@@ -5,7 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Bate Bola Football — Jubis Games</title>
 <style>
-*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:linear-gradient(#0b3d1f,#052612);color:#fff;display:flex;justify-content:center;align-items:center;min-height:100vh}a{position:fixed;top:12px;left:12px;color:#9dffb3;text-decoration:none;font-weight:700}.wrap{width:min(94vw,760px)}h1{text-align:center;margin:8px 0 14px;color:#e8ffef}.hud{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;background:rgba(0,0,0,.32);padding:10px 12px;border-radius:12px}canvas{width:100%;aspect-ratio:16/9;background:repeating-linear-gradient(90deg,#1f7a3a 0 60px,#1b6d34 60px 120px);border:4px solid #d5ffe0;border-radius:14px;display:block;margin-top:12px;touch-action:none}.buttons{text-align:center;margin-top:12px}button{border:0;border-radius:999px;padding:10px 18px;font-weight:700;cursor:pointer;background:#9dffb3;color:#063b1e}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:linear-gradient(#0b3d1f,#052612);color:#fff;display:flex;justify-content:center;align-items:center;min-height:100vh}
+a{position:fixed;top:12px;left:12px;color:#9dffb3;text-decoration:none;font-weight:700}
+.wrap{width:min(94vw,760px)}
+h1{text-align:center;margin:8px 0 14px;color:#e8ffef}
+.hud{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;background:rgba(0,0,0,.32);padding:10px 12px;border-radius:12px}
+canvas{width:100%;aspect-ratio:16/9;background:repeating-linear-gradient(90deg,#1f7a3a 0 60px,#1b6d34 60px 120px);border:4px solid #d5ffe0;border-radius:14px;display:block;margin-top:12px;touch-action:none}
+.buttons{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:12px}
+button{border:0;border-radius:999px;padding:10px 18px;font-weight:700;cursor:pointer;background:#9dffb3;color:#063b1e}
+button.secondary{background:#ffffff2b;color:#ddffe6;border:1px solid #9dffb3}
 </style>
 </head>
 <body>
@@ -15,35 +24,138 @@
   <div class="hud">
     <div>Pontos: <span id="score">0</span></div>
     <div>Vidas: <span id="lives">3</span></div>
+    <div>Nível: <span id="level">1</span></div>
     <div>Recorde: <span id="best">0</span></div>
   </div>
   <canvas id="field" width="960" height="540"></canvas>
-  <div class="buttons"><button id="restart">Reiniciar</button></div>
+  <div class="buttons">
+    <button id="restart">Reiniciar</button>
+    <button id="pause" class="secondary">Pausar</button>
+  </div>
 </div>
 <script>
 const canvas=document.getElementById('field'),ctx=canvas.getContext('2d');
-const scoreEl=document.getElementById('score'),livesEl=document.getElementById('lives'),bestEl=document.getElementById('best');
-let score=0,lives=3,best=+localStorage.getItem('bate_bola_best')||0;
-const paddle={x:24,y:220,w:16,h:100,speed:8};
-const ball={x:480,y:270,r:11,vx:6,vy:3};
-let up=false,down=false,running=true;
+const scoreEl=document.getElementById('score'),livesEl=document.getElementById('lives'),bestEl=document.getElementById('best'),levelEl=document.getElementById('level');
+const keys={up:false,down:false};
+let score=0,lives=3,level=1;
+let best=+localStorage.getItem('bate_bola_best')||0;
+let running=true,paused=false;
+
+const player={x:24,y:220,w:16,h:100,speed:8};
+const cpu={x:920,y:220,w:16,h:100,speed:5};
+const ball={x:480,y:270,r:11,vx:6,vy:3,maxSpeed:13};
+
 bestEl.textContent=best;
-function resetBall(dir=1){ball.x=canvas.width/2;ball.y=canvas.height/2;ball.vx=6*dir;ball.vy=(Math.random()*6)-3}
-function draw(){ctx.clearRect(0,0,canvas.width,canvas.height);ctx.strokeStyle='rgba(255,255,255,.45)';ctx.lineWidth=6;ctx.setLineDash([18,18]);ctx.beginPath();ctx.moveTo(canvas.width/2,0);ctx.lineTo(canvas.width/2,canvas.height);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#d9ffe5';ctx.fillRect(paddle.x,paddle.y,paddle.w,paddle.h);ctx.beginPath();ctx.arc(ball.x,ball.y,ball.r,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.beginPath();ctx.arc(canvas.width-24,canvas.height/2,68,0,Math.PI*2);ctx.strokeStyle='rgba(255,255,255,.35)';ctx.lineWidth=5;ctx.stroke();}
-function update(){if(!running)return; if(up)paddle.y-=paddle.speed; if(down)paddle.y+=paddle.speed; paddle.y=Math.max(0,Math.min(canvas.height-paddle.h,paddle.y));
-ball.x+=ball.vx; ball.y+=ball.vy;
-if(ball.y<ball.r||ball.y>canvas.height-ball.r)ball.vy*=-1;
-if(ball.x-ball.r<paddle.x+paddle.w&&ball.y>paddle.y&&ball.y<paddle.y+paddle.h&&ball.vx<0){ball.vx*=-1.04;ball.vy+=((ball.y-(paddle.y+paddle.h/2))/18);score++;scoreEl.textContent=score;}
-if(ball.x+ball.r>canvas.width-10){score+=5;scoreEl.textContent=score;resetBall(-1)}
-if(ball.x<0){lives--;livesEl.textContent=lives;if(lives<=0){running=false;if(score>best){best=score;localStorage.setItem('bate_bola_best',best);bestEl.textContent=best}setTimeout(()=>alert('Fim de jogo! Pontos: '+score),50);}else resetBall(1)}
-const aiY=ball.y-55; paddle.y+=Math.sign(aiY-paddle.y)*1.3;
+
+function resetBall(dir=1){
+  ball.x=canvas.width/2;
+  ball.y=canvas.height/2;
+  ball.vx=(5+level*0.5)*dir;
+  ball.vy=(Math.random()*6)-3;
 }
+
+function updateLevel(){
+  const newLevel=Math.min(10,Math.floor(score/12)+1);
+  if(newLevel!==level){
+    level=newLevel;
+    player.speed=8+level*0.2;
+    cpu.speed=4.5+level*0.4;
+    levelEl.textContent=level;
+  }
+}
+
+function clampPaddles(){
+  player.y=Math.max(0,Math.min(canvas.height-player.h,player.y));
+  cpu.y=Math.max(0,Math.min(canvas.height-cpu.h,cpu.y));
+}
+
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.strokeStyle='rgba(255,255,255,.45)';ctx.lineWidth=6;ctx.setLineDash([18,18]);
+  ctx.beginPath();ctx.moveTo(canvas.width/2,0);ctx.lineTo(canvas.width/2,canvas.height);ctx.stroke();ctx.setLineDash([]);
+
+  ctx.fillStyle='#d9ffe5';
+  ctx.fillRect(player.x,player.y,player.w,player.h);
+  ctx.fillRect(cpu.x,cpu.y,cpu.w,cpu.h);
+
+  ctx.beginPath();ctx.arc(ball.x,ball.y,ball.r,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();
+
+  if(paused){
+    ctx.fillStyle='rgba(0,0,0,.45)';ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle='#fff';ctx.font='bold 46px Arial';ctx.textAlign='center';
+    ctx.fillText('PAUSADO',canvas.width/2,canvas.height/2);
+  }
+}
+
+function collideWith(p){
+  return ball.x+ball.r>p.x && ball.x-ball.r<p.x+p.w && ball.y+ball.r>p.y && ball.y-ball.r<p.y+p.h;
+}
+
+function update(){
+  if(!running || paused) return;
+
+  if(keys.up) player.y-=player.speed;
+  if(keys.down) player.y+=player.speed;
+
+  const cpuCenter=cpu.y+cpu.h/2;
+  const trackError=(Math.random()-0.5)*(10-Math.min(level,8));
+  if(ball.y+trackError<cpuCenter-8) cpu.y-=cpu.speed;
+  if(ball.y+trackError>cpuCenter+8) cpu.y+=cpu.speed;
+  clampPaddles();
+
+  ball.x+=ball.vx; ball.y+=ball.vy;
+  if(ball.y<ball.r||ball.y>canvas.height-ball.r) ball.vy*=-1;
+
+  if(collideWith(player) && ball.vx<0){
+    ball.vx=Math.min(ball.maxSpeed,Math.abs(ball.vx)*1.05);
+    ball.vy+=((ball.y-(player.y+player.h/2))/18);
+    score++;scoreEl.textContent=score;updateLevel();
+  }
+  if(collideWith(cpu) && ball.vx>0){
+    ball.vx=-Math.min(ball.maxSpeed,Math.abs(ball.vx)*1.03);
+    ball.vy+=((ball.y-(cpu.y+cpu.h/2))/20);
+  }
+
+  if(ball.x+ball.r>canvas.width){
+    score+=5;scoreEl.textContent=score;updateLevel();resetBall(-1);
+  }
+
+  if(ball.x<0){
+    lives--;livesEl.textContent=lives;
+    if(lives<=0){
+      running=false;
+      if(score>best){best=score;localStorage.setItem('bate_bola_best',best);bestEl.textContent=best;}
+      setTimeout(()=>alert(`Fim de jogo! Pontos: ${score}`),40);
+    } else resetBall(1);
+  }
+}
+
 function loop(){update();draw();requestAnimationFrame(loop)}
 loop();
-document.addEventListener('keydown',e=>{if(e.key==='ArrowUp'||e.key==='w')up=true;if(e.key==='ArrowDown'||e.key==='s')down=true});
-document.addEventListener('keyup',e=>{if(e.key==='ArrowUp'||e.key==='w')up=false;if(e.key==='ArrowDown'||e.key==='s')down=false});
-canvas.addEventListener('pointermove',e=>{const r=canvas.getBoundingClientRect();const y=(e.clientY-r.top)*(canvas.height/r.height);paddle.y=y-paddle.h/2});
-document.getElementById('restart').onclick=()=>{score=0;lives=3;scoreEl.textContent=0;livesEl.textContent=3;running=true;resetBall(1)};
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowUp'||e.key.toLowerCase()==='w') keys.up=true;
+  if(e.key==='ArrowDown'||e.key.toLowerCase()==='s') keys.down=true;
+  if(e.key===' ') paused=!paused;
+});
+document.addEventListener('keyup',e=>{
+  if(e.key==='ArrowUp'||e.key.toLowerCase()==='w') keys.up=false;
+  if(e.key==='ArrowDown'||e.key.toLowerCase()==='s') keys.down=false;
+});
+canvas.addEventListener('pointermove',e=>{
+  const r=canvas.getBoundingClientRect();
+  const y=(e.clientY-r.top)*(canvas.height/r.height);
+  player.y=y-player.h/2;
+  clampPaddles();
+});
+
+document.getElementById('pause').onclick=()=>{paused=!paused;document.getElementById('pause').textContent=paused?'Continuar':'Pausar';};
+document.getElementById('restart').onclick=()=>{
+  score=0;lives=3;level=1;running=true;paused=false;
+  scoreEl.textContent=0;livesEl.textContent=3;levelEl.textContent=1;
+  document.getElementById('pause').textContent='Pausar';
+  player.y=220;cpu.y=220;resetBall(1);
+};
 </script>
 </body>
 </html>

@@ -1,0 +1,8 @@
+{
+  "title": "Bate Martelo Arcade 3D",
+  "description": "Acerte os bichinhos, faça combos e bata seu recorde!",
+  "emoji": "🔨",
+  "tags": ["arcade", "1 jogador", "mobile"],
+  "entry": "index.html",
+  "order": 10
+}

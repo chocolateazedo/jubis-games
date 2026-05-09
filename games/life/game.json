@@ -1,8 +1,0 @@
-{
-  "title": "Life",
-  "description": "Jogo publicado como Life.",
-  "emoji": "🧬",
-  "tags": ["arcade", "1 jogador"],
-  "entry": "index.html",
-  "order": 12
-}

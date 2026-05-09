@@ -1,8 +1,13 @@
 {
-  "title": "Bate Bola Football",
+  "title": "Bate Bola",
   "description": "Nova versão com níveis progressivos, pausa e IA de goleiro para partidas mais desafiadoras.",
   "emoji": "⚽",
-  "tags": ["arcade", "1 jogador", "futebol", "atualizado"],
+  "tags": [
+    "arcade",
+    "1 jogador",
+    "futebol",
+    "atualizado"
+  ],
   "entry": "index.html",
   "order": 11
 }

@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Damas — Jubis Games</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rubik:wght@400;600;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0a0a1f;
+      --ink: #f4f2ff;
+      --muted: #a39ec4;
+      --cyan: #00f0ff;
+      --magenta: #ff2bd6;
+      --lime: #c2ff3d;
+      --yellow: #ffd23f;
+      --light-sq: #f5e6c5;
+      --dark-sq:  #3a2870;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh;
+      background: radial-gradient(ellipse at top, #1a1340, var(--bg));
+      color: var(--ink);
+      font-family: 'Rubik', system-ui, sans-serif;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 0 16px 40px;
+    }
+    header {
+      width: 100%; max-width: 720px;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 18px 0; gap: 12px; flex-wrap: wrap;
+    }
+    a.back {
+      color: var(--cyan); text-decoration: none; font-weight: 700;
+    }
+    a.back:hover { text-decoration: underline; }
+    h1 {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 18px; margin: 0;
+      letter-spacing: 1px;
+    }
+    button {
+      padding: 10px 18px; border: none; border-radius: 999px;
+      background: linear-gradient(135deg, var(--cyan), var(--magenta));
+      color: var(--bg); font-weight: 800; cursor: pointer;
+      font-family: inherit;
+    }
+    button:hover { filter: brightness(1.1); }
+
+    .status {
+      display: flex; gap: 24px; flex-wrap: wrap; justify-content: center;
+      padding: 12px 18px; margin-bottom: 18px;
+      background: rgba(255,255,255,.05);
+      border: 1px solid rgba(255,255,255,.1);
+      border-radius: 14px;
+      font-size: 15px;
+    }
+    .status b { color: var(--lime); font-family: 'Press Start 2P', monospace; font-size: 13px; margin-left: 4px; }
+    .turn-dot {
+      display: inline-block; width: 12px; height: 12px;
+      border-radius: 50%; margin-right: 6px; vertical-align: middle;
+      box-shadow: 0 0 8px currentColor;
+    }
+    .turn-dot.w { background: #fff; color: #fff; }
+    .turn-dot.b { background: #1a1340; color: var(--magenta); border: 1px solid var(--magenta); }
+
+    #board {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      width: min(92vw, 640px);
+      aspect-ratio: 1;
+      border: 4px solid #2a1c5e;
+      border-radius: 12px;
+      box-shadow: 0 0 60px -20px rgba(0,240,255,.6), 0 20px 60px -30px rgba(0,0,0,.8);
+      overflow: hidden;
+    }
+    .sq {
+      position: relative;
+      display: grid; place-items: center;
+      cursor: default;
+      transition: background .15s ease;
+    }
+    .sq.light { background: var(--light-sq); }
+    .sq.dark  { background: var(--dark-sq); cursor: pointer; }
+    .sq.selected {
+      box-shadow: inset 0 0 0 4px var(--lime);
+    }
+    .sq.move-target::before {
+      content: '';
+      position: absolute;
+      width: 28%; height: 28%;
+      border-radius: 50%;
+      background: var(--lime);
+      box-shadow: 0 0 16px var(--lime);
+      opacity: .8;
+      animation: pulse 1.2s infinite;
+    }
+    .sq.capture-target {
+      background: linear-gradient(135deg, #ff2bd6, #7a3dff) !important;
+      box-shadow: inset 0 0 0 3px var(--yellow);
+    }
+    .sq.capture-target::before {
+      content: '✕';
+      position: absolute;
+      font-size: 2em;
+      color: var(--yellow);
+      text-shadow: 0 0 8px var(--yellow);
+      animation: pulse 1s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%      { opacity: .5; transform: scale(.85); }
+    }
+
+    .piece {
+      width: 78%; height: 78%;
+      border-radius: 50%;
+      position: relative;
+      transition: transform .15s ease;
+      cursor: pointer;
+    }
+    .piece.white {
+      background: radial-gradient(circle at 30% 30%, #ffffff 0%, #d8d0e8 60%, #888fa0 100%);
+      box-shadow:
+        inset 0 -6px 10px rgba(0,0,0,.25),
+        inset 0 6px 10px rgba(255,255,255,.6),
+        0 4px 10px rgba(0,0,0,.4),
+        0 0 0 2px rgba(0,240,255,.3);
+    }
+    .piece.black {
+      background: radial-gradient(circle at 30% 30%, #5a4a8c 0%, #1a1340 60%, #050514 100%);
+      box-shadow:
+        inset 0 -6px 10px rgba(0,0,0,.4),
+        inset 0 6px 10px rgba(255,255,255,.15),
+        0 4px 10px rgba(0,0,0,.5),
+        0 0 0 2px rgba(255,43,214,.4);
+    }
+    .piece.king::after {
+      content: '♛';
+      position: absolute;
+      inset: 0;
+      display: grid; place-items: center;
+      font-size: 1.6em;
+      color: var(--yellow);
+      text-shadow: 0 0 8px rgba(255,210,63,.9);
+      pointer-events: none;
+    }
+    .sq.selected .piece { transform: scale(1.08); }
+
+    #msg {
+      margin-top: 18px;
+      font-family: 'Press Start 2P', monospace;
+      font-size: 16px;
+      color: var(--lime);
+      min-height: 1.4em;
+      text-align: center;
+      text-shadow: 0 0 12px rgba(194,255,61,.6);
+    }
+    .rules {
+      margin-top: 24px;
+      max-width: 640px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+      text-align: center;
+    }
+    .rules summary { cursor: pointer; font-weight: 700; color: var(--cyan); }
+    .rules ul { text-align: left; }
+  </style>
+</head>
+<body>
+  <header>
+    <a class="back" href="../../">← Voltar</a>
+    <h1>♟️ Damas</h1>
+    <button id="restart">↻ Reiniciar</button>
+  </header>
+
+  <div class="status">
+    <div>Vez de: <span class="turn-dot" id="turn-dot"></span><b id="turn">Brancas</b></div>
+    <div>Brancas: <b id="white-count">12</b></div>
+    <div>Pretas: <b id="black-count">12</b></div>
+  </div>
+
+  <div id="board" aria-label="Tabuleiro de damas"></div>
+
+  <p id="msg" role="status" aria-live="polite"></p>
+
+  <details class="rules">
+    <summary>Como jogar</summary>
+    <ul>
+      <li>Brancas começam. Cada jogador joga na sua vez.</li>
+      <li>Peças andam <b>uma casa em diagonal</b> para frente.</li>
+      <li>Para <b>capturar</b>, pule sobre uma peça adversária e caia na casa vazia logo depois (em qualquer diagonal — frente ou trás).</li>
+      <li>Se houver captura disponível, ela é <b>obrigatória</b>.</li>
+      <li>Se após uma captura você puder capturar de novo com a mesma peça, <b>continue capturando</b>.</li>
+      <li>Ao chegar na última fileira do adversário, sua peça vira <b>dama 👑</b> — anda em qualquer direção, qualquer distância.</li>
+      <li>Vence quem capturar todas as peças do adversário (ou deixá-lo sem jogadas).</li>
+    </ul>
+  </details>
+
+  <script>
+    'use strict';
+
+    const SIZE = 8;
+    let board, turn, selected, validMoves, mustContinueFrom, gameOver;
+
+    function init() {
+      board = Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
+      for (let r = 0; r < SIZE; r++) {
+        for (let c = 0; c < SIZE; c++) {
+          if ((r + c) % 2 !== 1) continue; // somente casas escuras
+          if (r < 3)      board[r][c] = { color: 'b', king: false };
+          else if (r > 4) board[r][c] = { color: 'w', king: false };
+        }
+      }
+      turn = 'w';
+      selected = null;
+      validMoves = [];
+      mustContinueFrom = null;
+      gameOver = false;
+      document.getElementById('msg').textContent = '';
+      render();
+      updateStatus();
+    }
+
+    function inBounds(r, c) { return r >= 0 && r < SIZE && c >= 0 && c < SIZE; }
+    function opp(color)     { return color === 'w' ? 'b' : 'w'; }
+
+    function getCaptures(r, c, piece) {
+      const caps = [];
+      const dirs = [[-1,-1],[-1,1],[1,-1],[1,1]];
+      for (const [dr, dc] of dirs) {
+        if (piece.king) {
+          let nr = r + dr, nc = c + dc;
+          while (inBounds(nr, nc) && !board[nr][nc]) { nr += dr; nc += dc; }
+          if (!inBounds(nr, nc)) continue;
+          if (board[nr][nc].color === piece.color) continue;
+          let lr = nr + dr, lc = nc + dc;
+          while (inBounds(lr, lc) && !board[lr][lc]) {
+            caps.push({ to: { r: lr, c: lc }, captured: { r: nr, c: nc } });
+            lr += dr; lc += dc;
+          }
+        } else {
+          const mr = r + dr, mc = c + dc;
+          const lr = r + dr*2, lc = c + dc*2;
+          if (!inBounds(lr, lc)) continue;
+          const mid = board[mr][mc];
+          if (!mid || mid.color === piece.color) continue;
+          if (board[lr][lc]) continue;
+          caps.push({ to: { r: lr, c: lc }, captured: { r: mr, c: mc } });
+        }
+      }
+      return caps;
+    }
+
+    function getMoves(r, c, piece) {
+      const moves = [];
+      const fwd  = piece.color === 'w' ? -1 : 1;
+      const dirs = piece.king ? [[-1,-1],[-1,1],[1,-1],[1,1]] : [[fwd,-1],[fwd,1]];
+      for (const [dr, dc] of dirs) {
+        if (piece.king) {
+          let nr = r + dr, nc = c + dc;
+          while (inBounds(nr, nc) && !board[nr][nc]) {
+            moves.push({ to: { r: nr, c: nc } });
+            nr += dr; nc += dc;
+          }
+        } else {
+          const nr = r + dr, nc = c + dc;
+          if (inBounds(nr, nc) && !board[nr][nc]) {
+            moves.push({ to: { r: nr, c: nc } });
+          }
+        }
+      }
+      return moves;
+    }
+
+    function getAllCapturePieces(color) {
+      const out = [];
+      for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE; c++) {
+        const p = board[r][c];
+        if (p && p.color === color && getCaptures(r, c, p).length) {
+          out.push({ r, c });
+        }
+      }
+      return out;
+    }
+
+    function getAllMovePieces(color) {
+      const out = [];
+      for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE; c++) {
+        const p = board[r][c];
+        if (p && p.color === color && getMoves(r, c, p).length) out.push({ r, c });
+      }
+      return out;
+    }
+
+    function selectPiece(r, c) {
+      if (gameOver) return;
+      const p = board[r][c];
+      if (!p || p.color !== turn) return;
+
+      if (mustContinueFrom) return; // só continua com a mesma peça
+
+      const capPieces = getAllCapturePieces(turn);
+      if (capPieces.length) {
+        const isCapPiece = capPieces.some(cp => cp.r === r && cp.c === c);
+        if (!isCapPiece) {
+          flashMsg('Captura obrigatória — escolha uma peça que pode capturar.');
+          return;
+        }
+        selected = { r, c };
+        validMoves = getCaptures(r, c, p).map(cap => ({ ...cap, isCapture: true }));
+      } else {
+        selected = { r, c };
+        validMoves = getMoves(r, c, p).map(m => ({ ...m, isCapture: false }));
+      }
+      render();
+    }
+
+    function makeMove(targetR, targetC) {
+      const move = validMoves.find(m => m.to.r === targetR && m.to.c === targetC);
+      if (!move) return;
+
+      const piece = board[selected.r][selected.c];
+      board[selected.r][selected.c] = null;
+      board[targetR][targetC] = piece;
+
+      if (move.isCapture) {
+        board[move.captured.r][move.captured.c] = null;
+      }
+
+      if (!piece.king) {
+        if ((piece.color === 'w' && targetR === 0) ||
+            (piece.color === 'b' && targetR === SIZE - 1)) {
+          piece.king = true;
+        }
+      }
+
+      selected = null;
+      validMoves = [];
+
+      if (move.isCapture) {
+        const more = getCaptures(targetR, targetC, piece);
+        if (more.length) {
+          mustContinueFrom = { r: targetR, c: targetC };
+          selected = { r: targetR, c: targetC };
+          validMoves = more.map(cap => ({ ...cap, isCapture: true }));
+          render();
+          return;
+        }
+      }
+
+      mustContinueFrom = null;
+      turn = opp(turn);
+      render();
+      updateStatus();
+      checkEnd();
+    }
+
+    function handleClick(r, c) {
+      if (gameOver) return;
+      if (selected) {
+        const m = validMoves.find(v => v.to.r === r && v.to.c === c);
+        if (m) { makeMove(r, c); return; }
+      }
+      selectPiece(r, c);
+    }
+
+    function render() {
+      const boardEl = document.getElementById('board');
+      boardEl.innerHTML = '';
+      for (let r = 0; r < SIZE; r++) {
+        for (let c = 0; c < SIZE; c++) {
+          const sq = document.createElement('div');
+          sq.className = 'sq ' + ((r + c) % 2 === 1 ? 'dark' : 'light');
+
+          const piece = board[r][c];
+          if (piece) {
+            const pe = document.createElement('div');
+            pe.className = 'piece ' + (piece.color === 'w' ? 'white' : 'black') + (piece.king ? ' king' : '');
+            sq.appendChild(pe);
+          }
+          if (selected && selected.r === r && selected.c === c) sq.classList.add('selected');
+          const target = validMoves.find(m => m.to.r === r && m.to.c === c);
+          if (target) sq.classList.add(target.isCapture ? 'capture-target' : 'move-target');
+
+          if ((r + c) % 2 === 1) sq.addEventListener('click', () => handleClick(r, c));
+          boardEl.appendChild(sq);
+        }
+      }
+    }
+
+    function countPieces(color) {
+      let n = 0;
+      for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE; c++) {
+        if (board[r][c] && board[r][c].color === color) n++;
+      }
+      return n;
+    }
+
+    function updateStatus() {
+      const wc = countPieces('w');
+      const bc = countPieces('b');
+      const dot = document.getElementById('turn-dot');
+      dot.className = 'turn-dot ' + turn;
+      document.getElementById('turn').textContent = turn === 'w' ? 'Brancas' : 'Pretas';
+      document.getElementById('white-count').textContent = wc;
+      document.getElementById('black-count').textContent = bc;
+    }
+
+    function checkEnd() {
+      const wc = countPieces('w');
+      const bc = countPieces('b');
+      let winner = null;
+      if (wc === 0) winner = 'Pretas';
+      else if (bc === 0) winner = 'Brancas';
+      else {
+        const caps = getAllCapturePieces(turn);
+        const moves = getAllMovePieces(turn);
+        if (!caps.length && !moves.length) {
+          winner = turn === 'w' ? 'Pretas' : 'Brancas';
+        }
+      }
+      if (winner) {
+        gameOver = true;
+        document.getElementById('msg').textContent = '🏆 ' + winner + ' venceram!';
+      }
+    }
+
+    let msgTimer;
+    function flashMsg(text) {
+      const el = document.getElementById('msg');
+      el.textContent = text;
+      clearTimeout(msgTimer);
+      msgTimer = setTimeout(() => { if (!gameOver) el.textContent = ''; }, 2200);
+    }
+
+    document.getElementById('restart').addEventListener('click', init);
+    init();
+  </script>
+</body>
+</html>

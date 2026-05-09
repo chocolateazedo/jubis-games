@@ -1,1 +1,67 @@
-# jubis-games
+# Jubis Games 🎮
+
+Site oficial dos jogos do João — [jubis-games.cloud](https://jubis-games.cloud).
+
+## Estrutura
+
+```
+jubis-games/
+├── index.php              ← página inicial (lista os jogos)
+├── includes/
+│   └── games.php          ← descobre os jogos automaticamente
+├── assets/
+│   ├── css/style.css
+│   ├── js/main.js
+│   └── img/favicon.svg
+├── games/
+│   └── <slug-do-jogo>/
+│       ├── game.json      ← metadados (título, descrição, emoji, tags)
+│       ├── index.html     ← o jogo em si
+│       └── cover.png      ← capa opcional (16:10)
+└── .htaccess
+```
+
+## Como o João adiciona um novo jogo
+
+1. Crie uma pasta nova dentro de `games/` (ex.: `games/super-aventura/`).
+2. Coloque o jogo em `index.html` dentro dessa pasta.
+3. Crie um arquivo `game.json` com as informações:
+
+```json
+{
+  "title": "Super Aventura",
+  "description": "Frase curtinha que aparece no cartão.",
+  "emoji": "🚀",
+  "tags": ["aventura", "1 jogador"],
+  "entry": "index.html",
+  "cover": "cover.png",
+  "order": 2
+}
+```
+
+Pronto! Faz upload e o jogo aparece automaticamente na página inicial. Não precisa mexer no `index.php`.
+
+### Campos do `game.json`
+
+| Campo | Obrigatório | O que é |
+|---|---|---|
+| `title` | sim | Nome do jogo |
+| `description` | não | Frase curta no cartão |
+| `emoji` | não | Emoji da capa quando não há `cover` |
+| `tags` | não | Lista de etiquetas (ex.: `["plataforma", "co-op"]`) |
+| `entry` | não | Arquivo de entrada — padrão `index.html` |
+| `cover` | não | Imagem de capa (16:10, ex.: `cover.png`) |
+| `order` | não | Ordem na grade — menor número aparece primeiro |
+| `hidden` | não | `true` esconde o jogo da página |
+
+## Requisitos do servidor
+
+- PHP 7.4+ (qualquer hospedagem compartilhada já tem)
+- Apache com `mod_rewrite` (opcional, mas recomendado)
+
+## Rodando localmente
+
+```bash
+php -S localhost:8080
+# abre http://localhost:8080
+```

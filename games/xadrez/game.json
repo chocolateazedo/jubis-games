@@ -1,8 +1,0 @@
-{
-  "title": "Xadrez",
-  "description": "Jogue xadrez clássico para dois jogadores no mesmo dispositivo.",
-  "emoji": "♞",
-  "tags": ["tabuleiro", "2 jogadores"],
-  "entry": "index.html",
-  "order": 2
-}

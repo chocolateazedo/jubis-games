@@ -1,0 +1,8 @@
+{
+  "title": "Bate Bola Football",
+  "description": "Desvie, chute e marque gols nesse arcade de futebol estilo pong.",
+  "emoji": "⚽",
+  "tags": ["arcade", "1 jogador", "futebol"],
+  "entry": "index.html",
+  "order": 11
+}

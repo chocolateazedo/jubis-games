@@ -1,0 +1,8 @@
+{
+  "title": "Meu Jardim",
+  "description": "Cuide das plantas, regue e veja seu jardim florescer!",
+  "emoji": "🌱",
+  "tags": ["simulação", "relaxante", "1 jogador"],
+  "entry": "index.html",
+  "order": 4
+}

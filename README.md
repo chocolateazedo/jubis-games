@@ -54,6 +54,14 @@ Pronto! Faz upload e o jogo aparece automaticamente na página inicial. Não pre
 | `order` | não | Ordem na grade — menor número aparece primeiro |
 | `hidden` | não | `true` esconde o jogo da página |
 
+
+## Jogos publicados
+
+- Bate Bola (`games/bate-bola`)
+- Bate Martelo Arcade 3D (`games/bate-martelo-arcade-3d`)
+- Damas (`games/damas`)
+- Meu Jardim (`games/meu-jardim`)
+
 ## Requisitos do servidor
 
 - PHP 7.4+ (qualquer hospedagem compartilhada já tem)

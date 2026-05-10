@@ -1,0 +1,8 @@
+{
+  "title": "Pega Bolinha",
+  "description": "Clique na bolinha e faça a maior pontuação em 30 segundos.",
+  "emoji": "🟣",
+  "tags": ["arcade", "1 jogador", "reflexo"],
+  "entry": "index.html",
+  "order": 3
+}

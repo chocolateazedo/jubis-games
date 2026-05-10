@@ -15,7 +15,7 @@
       color: #f0f0f0;
       font-family: Inter, system-ui, sans-serif;
     }
-    .wrap { text-align: center; }
+    .wrap { text-align: center; width: min(92vw, 440px); }
     .back {
       position: fixed;
       top: 12px;
@@ -25,13 +25,48 @@
       font-weight: 700;
     }
     canvas {
+      width: 100%;
+      height: auto;
       border: 2px solid #28365d;
       border-radius: 10px;
       background: #05070f;
-      box-shadow: 0 15px 40px rgba(0,0,0,.45);
+      box-shadow: 0 15px 40px rgba(0,0,0,.45), 0 0 28px rgba(78,203,255,.22);
+      touch-action: none;
     }
     .hud { margin-top: .8rem; display: flex; gap: 1rem; justify-content: center; font-weight: 600; }
     .hint { opacity:.8; font-size:.95rem; margin-top:.4rem; }
+
+    .controls {
+      margin: 1rem auto 0;
+      width: min(260px, 100%);
+      display: none;
+      grid-template-columns: repeat(3, minmax(52px, 1fr));
+      gap: .6rem;
+      user-select: none;
+    }
+    .controls button {
+      aspect-ratio: 1 / 1;
+      border: 1px solid #5ef0ff;
+      border-radius: 14px;
+      background: radial-gradient(circle at 30% 20%, #193250, #0a1329 72%);
+      color: #91f8ff;
+      font-size: 1.4rem;
+      font-weight: 800;
+      box-shadow: 0 0 10px rgba(94,240,255,.5), inset 0 0 10px rgba(145,248,255,.18);
+    }
+    .controls button:active {
+      transform: scale(.96);
+      box-shadow: 0 0 16px rgba(94,240,255,.85), inset 0 0 12px rgba(145,248,255,.35);
+    }
+    .controls .spacer {
+      visibility: hidden;
+      pointer-events: none;
+    }
+    @media (max-width: 900px), (pointer: coarse) {
+      .controls { display: grid; }
+      .hint { font-size: .9rem; }
+    }
+
   </style>
 </head>
 <body>
@@ -44,6 +79,14 @@
       <span id="lives">Vidas: 3</span>
     </div>
     <p class="hint">Use as setas para mover. Pegue todos os pontos para vencer.</p>
+    <div class="controls" aria-label="Controles mobile">
+      <span class="spacer" aria-hidden="true"></span>
+      <button type="button" data-dir="up" aria-label="Mover para cima">▲</button>
+      <span class="spacer" aria-hidden="true"></span>
+      <button type="button" data-dir="left" aria-label="Mover para esquerda">◀</button>
+      <button type="button" data-dir="down" aria-label="Mover para baixo">▼</button>
+      <button type="button" data-dir="right" aria-label="Mover para direita">▶</button>
+    </div>
   </div>
 
   <script>
@@ -68,6 +111,7 @@
     const ctx = canvas.getContext("2d");
     const scoreEl = document.getElementById("score");
     const livesEl = document.getElementById("lives");
+    const controls = document.querySelector(".controls");
 
     let player = {x: 7, y: 9, dir: {x:0,y:0}};
     let score = 0;
@@ -104,21 +148,38 @@
       if (!isWall(nx, ny)) player.dir = dir;
     }
 
+    const moves = {
+      ArrowUp: {x:0, y:-1},
+      ArrowDown: {x:0, y:1},
+      ArrowLeft: {x:-1, y:0},
+      ArrowRight: {x:1, y:0},
+      up: {x:0, y:-1},
+      down: {x:0, y:1},
+      left: {x:-1, y:0},
+      right: {x:1, y:0},
+    };
+
+    function handleMove(direction) {
+      const moveDir = moves[direction];
+      if (!moveDir || gameOver) return;
+      tryTurn(moveDir);
+    }
+
     function handleKeyDown(e) {
-      const moves = {
-        ArrowUp: {x:0, y:-1},
-        ArrowDown: {x:0, y:1},
-        ArrowLeft: {x:-1, y:0},
-        ArrowRight: {x:1, y:0},
-      };
       const moveDir = moves[e.key];
       if (!moveDir) return;
       e.preventDefault();
-      tryTurn(moveDir);
+      handleMove(e.key);
     }
 
     window.addEventListener("keydown", handleKeyDown, { passive: false });
     canvas.addEventListener("keydown", handleKeyDown, { passive: false });
+    controls?.addEventListener("click", (e) => {
+      const button = e.target.closest("button[data-dir]");
+      if (!button) return;
+      handleMove(button.dataset.dir);
+      canvas.focus();
+    });
     canvas.focus();
 
     function update() {

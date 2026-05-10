@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dinosaurinho</title>
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(180deg, #8fd3ff 0%, #eefcff 55%, #f6f6f6 55%, #f6f6f6 100%);
+    }
+    .wrap {
+      width: min(900px, 96vw);
+      text-align: center;
+    }
+    h1 { margin: 0 0 8px; }
+    p { margin: 0 0 14px; }
+    canvas {
+      width: 100%;
+      max-width: 900px;
+      height: auto;
+      border: 3px solid #222;
+      background: #fff;
+      border-radius: 10px;
+    }
+    .help { margin-top: 10px; font-size: .95rem; opacity: .9; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <h1>🦖 Dinosaurinho</h1>
+    <p>Pule com <strong>Espaço</strong> ou <strong>↑</strong>.</p>
+    <canvas id="game" width="900" height="300" aria-label="Jogo Dinosaurinho"></canvas>
+    <div class="help">Desvie dos cactos. Quanto mais tempo vivo, mais rápido fica!</div>
+  </main>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+
+    const groundY = 245;
+    const dino = { x: 80, y: groundY - 48, w: 48, h: 48, vy: 0, gravity: 0.8, jump: -14, onGround: true };
+    let speed = 6;
+    let score = 0;
+    let high = Number(localStorage.getItem('dino_highscore') || 0);
+    let gameOver = false;
+    let obstacles = [];
+    let spawnTimer = 0;
+
+    function reset() {
+      obstacles = [];
+      score = 0;
+      speed = 6;
+      spawnTimer = 0;
+      gameOver = false;
+      dino.y = groundY - dino.h;
+      dino.vy = 0;
+      dino.onGround = true;
+    }
+
+    function jump() {
+      if (gameOver) {
+        reset();
+        return;
+      }
+      if (dino.onGround) {
+        dino.vy = dino.jump;
+        dino.onGround = false;
+      }
+    }
+
+    addEventListener('keydown', (e) => {
+      if (e.code === 'Space' || e.code === 'ArrowUp') {
+        e.preventDefault();
+        jump();
+      }
+    });
+
+    addEventListener('pointerdown', jump);
+
+    function collide(a, b) {
+      return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+    }
+
+    function update() {
+      if (gameOver) return;
+
+      dino.vy += dino.gravity;
+      dino.y += dino.vy;
+
+      if (dino.y >= groundY - dino.h) {
+        dino.y = groundY - dino.h;
+        dino.vy = 0;
+        dino.onGround = true;
+      }
+
+      spawnTimer--;
+      if (spawnTimer <= 0) {
+        const h = 35 + Math.random() * 35;
+        obstacles.push({ x: canvas.width + 20, y: groundY - h, w: 24 + Math.random() * 14, h });
+        spawnTimer = Math.max(40, 90 - Math.floor(speed * 2) + Math.random() * 30);
+      }
+
+      obstacles.forEach(o => o.x -= speed);
+      obstacles = obstacles.filter(o => o.x + o.w > -10);
+
+      for (const o of obstacles) {
+        if (collide(dino, o)) {
+          gameOver = true;
+          if (score > high) {
+            high = score;
+            localStorage.setItem('dino_highscore', String(high));
+          }
+          break;
+        }
+      }
+
+      score += 1;
+      speed += 0.0015;
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = '#f4f8ff';
+      ctx.fillRect(0, 0, canvas.width, groundY);
+
+      ctx.strokeStyle = '#444';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(0, groundY + 1);
+      ctx.lineTo(canvas.width, groundY + 1);
+      ctx.stroke();
+
+      // Dino
+      ctx.fillStyle = '#2f2f2f';
+      ctx.fillRect(dino.x, dino.y, dino.w, dino.h);
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(dino.x + 32, dino.y + 10, 6, 6);
+
+      // Obstáculos
+      ctx.fillStyle = '#0f8a35';
+      obstacles.forEach(o => {
+        ctx.fillRect(o.x, o.y, o.w, o.h);
+        ctx.fillRect(o.x - 4, o.y + 8, 5, 8);
+      });
+
+      // HUD
+      ctx.fillStyle = '#111';
+      ctx.font = 'bold 22px Arial';
+      ctx.fillText(`Pontos: ${Math.floor(score / 6)}`, 16, 30);
+      ctx.fillText(`Recorde: ${Math.floor(high / 6)}`, 16, 58);
+
+      if (gameOver) {
+        ctx.fillStyle = 'rgba(0,0,0,.55)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 46px Arial';
+        ctx.fillText('Fim de Jogo', canvas.width / 2, 130);
+        ctx.font = '24px Arial';
+        ctx.fillText('Pressione Espaço, ↑ ou toque para reiniciar', canvas.width / 2, 175);
+        ctx.textAlign = 'left';
+      }
+    }
+
+    function loop() {
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    loop();
+  </script>
+</body>
+</html>

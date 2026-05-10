@@ -1,0 +1,8 @@
+{
+  "title": "Stickman runner",
+  "description": "Corra sem parar, desvie dos obstáculos e tente bater seu recorde.",
+  "emoji": "🏃",
+  "tags": ["corrida", "arcade", "1 jogador"],
+  "entry": "index.html",
+  "order": 5
+}

@@ -1,0 +1,8 @@
+{
+  "title": "Galinha no Trânsito",
+  "description": "Ajude a galinha a atravessar a avenida sem ser atropelada.",
+  "emoji": "🐔",
+  "tags": ["arcade", "reflexo", "1 jogador"],
+  "entry": "index.html",
+  "order": 4
+}

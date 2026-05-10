@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Jogo de Stop</title>
+  <style>body{font-family:system-ui,sans-serif;background:#11162a;color:#fff;margin:0;padding:20px}.wrap{max-width:880px;margin:auto}.card{background:#1a2140;padding:16px;border-radius:14px}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.pill{background:#2f376b;padding:8px 12px;border-radius:99px}button{border:0;border-radius:10px;padding:9px 12px;font-weight:700;cursor:pointer;background:#5d6cff;color:#fff}button.secondary{background:#3d467f}table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border-bottom:1px solid #3a4278;padding:8px}input{width:100%;padding:9px;border-radius:8px;border:1px solid #4d58a8;background:#0e1330;color:#fff}.msg{opacity:.9}</style>
+</head>
+<body><div class="wrap"><div class="card"><h1>🛑 Jogo de Stop</h1><div class="row"><span class="pill">Letra: <strong id="letter">?</strong></span><span class="pill">Tempo: <strong id="time">60</strong>s</span><button id="startBtn">Novo round</button><button id="checkBtn" class="secondary">Parar e conferir</button></div><table><thead><tr><th>Categoria</th><th>Sua resposta</th></tr></thead><tbody id="tbody"></tbody></table><p class="msg" id="msg">Clique em Novo round para começar.</p></div></div>
+<script>
+const categories=["Nome","Animal","Cor","Comida","Objeto","Lugar"];const tbody=document.getElementById('tbody'),msg=document.getElementById('msg'),letterEl=document.getElementById('letter'),timeEl=document.getElementById('time');let timer=null,timeLeft=60,currentLetter='';
+categories.forEach(c=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${c}</td><td><input placeholder="Digite com a letra sorteada"></td>`;tbody.appendChild(tr)});
+const randLetter=()=>{const letters='ABCDEFGHIJKLMNOPQRSTUVWXYZ'.replace(/[KWY]/g,'');return letters[Math.floor(Math.random()*letters.length)]};
+function startRound(){clearInterval(timer);timeLeft=60;timeEl.textContent=timeLeft;currentLetter=randLetter();letterEl.textContent=currentLetter;document.querySelectorAll('input').forEach(i=>{i.value='';i.disabled=false});msg.textContent='Valendo!';timer=setInterval(()=>{timeLeft--;timeEl.textContent=timeLeft;if(timeLeft<=0){clearInterval(timer);scoreRound()}},1000)}
+function scoreRound(){clearInterval(timer);let score=0,filled=0;document.querySelectorAll('input').forEach(i=>{const v=i.value.trim();i.disabled=true;if(!v)return;filled++;score+=(v[0]&&v[0].toUpperCase()===currentLetter)?10:5});msg.textContent=`Round finalizado: ${filled}/${categories.length} respostas. Pontuação: ${score}.`}
+document.getElementById('startBtn').onclick=startRound;document.getElementById('checkBtn').onclick=scoreRound;
+</script></body></html>

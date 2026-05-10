@@ -1,0 +1,8 @@
+{
+  "title": "Jogo de Stop",
+  "description": "Sorteie uma letra, preencha categorias e confira sua pontuação.",
+  "emoji": "🛑",
+  "tags": ["palavras", "1 jogador", "casual"],
+  "entry": "index.html",
+  "order": 12
+}

@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Xadrez — Jubis Games</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rubik:wght@400;600;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0a0a1f;
+      --ink: #f4f2ff;
+      --muted: #a39ec4;
+      --cyan: #00f0ff;
+      --magenta: #ff2bd6;
+      --lime: #c2ff3d;
+      --light-sq: #f3e7ca;
+      --dark-sq: #39266f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 0 16px 40px;
+      background: radial-gradient(ellipse at top, #1a1340, var(--bg));
+      color: var(--ink);
+      font-family: 'Rubik', system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    header {
+      width: 100%;
+      max-width: 760px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding: 18px 0;
+    }
+    a { color: var(--cyan); text-decoration: none; font-weight: 700; }
+    a:hover { text-decoration: underline; }
+    h1 { margin: 0; font-family: 'Press Start 2P', monospace; font-size: 18px; }
+    button {
+      padding: 10px 18px; border: none; border-radius: 999px;
+      background: linear-gradient(135deg, var(--cyan), var(--magenta));
+      color: var(--bg); font-weight: 800; cursor: pointer;
+      font-family: inherit;
+    }
+    .status {
+      display: flex;
+      gap: 22px;
+      flex-wrap: wrap;
+      justify-content: center;
+      background: rgba(255, 255, 255, .05);
+      border: 1px solid rgba(255, 255, 255, .1);
+      border-radius: 14px;
+      padding: 12px 18px;
+      margin-bottom: 18px;
+      font-size: 15px;
+    }
+    .status b { color: var(--lime); font-family: 'Press Start 2P', monospace; font-size: 12px; margin-left: 6px; }
+    #board {
+      width: min(94vw, 680px);
+      aspect-ratio: 1;
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      border-radius: 12px;
+      overflow: hidden;
+      border: 4px solid #2a1c5e;
+      box-shadow: 0 0 60px -20px rgba(0,240,255,.6), 0 20px 60px -30px rgba(0,0,0,.8);
+      user-select: none;
+    }
+    .sq {
+      display: grid;
+      place-items: center;
+      position: relative;
+      font-size: clamp(30px, 5vw, 48px);
+      cursor: pointer;
+    }
+    .sq.light { background: var(--light-sq); }
+    .sq.dark { background: var(--dark-sq); }
+    .sq.selected { box-shadow: inset 0 0 0 4px var(--lime); }
+    .sq.target::after {
+      content: '';
+      width: 28%;
+      height: 28%;
+      border-radius: 50%;
+      background: var(--lime);
+      box-shadow: 0 0 14px var(--lime);
+      opacity: .8;
+      position: absolute;
+    }
+    .sq.capture { box-shadow: inset 0 0 0 4px #ffce43; }
+    #msg {
+      min-height: 1.6em;
+      margin-top: 16px;
+      font-family: 'Press Start 2P', monospace;
+      font-size: 14px;
+      color: var(--lime);
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="../../">← Voltar</a>
+    <h1>♟️ Xadrez</h1>
+    <button id="restart">↻ Reiniciar</button>
+  </header>
+
+  <div class="status">
+    <div>Vez: <b id="turn">Brancas</b></div>
+    <div>Xeque: <b id="check">Não</b></div>
+  </div>
+
+  <div id="board" aria-label="Tabuleiro de xadrez"></div>
+  <p id="msg" role="status" aria-live="polite"></p>
+
+  <script>
+    'use strict';
+
+    const SIZE = 8;
+    const PIECES = {
+      wk: '♔', wq: '♕', wr: '♖', wb: '♗', wn: '♘', wp: '♙',
+      bk: '♚', bq: '♛', br: '♜', bb: '♝', bn: '♞', bp: '♟'
+    };
+
+    let board, turn, selected, legalMoves, gameOver;
+
+    function init() {
+      board = setupBoard();
+      turn = 'w';
+      selected = null;
+      legalMoves = [];
+      gameOver = false;
+      setMessage('');
+      render();
+    }
+
+    function setupBoard() {
+      const b = Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
+      b[0] = ['br','bn','bb','bq','bk','bb','bn','br'];
+      b[1] = Array(8).fill('bp');
+      b[6] = Array(8).fill('wp');
+      b[7] = ['wr','wn','wb','wq','wk','wb','wn','wr'];
+      return b;
+    }
+
+    function inBounds(r, c) { return r >= 0 && r < 8 && c >= 0 && c < 8; }
+    function pieceColor(piece) { return piece ? piece[0] : null; }
+
+    function cloneBoard(src) { return src.map(row => row.slice()); }
+
+    function getPseudoMoves(b, r, c) {
+      const piece = b[r][c];
+      if (!piece) return [];
+      const color = piece[0], type = piece[1], dir = color === 'w' ? -1 : 1;
+      const moves = [];
+      const push = (nr, nc, captureOnly = false) => {
+        if (!inBounds(nr, nc)) return;
+        const t = b[nr][nc];
+        if (t && pieceColor(t) !== color) moves.push({ r: nr, c: nc, capture: true });
+        else if (!t && !captureOnly) moves.push({ r: nr, c: nc, capture: false });
+      };
+
+      if (type === 'p') {
+        if (inBounds(r + dir, c) && !b[r + dir][c]) moves.push({ r: r + dir, c, capture: false });
+        const start = color === 'w' ? 6 : 1;
+        if (r === start && !b[r + dir][c] && !b[r + 2 * dir][c]) moves.push({ r: r + 2 * dir, c, capture: false });
+        push(r + dir, c - 1, true);
+        push(r + dir, c + 1, true);
+      } else if (type === 'n') {
+        [[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]].forEach(([dr, dc]) => push(r + dr, c + dc));
+      } else if (type === 'k') {
+        for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+          if (dr || dc) push(r + dr, c + dc);
+        }
+      } else {
+        const dirs = [];
+        if (type === 'b' || type === 'q') dirs.push([1,1],[1,-1],[-1,1],[-1,-1]);
+        if (type === 'r' || type === 'q') dirs.push([1,0],[-1,0],[0,1],[0,-1]);
+        for (const [dr, dc] of dirs) {
+          let nr = r + dr, nc = c + dc;
+          while (inBounds(nr, nc)) {
+            const t = b[nr][nc];
+            if (!t) moves.push({ r: nr, c: nc, capture: false });
+            else {
+              if (pieceColor(t) !== color) moves.push({ r: nr, c: nc, capture: true });
+              break;
+            }
+            nr += dr; nc += dc;
+          }
+        }
+      }
+      return moves;
+    }
+
+    function findKing(b, color) {
+      for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        if (b[r][c] === color + 'k') return { r, c };
+      }
+      return null;
+    }
+
+    function isCheck(b, color) {
+      const king = findKing(b, color);
+      if (!king) return false;
+      const enemy = color === 'w' ? 'b' : 'w';
+      for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        if (pieceColor(b[r][c]) !== enemy) continue;
+        const m = getPseudoMoves(b, r, c);
+        if (m.some(x => x.r === king.r && x.c === king.c)) return true;
+      }
+      return false;
+    }
+
+    function getLegalMoves(b, r, c) {
+      const p = b[r][c];
+      if (!p || pieceColor(p) !== turn) return [];
+      return getPseudoMoves(b, r, c).filter(m => {
+        const test = cloneBoard(b);
+        test[m.r][m.c] = test[r][c];
+        test[r][c] = null;
+        return !isCheck(test, turn);
+      });
+    }
+
+    function allMovesFor(color) {
+      const current = turn;
+      turn = color;
+      let any = false;
+      for (let r = 0; r < 8 && !any; r++) for (let c = 0; c < 8 && !any; c++) {
+        if (pieceColor(board[r][c]) !== color) continue;
+        if (getLegalMoves(board, r, c).length) any = true;
+      }
+      turn = current;
+      return any;
+    }
+
+    function movePiece(fr, fc, tr, tc) {
+      const p = board[fr][fc];
+      board[tr][tc] = p;
+      board[fr][fc] = null;
+      if (p[1] === 'p' && (tr === 0 || tr === 7)) board[tr][tc] = p[0] + 'q';
+    }
+
+    function onSquareClick(r, c) {
+      if (gameOver) return;
+      const clicked = board[r][c];
+      const move = legalMoves.find(m => m.r === r && m.c === c);
+
+      if (selected && move) {
+        movePiece(selected.r, selected.c, r, c);
+        selected = null;
+        legalMoves = [];
+        turn = turn === 'w' ? 'b' : 'w';
+
+        const check = isCheck(board, turn);
+        const hasMoves = allMovesFor(turn);
+        if (!hasMoves) {
+          gameOver = true;
+          if (check) setMessage(`Xeque-mate! ${turn === 'w' ? 'Pretas' : 'Brancas'} venceram.`);
+          else setMessage('Empate por afogamento.');
+        } else if (check) {
+          setMessage(`Xeque em ${turn === 'w' ? 'brancas' : 'pretas'}!`);
+        } else {
+          setMessage('');
+        }
+        render();
+        return;
+      }
+
+      if (clicked && pieceColor(clicked) === turn) {
+        selected = { r, c };
+        legalMoves = getLegalMoves(board, r, c);
+      } else {
+        selected = null;
+        legalMoves = [];
+      }
+      render();
+    }
+
+    function setMessage(text) { document.getElementById('msg').textContent = text; }
+
+    function render() {
+      const boardEl = document.getElementById('board');
+      boardEl.innerHTML = '';
+
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const sq = document.createElement('button');
+          sq.className = `sq ${(r + c) % 2 ? 'dark' : 'light'}`;
+          if (selected && selected.r === r && selected.c === c) sq.classList.add('selected');
+          const target = legalMoves.find(m => m.r === r && m.c === c);
+          if (target) sq.classList.add(target.capture ? 'capture' : 'target');
+          sq.setAttribute('aria-label', `Casa ${8-r}-${String.fromCharCode(97+c)}`);
+          sq.onclick = () => onSquareClick(r, c);
+
+          const piece = board[r][c];
+          if (piece) sq.textContent = PIECES[piece];
+          boardEl.appendChild(sq);
+        }
+      }
+
+      document.getElementById('turn').textContent = turn === 'w' ? 'Brancas' : 'Pretas';
+      document.getElementById('check').textContent = isCheck(board, turn) ? 'Sim' : 'Não';
+    }
+
+    document.getElementById('restart').addEventListener('click', init);
+    init();
+  </script>
+</body>
+</html>

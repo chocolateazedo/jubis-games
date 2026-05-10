@@ -1,9 +1,0 @@
-{
-  "title": "Coletador de Moedas",
-  "description": "Colete moedas, desvie dos inimigos e tente bater seu recorde.",
-  "emoji": "🪙",
-  "tags": ["arcade", "1 jogador", "desktop"],
-  "entry": "index.html",
-  "hidden": false,
-  "order": 2
-}

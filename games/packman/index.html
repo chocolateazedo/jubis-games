@@ -16,6 +16,14 @@
       font-family: Inter, system-ui, sans-serif;
     }
     .wrap { text-align: center; }
+    .back {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      color: #b8d9ff;
+      text-decoration: none;
+      font-weight: 700;
+    }
     canvas {
       border: 2px solid #28365d;
       border-radius: 10px;
@@ -27,9 +35,10 @@
   </style>
 </head>
 <body>
+  <a class="back" href="../../">← Voltar</a>
   <div class="wrap">
     <h1>👾 Packman</h1>
-    <canvas id="game" width="420" height="420" aria-label="Jogo Packman"></canvas>
+    <canvas id="game" width="420" height="420" aria-label="Jogo Packman" tabindex="0"></canvas>
     <div class="hud">
       <span id="score">Pontos: 0</span>
       <span id="lives">Vidas: 3</span>
@@ -95,12 +104,22 @@
       if (!isWall(nx, ny)) player.dir = dir;
     }
 
-    window.addEventListener("keydown", (e) => {
-      if (e.key === "ArrowUp") tryTurn({x:0,y:-1});
-      if (e.key === "ArrowDown") tryTurn({x:0,y:1});
-      if (e.key === "ArrowLeft") tryTurn({x:-1,y:0});
-      if (e.key === "ArrowRight") tryTurn({x:1,y:0});
-    });
+    function handleKeyDown(e) {
+      const moves = {
+        ArrowUp: {x:0, y:-1},
+        ArrowDown: {x:0, y:1},
+        ArrowLeft: {x:-1, y:0},
+        ArrowRight: {x:1, y:0},
+      };
+      const moveDir = moves[e.key];
+      if (!moveDir) return;
+      e.preventDefault();
+      tryTurn(moveDir);
+    }
+
+    window.addEventListener("keydown", handleKeyDown, { passive: false });
+    canvas.addEventListener("keydown", handleKeyDown, { passive: false });
+    canvas.focus();
 
     function update() {
       if (gameOver) return;

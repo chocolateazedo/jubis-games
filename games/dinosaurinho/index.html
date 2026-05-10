@@ -30,9 +30,24 @@
       border-radius: 10px;
     }
     .help { margin-top: 10px; font-size: .95rem; opacity: .9; }
+    .back {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      color: #1f2f4f;
+      text-decoration: none;
+      font-weight: 700;
+      background: rgba(255,255,255,.72);
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(31,47,79,.25);
+      backdrop-filter: blur(3px);
+    }
+    .back:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
+  <a class="back" href="../../index.php">← Voltar</a>
   <main class="wrap">
     <h1>🦖 Dinosaurinho</h1>
     <p>Pule com <strong>Espaço</strong> ou <strong>↑</strong>.</p>

@@ -1,0 +1,9 @@
+{
+  "title": "Máquina de Bichinhos",
+  "description": "Controle a garra com a alavanca e tente pegar os bichinhos fofos!",
+  "emoji": "🧸",
+  "tags": ["arcade", "habilidade", "1 jogador"],
+  "entry": "index.html",
+  "hidden": false,
+  "order": 7
+}

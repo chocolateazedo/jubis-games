@@ -1,8 +1,0 @@
-{
-  "title": "Pula Corda",
-  "description": "Pule na hora certa para não tropeçar na corda!",
-  "emoji": "🪢",
-  "tags": ["arcade", "tempo", "1 jogador"],
-  "entry": "index.html",
-  "order": 3
-}

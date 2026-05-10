@@ -35,6 +35,17 @@
     }
     .hud { margin-top: .8rem; display: flex; gap: 1rem; justify-content: center; font-weight: 600; }
     .hint { opacity:.8; font-size:.95rem; margin-top:.4rem; }
+    .actions { margin-top: .8rem; }
+    .restart {
+      border: 1px solid #5ef0ff;
+      border-radius: 10px;
+      background: linear-gradient(180deg, #17385e, #0a1b33);
+      color: #c8f9ff;
+      font-weight: 700;
+      padding: .55rem .95rem;
+      cursor: pointer;
+    }
+    .restart:active { transform: scale(.98); }
 
     .controls {
       margin: 1rem auto 0;
@@ -79,6 +90,9 @@
       <span id="lives">Vidas: 3</span>
     </div>
     <p class="hint">Use as setas para mover. Pegue todos os pontos para vencer.</p>
+    <div class="actions">
+      <button id="restart" class="restart" type="button">Reiniciar partida</button>
+    </div>
     <div class="controls" aria-label="Controles mobile">
       <span class="spacer" aria-hidden="true"></span>
       <button type="button" data-dir="up" aria-label="Mover para cima">▲</button>
@@ -91,7 +105,7 @@
 
   <script>
     const TILE = 28;
-    const map = [
+    const baseMap = [
       "###############",
       "#.............#",
       "#.###.###.###.#",
@@ -106,29 +120,54 @@
       "#o....#.#....o#",
       "###############"
     ].map(r => r.split(""));
+    let map = baseMap.map(row => [...row]);
 
     const canvas = document.getElementById("game");
     const ctx = canvas.getContext("2d");
     const scoreEl = document.getElementById("score");
     const livesEl = document.getElementById("lives");
     const controls = document.querySelector(".controls");
+    const restartButton = document.getElementById("restart");
 
-    let player = {x: 7, y: 9, dir: {x:0,y:0}};
+    const PLAYER_START = { x: 7, y: 9 };
+    const GHOSTS_START = [
+      { x: 7, y: 7, color: "#ff4e50", dir: {x:1,y:0} },
+      { x: 6, y: 7, color: "#4ecbff", dir: {x:0,y:1} },
+    ];
+
+    let player = {x: PLAYER_START.x, y: PLAYER_START.y, dir: {x:0,y:0}};
     let score = 0;
     let lives = 3;
     let dots = 0;
     let gameOver = false;
 
-    const ghosts = [
-      {x: 7, y: 7, color: "#ff4e50", dir: {x:1,y:0}},
-      {x: 6, y: 7, color: "#4ecbff", dir: {x:0,y:1}},
-    ];
+    let ghosts = GHOSTS_START.map(g => ({ ...g, dir: { ...g.dir } }));
 
-    for (let y = 0; y < map.length; y++) {
-      for (let x = 0; x < map[0].length; x++) {
-        if (map[y][x] === "." || map[y][x] === "o") dots++;
+    function countDots() {
+      let total = 0;
+      for (let y = 0; y < map.length; y++) {
+        for (let x = 0; x < map[0].length; x++) {
+          if (map[y][x] === "." || map[y][x] === "o") total++;
+        }
       }
+      return total;
     }
+
+    function restartGame() {
+      map = baseMap.map(row => [...row]);
+      player = {x: PLAYER_START.x, y: PLAYER_START.y, dir: {x:0,y:0}};
+      ghosts = GHOSTS_START.map(g => ({ ...g, dir: { ...g.dir } }));
+      score = 0;
+      lives = 3;
+      dots = countDots();
+      gameOver = false;
+      scoreEl.textContent = `Pontos: ${score}`;
+      livesEl.textContent = `Vidas: ${lives}`;
+      draw();
+      canvas.focus();
+    }
+
+    restartGame();
 
     function isWall(x, y) {
       return y < 0 || y >= map.length || x < 0 || x >= map[0].length || map[y][x] === "#";
@@ -180,6 +219,7 @@
       handleMove(button.dataset.dir);
       canvas.focus();
     });
+    restartButton?.addEventListener("click", restartGame);
     canvas.focus();
 
     function update() {
@@ -201,7 +241,7 @@
 
         if (g.x === player.x && g.y === player.y) {
           lives--;
-          player.x = 7; player.y = 9; player.dir = {x:0,y:0};
+          player.x = PLAYER_START.x; player.y = PLAYER_START.y; player.dir = {x:0,y:0};
           if (lives <= 0) {
             gameOver = true;
           }

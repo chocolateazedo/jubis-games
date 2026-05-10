@@ -1,0 +1,8 @@
+{
+  "title": "Jogo de Desenho",
+  "description": "Desenhe livremente com pincel, borracha e várias cores.",
+  "emoji": "🎨",
+  "tags": ["criativo", "1 jogador"],
+  "entry": "index.html",
+  "order": 1
+}

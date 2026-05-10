@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Jogo de Desenho</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100dvh;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: radial-gradient(circle at top, #23264b, #111326 50%, #090b17);
+      color: #f7f8ff;
+      display: grid;
+      place-items: center;
+      padding: 16px;
+    }
+    .app {
+      width: min(100%, 980px);
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.15);
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 16px 40px rgba(0,0,0,.35);
+      backdrop-filter: blur(6px);
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      padding: 12px;
+      background: rgba(0,0,0,.18);
+      border-bottom: 1px solid rgba(255,255,255,.12);
+    }
+    button, input[type="color"], input[type="range"] {
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: rgba(255,255,255,.1);
+      color: #fff;
+      font: inherit;
+    }
+    button { cursor: pointer; }
+    button.active { outline: 2px solid #8ec5ff; }
+    .board-wrap { padding: 12px; }
+    canvas {
+      width: 100%;
+      height: min(68vh, 700px);
+      display: block;
+      background: #fff;
+      border-radius: 12px;
+      touch-action: none;
+      cursor: crosshair;
+    }
+    .label { opacity: .9; font-size: .95rem; }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="toolbar">
+      <button id="brushBtn" class="active">🖌️ Pincel</button>
+      <button id="eraserBtn">🧽 Borracha</button>
+      <label class="label">Cor <input id="color" type="color" value="#2222ff"></label>
+      <label class="label">Tamanho <input id="size" type="range" min="2" max="48" value="8"></label>
+      <button id="clearBtn">🗑️ Limpar</button>
+      <button id="saveBtn">💾 Salvar PNG</button>
+    </section>
+    <section class="board-wrap">
+      <canvas id="board" aria-label="Quadro de desenho"></canvas>
+    </section>
+  </main>
+
+  <script>
+    const canvas = document.getElementById('board');
+    const ctx = canvas.getContext('2d');
+    const colorInput = document.getElementById('color');
+    const sizeInput = document.getElementById('size');
+    const brushBtn = document.getElementById('brushBtn');
+    const eraserBtn = document.getElementById('eraserBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const saveBtn = document.getElementById('saveBtn');
+
+    let drawing = false;
+    let erasing = false;
+
+    function resizeCanvas() {
+      const ratio = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+      canvas.width = Math.max(1, Math.floor(rect.width * ratio));
+      canvas.height = Math.max(1, Math.floor(rect.height * ratio));
+      ctx.scale(ratio, ratio);
+
+      const temp = document.createElement('canvas');
+      temp.width = image.width;
+      temp.height = image.height;
+      temp.getContext('2d').putImageData(image, 0, 0);
+      ctx.drawImage(temp, 0, 0, rect.width, rect.height);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+    }
+
+    function pointFromEvent(e) {
+      const rect = canvas.getBoundingClientRect();
+      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    }
+
+    function drawStart(e) {
+      drawing = true;
+      const p = pointFromEvent(e);
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+    }
+
+    function drawMove(e) {
+      if (!drawing) return;
+      const p = pointFromEvent(e);
+      ctx.globalCompositeOperation = erasing ? 'destination-out' : 'source-over';
+      ctx.strokeStyle = colorInput.value;
+      ctx.lineWidth = Number(sizeInput.value);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+    }
+
+    function drawEnd() {
+      drawing = false;
+      ctx.closePath();
+    }
+
+    function setTool(isEraser) {
+      erasing = isEraser;
+      brushBtn.classList.toggle('active', !isEraser);
+      eraserBtn.classList.toggle('active', isEraser);
+    }
+
+    brushBtn.addEventListener('click', () => setTool(false));
+    eraserBtn.addEventListener('click', () => setTool(true));
+    clearBtn.addEventListener('click', () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    });
+    saveBtn.addEventListener('click', () => {
+      const a = document.createElement('a');
+      a.href = canvas.toDataURL('image/png');
+      a.download = 'meu-desenho.png';
+      a.click();
+    });
+
+    canvas.addEventListener('pointerdown', drawStart);
+    canvas.addEventListener('pointermove', drawMove);
+    canvas.addEventListener('pointerup', drawEnd);
+    canvas.addEventListener('pointerleave', drawEnd);
+
+    window.addEventListener('resize', resizeCanvas);
+    requestAnimationFrame(() => {
+      resizeCanvas();
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    });
+  </script>
+</body>
+</html>

@@ -57,6 +57,7 @@ Pronto! Faz upload e o jogo aparece automaticamente na página inicial. Não pre
 
 ## Jogos publicados
 
+- Jogo de Desenho (`games/jogo-de-desenho`)
 - Bate Bola (`games/bate-bola`)
 - Bate Martelo Arcade 3D (`games/bate-martelo-arcade-3d`)
 - Damas (`games/damas`)

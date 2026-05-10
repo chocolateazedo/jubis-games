@@ -1,0 +1,8 @@
+{
+  "title": "Jogo de Inglês",
+  "description": "Acerte traduções de palavras em inglês e some pontos.",
+  "emoji": "🇬🇧",
+  "tags": ["palavras", "1 jogador", "educativo"],
+  "entry": "index.html",
+  "order": 13
+}

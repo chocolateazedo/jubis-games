@@ -1,8 +1,0 @@
-{
-  "title": "Clique de Moedas",
-  "description": "Clique para juntar moedas e bater seu recorde.",
-  "emoji": "🪙",
-  "tags": ["clique", "casual", "1 jogador"],
-  "entry": "index.html",
-  "order": 1
-}

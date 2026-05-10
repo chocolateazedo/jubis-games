@@ -67,6 +67,7 @@ Pronto! Faz upload e o jogo aparece automaticamente na página inicial. Não pre
 - Jogo da Velha (`games/jogo-da-velha`)
 - Stickman runner (`games/stickman-runner`)
 - Jogo de Stop (`games/jogo-de-stop`)
+- Jogo de Inglês (`games/jogo-de-ingles`)
 
 ## Requisitos do servidor
 

@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Jogo de Inglês</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: radial-gradient(circle at top, #273469, #111827 70%);
+      display: grid;
+      place-items: center;
+      color: #f9fafb;
+    }
+    .card {
+      width: min(92vw, 560px);
+      background: rgba(17, 24, 39, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 18px;
+      padding: 24px;
+      box-shadow: 0 16px 30px rgba(0,0,0,.35);
+    }
+    h1 { margin-top: 0; font-size: clamp(1.4rem, 2vw, 1.8rem); }
+    .word {
+      font-size: clamp(2rem, 5vw, 2.6rem);
+      font-weight: 700;
+      text-align: center;
+      margin: 18px 0;
+      color: #93c5fd;
+    }
+    .options { display: grid; gap: 10px; }
+    button {
+      border: none;
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 1rem;
+      cursor: pointer;
+      background: #1f2937;
+      color: #f9fafb;
+      transition: transform .08s ease, background .2s ease;
+    }
+    button:hover { background: #374151; }
+    button:active { transform: scale(0.98); }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      font-size: .95rem;
+      opacity: .9;
+    }
+    .result { margin-top: 14px; min-height: 24px; font-weight: 600; }
+    .success { color: #34d399; }
+    .fail { color: #fca5a5; }
+    .footer { margin-top: 18px; display:flex; justify-content:space-between; gap: 10px; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>🇬🇧 Jogo de Inglês</h1>
+    <div class="topbar">
+      <span id="score">Pontos: 0</span>
+      <span id="round">Rodada: 1/10</span>
+    </div>
+    <p>Escolha a tradução correta:</p>
+    <div class="word" id="word">---</div>
+    <div class="options" id="options"></div>
+    <div class="result" id="result"></div>
+    <div class="footer">
+      <button id="nextBtn" style="display:none;">Próxima</button>
+      <button id="restartBtn" style="display:none;">Jogar de novo</button>
+    </div>
+  </main>
+
+  <script>
+    const bank = [
+      { en: 'apple', pt: 'maçã' },
+      { en: 'house', pt: 'casa' },
+      { en: 'book', pt: 'livro' },
+      { en: 'dog', pt: 'cachorro' },
+      { en: 'water', pt: 'água' },
+      { en: 'school', pt: 'escola' },
+      { en: 'friend', pt: 'amigo' },
+      { en: 'sun', pt: 'sol' },
+      { en: 'chair', pt: 'cadeira' },
+      { en: 'car', pt: 'carro' },
+      { en: 'milk', pt: 'leite' },
+      { en: 'door', pt: 'porta' }
+    ];
+
+    let questions = [];
+    let current = 0;
+    let score = 0;
+
+    const wordEl = document.getElementById('word');
+    const optionsEl = document.getElementById('options');
+    const scoreEl = document.getElementById('score');
+    const roundEl = document.getElementById('round');
+    const resultEl = document.getElementById('result');
+    const nextBtn = document.getElementById('nextBtn');
+    const restartBtn = document.getElementById('restartBtn');
+
+    function shuffle(arr) {
+      const clone = [...arr];
+      for (let i = clone.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [clone[i], clone[j]] = [clone[j], clone[i]];
+      }
+      return clone;
+    }
+
+    function init() {
+      questions = shuffle(bank).slice(0, 10);
+      current = 0;
+      score = 0;
+      restartBtn.style.display = 'none';
+      nextBtn.style.display = 'none';
+      resultEl.textContent = '';
+      updateHUD();
+      renderQuestion();
+    }
+
+    function updateHUD() {
+      scoreEl.textContent = `Pontos: ${score}`;
+      roundEl.textContent = `Rodada: ${Math.min(current + 1, 10)}/10`;
+    }
+
+    function renderQuestion() {
+      const q = questions[current];
+      wordEl.textContent = q.en;
+
+      const wrong = shuffle(bank.filter(x => x.pt !== q.pt)).slice(0, 3).map(x => x.pt);
+      const choices = shuffle([q.pt, ...wrong]);
+
+      optionsEl.innerHTML = '';
+      choices.forEach(choice => {
+        const btn = document.createElement('button');
+        btn.textContent = choice;
+        btn.onclick = () => answer(choice, q.pt);
+        optionsEl.appendChild(btn);
+      });
+    }
+
+    function answer(choice, correct) {
+      [...optionsEl.querySelectorAll('button')].forEach(b => b.disabled = true);
+      if (choice === correct) {
+        score++;
+        resultEl.textContent = '✅ Acertou!';
+        resultEl.className = 'result success';
+      } else {
+        resultEl.textContent = `❌ Errou! Resposta certa: ${correct}`;
+        resultEl.className = 'result fail';
+      }
+      updateHUD();
+      nextBtn.style.display = 'inline-block';
+    }
+
+    nextBtn.addEventListener('click', () => {
+      current++;
+      nextBtn.style.display = 'none';
+      resultEl.textContent = '';
+      if (current >= questions.length) {
+        finish();
+      } else {
+        updateHUD();
+        renderQuestion();
+      }
+    });
+
+    function finish() {
+      wordEl.textContent = 'Fim de jogo!';
+      optionsEl.innerHTML = '';
+      const pct = Math.round((score / questions.length) * 100);
+      resultEl.textContent = `Você fez ${score}/${questions.length} (${pct}%).`;
+      resultEl.className = 'result success';
+      roundEl.textContent = 'Rodada: concluído';
+      restartBtn.style.display = 'inline-block';
+    }
+
+    restartBtn.addEventListener('click', init);
+    init();
+  </script>
+</body>
+</html>

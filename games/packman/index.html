@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Packman</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #090b18;
+      color: #f0f0f0;
+      font-family: Inter, system-ui, sans-serif;
+    }
+    .wrap { text-align: center; }
+    canvas {
+      border: 2px solid #28365d;
+      border-radius: 10px;
+      background: #05070f;
+      box-shadow: 0 15px 40px rgba(0,0,0,.45);
+    }
+    .hud { margin-top: .8rem; display: flex; gap: 1rem; justify-content: center; font-weight: 600; }
+    .hint { opacity:.8; font-size:.95rem; margin-top:.4rem; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>👾 Packman</h1>
+    <canvas id="game" width="420" height="420" aria-label="Jogo Packman"></canvas>
+    <div class="hud">
+      <span id="score">Pontos: 0</span>
+      <span id="lives">Vidas: 3</span>
+    </div>
+    <p class="hint">Use as setas para mover. Pegue todos os pontos para vencer.</p>
+  </div>
+
+  <script>
+    const TILE = 28;
+    const map = [
+      "###############",
+      "#.............#",
+      "#.###.###.###.#",
+      "#o#.......#...#",
+      "#.###.#.#.###.#",
+      "#.....#.#.....#",
+      "#####.#.#.#####",
+      "#.............#",
+      "#.###.###.###.#",
+      "#...#..P..#...#",
+      "#.###.#.#.###.#",
+      "#o....#.#....o#",
+      "###############"
+    ].map(r => r.split(""));
+
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const scoreEl = document.getElementById("score");
+    const livesEl = document.getElementById("lives");
+
+    let player = {x: 7, y: 9, dir: {x:0,y:0}};
+    let score = 0;
+    let lives = 3;
+    let dots = 0;
+    let gameOver = false;
+
+    const ghosts = [
+      {x: 7, y: 7, color: "#ff4e50", dir: {x:1,y:0}},
+      {x: 6, y: 7, color: "#4ecbff", dir: {x:0,y:1}},
+    ];
+
+    for (let y = 0; y < map.length; y++) {
+      for (let x = 0; x < map[0].length; x++) {
+        if (map[y][x] === "." || map[y][x] === "o") dots++;
+      }
+    }
+
+    function isWall(x, y) {
+      return y < 0 || y >= map.length || x < 0 || x >= map[0].length || map[y][x] === "#";
+    }
+
+    function move(entity) {
+      const nx = entity.x + entity.dir.x;
+      const ny = entity.y + entity.dir.y;
+      if (!isWall(nx, ny)) {
+        entity.x = nx; entity.y = ny;
+      }
+    }
+
+    function tryTurn(dir) {
+      const nx = player.x + dir.x;
+      const ny = player.y + dir.y;
+      if (!isWall(nx, ny)) player.dir = dir;
+    }
+
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowUp") tryTurn({x:0,y:-1});
+      if (e.key === "ArrowDown") tryTurn({x:0,y:1});
+      if (e.key === "ArrowLeft") tryTurn({x:-1,y:0});
+      if (e.key === "ArrowRight") tryTurn({x:1,y:0});
+    });
+
+    function update() {
+      if (gameOver) return;
+
+      move(player);
+      const cell = map[player.y][player.x];
+      if (cell === ".") { map[player.y][player.x] = " "; score += 10; dots--; }
+      if (cell === "o") { map[player.y][player.x] = " "; score += 50; dots--; }
+
+      ghosts.forEach(g => {
+        const dirs = [
+          {x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}
+        ].filter(d => !isWall(g.x + d.x, g.y + d.y));
+        if (!dirs.some(d => d.x === g.dir.x && d.y === g.dir.y) || Math.random() < 0.25) {
+          g.dir = dirs[Math.floor(Math.random() * dirs.length)] || {x:0,y:0};
+        }
+        move(g);
+
+        if (g.x === player.x && g.y === player.y) {
+          lives--;
+          player.x = 7; player.y = 9; player.dir = {x:0,y:0};
+          if (lives <= 0) {
+            gameOver = true;
+          }
+        }
+      });
+
+      if (dots === 0) gameOver = true;
+      scoreEl.textContent = `Pontos: ${score}`;
+      livesEl.textContent = `Vidas: ${lives}`;
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (let y = 0; y < map.length; y++) {
+        for (let x = 0; x < map[0].length; x++) {
+          const c = map[y][x];
+          const px = x * TILE;
+          const py = y * TILE;
+          if (c === "#") {
+            ctx.fillStyle = "#203a75";
+            ctx.fillRect(px, py, TILE, TILE);
+          } else if (c === ".") {
+            ctx.fillStyle = "#f2d46f";
+            ctx.beginPath();
+            ctx.arc(px + TILE/2, py + TILE/2, 3, 0, Math.PI * 2);
+            ctx.fill();
+          } else if (c === "o") {
+            ctx.fillStyle = "#fff";
+            ctx.beginPath();
+            ctx.arc(px + TILE/2, py + TILE/2, 6, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+
+      ctx.fillStyle = "#f8d829";
+      ctx.beginPath();
+      ctx.arc(player.x * TILE + TILE/2, player.y * TILE + TILE/2, TILE/2 - 3, 0.2 * Math.PI, 1.8 * Math.PI);
+      ctx.lineTo(player.x * TILE + TILE/2, player.y * TILE + TILE/2);
+      ctx.fill();
+
+      ghosts.forEach(g => {
+        ctx.fillStyle = g.color;
+        ctx.beginPath();
+        ctx.arc(g.x * TILE + TILE/2, g.y * TILE + TILE/2, TILE/2 - 4, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      if (gameOver) {
+        ctx.fillStyle = "rgba(0,0,0,.65)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 28px system-ui";
+        ctx.textAlign = "center";
+        const won = dots === 0 && lives > 0;
+        ctx.fillText(won ? "Você venceu!" : "Game Over", canvas.width/2, canvas.height/2);
+      }
+    }
+
+    function loop() {
+      update();
+      draw();
+    }
+
+    setInterval(loop, 150);
+    draw();
+  </script>
+</body>
+</html>

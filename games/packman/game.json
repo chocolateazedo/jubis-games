@@ -1,0 +1,9 @@
+{
+  "title": "Packman",
+  "description": "Colete todos os pontos e desvie dos fantasmas neste mini arcade.",
+  "emoji": "👻",
+  "tags": ["arcade", "1 jogador"],
+  "entry": "index.html",
+  "hidden": false,
+  "order": 12
+}

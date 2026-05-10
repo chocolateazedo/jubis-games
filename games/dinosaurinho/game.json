@@ -1,0 +1,8 @@
+{
+  "title": "Dinosaurinho",
+  "description": "Corra e desvie dos cactos para fazer a maior pontuação.",
+  "emoji": "🦖",
+  "tags": ["arcade", "endless runner", "1 jogador"],
+  "entry": "index.html",
+  "order": 3
+}

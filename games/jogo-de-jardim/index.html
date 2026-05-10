@@ -109,12 +109,28 @@
     }
     .msg.good { color: #1f6f3d; }
     .msg.bad { color: var(--danger); }
+    .back {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      color: #1f5130;
+      font-weight: 700;
+      text-decoration: none;
+      background: rgba(255,255,255,.92);
+      border: 2px solid #9cd8b0;
+      border-radius: 999px;
+      padding: 6px 12px;
+      z-index: 20;
+    }
+    .back:hover { text-decoration: underline; }
     @media (max-width: 700px) {
       .board { grid-template-columns: repeat(2, minmax(120px,1fr)); }
     }
   </style>
 </head>
 <body>
+  <a class="back" href="../../index.php">← Voltar</a>
+
   <main class="game">
     <div class="top">
       <h1>🌼 Jogo de Jardim</h1>

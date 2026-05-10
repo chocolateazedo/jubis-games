@@ -66,6 +66,7 @@ Pronto! Faz upload e o jogo aparece automaticamente na página inicial. Não pre
 - Damas (`games/damas`)
 - Jogo da Velha (`games/jogo-da-velha`)
 - Stickman runner (`games/stickman-runner`)
+- Jogo de Stop (`games/jogo-de-stop`)
 
 ## Requisitos do servidor
 

@@ -61,6 +61,7 @@ Pronto! Faz upload e o jogo aparece automaticamente na página inicial. Não pre
 - Bate Bola (`games/bate-bola`)
 - Bate Martelo Arcade 3D (`games/bate-martelo-arcade-3d`)
 - Damas (`games/damas`)
+- Jogo da Velha (`games/jogo-da-velha`)
 - Stickman runner (`games/stickman-runner`)
 
 ## Requisitos do servidor

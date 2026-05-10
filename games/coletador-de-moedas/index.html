@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Coletador de Moedas</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(circle at top, #202020, #111);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      color: #fff;
+    }
+    .card {
+      width: min(92vw, 820px);
+      background: #181818;
+      border: 1px solid #2f2f2f;
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 12px 30px rgba(0,0,0,.35);
+    }
+    .hud { display:flex; justify-content:space-between; margin-bottom: 12px; }
+    canvas {
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      background: linear-gradient(#0f232f, #102032);
+      border-radius: 12px;
+      display:block;
+    }
+    .hint {opacity:.8; font-size:.9rem; margin-top:8px;}
+  </style>
+</head>
+<body>
+  <section class="card">
+    <div class="hud">
+      <strong>Pontos: <span id="score">0</span></strong>
+      <strong>Vidas: <span id="lives">3</span></strong>
+    </div>
+    <canvas id="game" width="800" height="600"></canvas>
+    <p class="hint">Use ← → ↑ ↓ para mover. Pegue moedas (amarelas) e evite inimigos (vermelhos).</p>
+  </section>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const livesEl = document.getElementById('lives');
+
+    const state = {
+      score: 0,
+      lives: 3,
+      keys: new Set(),
+      player: { x: 380, y: 280, r: 16, speed: 4 },
+      coins: [],
+      enemies: [],
+      lastCoin: 0,
+      gameOver: false,
+    };
+
+    function spawnCoin() {
+      state.coins.push({ x: 30 + Math.random() * 740, y: 30 + Math.random() * 540, r: 10 });
+    }
+
+    function spawnEnemy() {
+      const side = Math.floor(Math.random() * 4);
+      let x = 0, y = 0;
+      if (side === 0) { x = -20; y = Math.random() * 600; }
+      if (side === 1) { x = 820; y = Math.random() * 600; }
+      if (side === 2) { x = Math.random() * 800; y = -20; }
+      if (side === 3) { x = Math.random() * 800; y = 620; }
+      const angle = Math.atan2(state.player.y - y, state.player.x - x);
+      state.enemies.push({ x, y, r: 14, vx: Math.cos(angle) * (1.5 + Math.random() * 1.5), vy: Math.sin(angle) * (1.5 + Math.random() * 1.5) });
+    }
+
+    for (let i = 0; i < 5; i++) spawnCoin();
+    for (let i = 0; i < 2; i++) spawnEnemy();
+
+    window.addEventListener('keydown', (e) => state.keys.add(e.key));
+    window.addEventListener('keyup', (e) => state.keys.delete(e.key));
+
+    function update() {
+      if (state.gameOver) return;
+      const p = state.player;
+      if (state.keys.has('ArrowLeft')) p.x -= p.speed;
+      if (state.keys.has('ArrowRight')) p.x += p.speed;
+      if (state.keys.has('ArrowUp')) p.y -= p.speed;
+      if (state.keys.has('ArrowDown')) p.y += p.speed;
+      p.x = Math.max(p.r, Math.min(800 - p.r, p.x));
+      p.y = Math.max(p.r, Math.min(600 - p.r, p.y));
+
+      state.coins = state.coins.filter((c) => {
+        const d = Math.hypot(c.x - p.x, c.y - p.y);
+        if (d < c.r + p.r) {
+          state.score += 10;
+          scoreEl.textContent = state.score;
+          return false;
+        }
+        return true;
+      });
+
+      if (state.coins.length < 5) spawnCoin();
+      if (Math.random() < 0.007) spawnEnemy();
+
+      for (const e of state.enemies) {
+        e.x += e.vx;
+        e.y += e.vy;
+        const d = Math.hypot(e.x - p.x, e.y - p.y);
+        if (d < e.r + p.r) {
+          state.lives -= 1;
+          livesEl.textContent = state.lives;
+          e.x = -50;
+          if (state.lives <= 0) state.gameOver = true;
+        }
+      }
+
+      state.enemies = state.enemies.filter(e => e.x > -80 && e.x < 880 && e.y > -80 && e.y < 680);
+    }
+
+    function drawCircle(x, y, r, color) {
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+    }
+
+    function render() {
+      ctx.clearRect(0, 0, 800, 600);
+      drawCircle(state.player.x, state.player.y, state.player.r, '#6ce3ff');
+      for (const c of state.coins) drawCircle(c.x, c.y, c.r, '#ffd447');
+      for (const e of state.enemies) drawCircle(e.x, e.y, e.r, '#ff4f65');
+
+      if (state.gameOver) {
+        ctx.fillStyle = 'rgba(0, 0, 0, .6)';
+        ctx.fillRect(0, 0, 800, 600);
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 52px system-ui';
+        ctx.fillText('Fim de jogo', 400, 280);
+        ctx.font = '28px system-ui';
+        ctx.fillText(`Pontuação: ${state.score}`, 400, 330);
+      }
+    }
+
+    function loop() {
+      update();
+      render();
+      requestAnimationFrame(loop);
+    }
+
+    loop();
+  </script>
+</body>
+</html>

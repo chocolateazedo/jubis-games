@@ -1,0 +1,9 @@
+{
+  "title": "Xadrez",
+  "description": "Jogue xadrez local para 2 jogadores com movimentos válidos e xeque-mate.",
+  "emoji": "♟️",
+  "tags": ["estratégia", "2 jogadores", "tabuleiro"],
+  "entry": "index.html",
+  "hidden": false,
+  "order": 7
+}

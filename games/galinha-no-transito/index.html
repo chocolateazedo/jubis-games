@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Galinha no Trânsito</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(180deg, #b7e6ff, #f2fbff 58%, #d8d8d8 58%, #d8d8d8 100%);
+    }
+    .wrap { width: min(920px, 96vw); text-align: center; }
+    h1 { margin: 0 0 8px; }
+    p { margin: 0 0 12px; }
+    canvas {
+      width: 100%;
+      max-width: 920px;
+      height: auto;
+      border: 3px solid #222;
+      border-radius: 10px;
+      background: #fff;
+    }
+    .help { margin-top: 10px; opacity: .9; }
+    .back {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      color: #1f2f4f;
+      text-decoration: none;
+      font-weight: 700;
+      background: rgba(255,255,255,.75);
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(31,47,79,.22);
+    }
+  </style>
+</head>
+<body>
+  <a class="back" href="../../index.php">← Voltar</a>
+  <main class="wrap">
+    <h1>🐔 Galinha no Trânsito</h1>
+    <p>Mova com <strong>WASD</strong> ou <strong>setas</strong> e chegue ao gramado do topo.</p>
+    <canvas id="game" width="920" height="560"></canvas>
+    <div class="help">Desvie dos carros. Ao ser atingido, você perde uma vida e volta para o início.</div>
+  </main>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+
+    const laneHeight = 70;
+    const startY = canvas.height - 48;
+    const chicken = { x: canvas.width / 2 - 18, y: startY, w: 36, h: 36, step: laneHeight };
+
+    let score = 0;
+    let lives = 3;
+    let level = 1;
+    let gameOver = false;
+    let cars = [];
+
+    function createCars() {
+      const base = [];
+      for (let i = 0; i < 5; i++) {
+        const y = 110 + i * laneHeight;
+        const dir = i % 2 === 0 ? 1 : -1;
+        const count = 2 + Math.floor(Math.random() * 2);
+        for (let j = 0; j < count; j++) {
+          const width = 72 + Math.random() * 35;
+          const speed = (2 + Math.random() * 2 + level * 0.45) * dir;
+          const spacing = 320 + Math.random() * 180;
+          const x = dir === 1 ? -j * spacing : canvas.width + j * spacing;
+          base.push({ x, y, w: width, h: 42, speed, dir, color: `hsl(${Math.random() * 360} 75% 55%)` });
+        }
+      }
+      return base;
+    }
+
+    function resetRound() {
+      chicken.x = canvas.width / 2 - chicken.w / 2;
+      chicken.y = startY;
+    }
+
+    function restartGame() {
+      score = 0;
+      lives = 3;
+      level = 1;
+      gameOver = false;
+      cars = createCars();
+      resetRound();
+    }
+
+    function move(dx, dy) {
+      if (gameOver) {
+        restartGame();
+        return;
+      }
+      chicken.x = Math.max(10, Math.min(canvas.width - chicken.w - 10, chicken.x + dx * chicken.step));
+      chicken.y = Math.max(16, Math.min(startY, chicken.y + dy * chicken.step));
+    }
+
+    addEventListener('keydown', (e) => {
+      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD", "Space"].includes(e.code)) {
+        e.preventDefault();
+      }
+      if (e.code === 'ArrowUp' || e.code === 'KeyW') move(0, -1);
+      if (e.code === 'ArrowDown' || e.code === 'KeyS') move(0, 1);
+      if (e.code === 'ArrowLeft' || e.code === 'KeyA') move(-1, 0);
+      if (e.code === 'ArrowRight' || e.code === 'KeyD') move(1, 0);
+      if (e.code === 'Space' && gameOver) restartGame();
+    });
+
+    canvas.addEventListener('pointerdown', (e) => {
+      if (gameOver) {
+        restartGame();
+        return;
+      }
+      const rect = canvas.getBoundingClientRect();
+      const px = e.clientX - rect.left;
+      const py = e.clientY - rect.top;
+      const cx = (chicken.x + chicken.w / 2) * (rect.width / canvas.width);
+      const cy = (chicken.y + chicken.h / 2) * (rect.height / canvas.height);
+      const dx = px - cx;
+      const dy = py - cy;
+      if (Math.abs(dx) > Math.abs(dy)) move(Math.sign(dx), 0);
+      else move(0, Math.sign(dy));
+    });
+
+    function hit(a, b) {
+      return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+    }
+
+    function update() {
+      if (gameOver) return;
+
+      for (const car of cars) {
+        car.x += car.speed;
+        if (car.dir === 1 && car.x > canvas.width + 110) car.x = -car.w - Math.random() * 260;
+        if (car.dir === -1 && car.x + car.w < -110) car.x = canvas.width + Math.random() * 260;
+
+        if (hit(chicken, car)) {
+          lives--;
+          resetRound();
+          if (lives <= 0) gameOver = true;
+          return;
+        }
+      }
+
+      if (chicken.y <= 30) {
+        score += 100;
+        level++;
+        cars.forEach(c => c.speed *= 1.12);
+        resetRound();
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = '#6bc86b';
+      ctx.fillRect(0, 0, canvas.width, 80);
+      ctx.fillStyle = '#5ab35a';
+      ctx.fillRect(0, canvas.height - 80, canvas.width, 80);
+
+      for (let i = 0; i < 5; i++) {
+        const y = 100 + i * laneHeight;
+        ctx.fillStyle = '#444';
+        ctx.fillRect(0, y, canvas.width, 50);
+        ctx.strokeStyle = '#e8d77d';
+        ctx.setLineDash([24, 24]);
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(0, y + 25);
+        ctx.lineTo(canvas.width, y + 25);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+
+      cars.forEach(car => {
+        ctx.fillStyle = car.color;
+        ctx.fillRect(car.x, car.y, car.w, car.h);
+        ctx.fillStyle = '#222';
+        ctx.fillRect(car.x + 8, car.y + car.h - 8, car.w - 16, 8);
+      });
+
+      // Galinha
+      ctx.fillStyle = '#fff6d5';
+      ctx.fillRect(chicken.x, chicken.y, chicken.w, chicken.h);
+      ctx.fillStyle = '#f04343';
+      ctx.fillRect(chicken.x + 8, chicken.y - 8, 20, 10);
+      ctx.fillStyle = '#e59e2a';
+      ctx.fillRect(chicken.x + chicken.w - 2, chicken.y + 14, 10, 8);
+      ctx.fillStyle = '#111';
+      ctx.fillRect(chicken.x + 24, chicken.y + 9, 4, 4);
+
+      ctx.fillStyle = '#111';
+      ctx.font = 'bold 26px Arial';
+      ctx.fillText(`Pontos: ${score}`, 18, 34);
+      ctx.fillText(`Vidas: ${'❤️'.repeat(lives)}`, 18, 64);
+      ctx.fillText(`Nível: ${level}`, 760, 34);
+
+      if (gameOver) {
+        ctx.fillStyle = 'rgba(0,0,0,.58)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 56px Arial';
+        ctx.fillText('Fim de Jogo', canvas.width / 2, 240);
+        ctx.font = '28px Arial';
+        ctx.fillText(`Pontuação final: ${score}`, canvas.width / 2, 290);
+        ctx.fillText('Pressione espaço ou toque para recomeçar', canvas.width / 2, 340);
+        ctx.textAlign = 'left';
+      }
+    }
+
+    function loop() {
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    cars = createCars();
+    loop();
+  </script>
+</body>
+</html>

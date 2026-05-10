@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jogo de Jardim</title>
+  <style>
+    :root {
+      --bg: #e8fff1;
+      --grass: #c8f7d3;
+      --soil: #8b5e3c;
+      --ui: #1f5130;
+      --accent: #2fa35f;
+      --danger: #d14a4a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Trebuchet MS", Arial, sans-serif;
+      background: linear-gradient(180deg, #b8eaff 0%, var(--bg) 35%);
+      min-height: 100vh;
+      color: #133;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+    }
+    .game {
+      width: min(980px, 100%);
+      background: rgba(255,255,255,.86);
+      border: 3px solid #7acb95;
+      border-radius: 18px;
+      box-shadow: 0 12px 35px rgba(31,81,48,.18);
+      overflow: hidden;
+    }
+    .top {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 16px;
+      background: #f4fff8;
+      border-bottom: 2px dashed #9cd8b0;
+    }
+    h1 { margin: 0; font-size: 1.25rem; color: var(--ui); }
+    .hud { display: flex; gap: 10px; flex-wrap: wrap; }
+    .pill {
+      background: white;
+      border: 2px solid #9cd8b0;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-weight: 700;
+      font-size: .95rem;
+    }
+    .controls {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding: 12px 16px;
+      background: #effff5;
+      border-bottom: 1px solid #d2f0de;
+    }
+    button {
+      border: none;
+      background: var(--accent);
+      color: white;
+      font-weight: 700;
+      padding: 9px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+    button.secondary { background: #5f7f6a; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    .board {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(120px,1fr));
+      gap: 12px;
+      padding: 16px;
+      background: var(--grass);
+    }
+    .plot {
+      aspect-ratio: 1 / 1;
+      border-radius: 14px;
+      background: var(--soil);
+      border: 2px solid #694229;
+      position: relative;
+      overflow: hidden;
+      cursor: pointer;
+      user-select: none;
+      display: grid;
+      place-items: end center;
+      padding-bottom: 8px;
+    }
+    .plot .stage { font-size: clamp(1.8rem, 4vw, 3rem); }
+    .dry::after {
+      content: "💧";
+      position: absolute;
+      top: 7px;
+      right: 8px;
+      font-size: 1.15rem;
+      filter: grayscale(100%);
+      opacity: .75;
+    }
+    .footer {
+      padding: 12px 16px 16px;
+      color: #315c43;
+      font-size: .95rem;
+      background: #fbfffd;
+    }
+    .msg.good { color: #1f6f3d; }
+    .msg.bad { color: var(--danger); }
+    @media (max-width: 700px) {
+      .board { grid-template-columns: repeat(2, minmax(120px,1fr)); }
+    }
+  </style>
+</head>
+<body>
+  <main class="game">
+    <div class="top">
+      <h1>🌼 Jogo de Jardim</h1>
+      <div class="hud">
+        <span class="pill">💰 Moedas: <strong id="coins">4</strong></span>
+        <span class="pill">⭐ Pontos: <strong id="score">0</strong></span>
+        <span class="pill">🧺 Flores colhidas: <strong id="harvest">0</strong></span>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button id="seedBtn">🌱 Plantar semente (1 moeda)</button>
+      <button id="waterBtn">💧 Regar área</button>
+      <button id="nextBtn" class="secondary">⏭️ Próximo dia</button>
+      <button id="resetBtn" class="secondary">🔄 Reiniciar</button>
+    </div>
+
+    <section id="board" class="board" aria-label="Canteiros do jardim"></section>
+    <div class="footer">
+      <p class="msg" id="msg">Clique em um canteiro vazio para plantar.</p>
+      <p>Dica: plantas secas não crescem. Regue antes de passar o dia!</p>
+    </div>
+  </main>
+
+  <script>
+    const plotCount = 8;
+    const board = document.getElementById('board');
+    const msg = document.getElementById('msg');
+    const coinsEl = document.getElementById('coins');
+    const scoreEl = document.getElementById('score');
+    const harvestEl = document.getElementById('harvest');
+
+    const seedBtn = document.getElementById('seedBtn');
+    const waterBtn = document.getElementById('waterBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const resetBtn = document.getElementById('resetBtn');
+
+    let mode = 'seed';
+    let coins = 4;
+    let score = 0;
+    let harvest = 0;
+
+    const stages = ['·', '🌱', '🌿', '🌸'];
+    let plots = [];
+
+    function createPlots() {
+      plots = Array.from({ length: plotCount }, () => ({ planted: false, stage: 0, dry: false }));
+      render();
+    }
+
+    function setMessage(text, kind = 'good') {
+      msg.textContent = text;
+      msg.className = `msg ${kind}`;
+    }
+
+    function render() {
+      coinsEl.textContent = coins;
+      scoreEl.textContent = score;
+      harvestEl.textContent = harvest;
+      seedBtn.disabled = mode === 'seed';
+      waterBtn.disabled = mode === 'water';
+
+      board.innerHTML = '';
+      plots.forEach((plot, i) => {
+        const el = document.createElement('button');
+        el.className = `plot ${plot.dry ? 'dry' : ''}`;
+        el.setAttribute('aria-label', `Canteiro ${i+1}`);
+        el.innerHTML = `<span class="stage">${stages[plot.stage]}</span>`;
+        el.addEventListener('click', () => onPlotClick(i));
+        board.appendChild(el);
+      });
+    }
+
+    function onPlotClick(index) {
+      const p = plots[index];
+      if (mode === 'seed') {
+        if (p.planted) return setMessage('Esse canteiro já tem planta!', 'bad');
+        if (coins < 1) return setMessage('Você precisa de moedas para plantar.', 'bad');
+        coins -= 1;
+        p.planted = true;
+        p.stage = 1;
+        p.dry = false;
+        setMessage('Semente plantada! Agora regue e avance os dias.');
+      } else {
+        if (!p.planted) return setMessage('Não há planta nesse canteiro.', 'bad');
+        p.dry = false;
+        setMessage('Canteiro regado!');
+      }
+      render();
+    }
+
+    function nextDay() {
+      let harvestedToday = 0;
+      plots.forEach(p => {
+        if (!p.planted) return;
+        if (p.dry) {
+          p.stage = Math.max(1, p.stage - 1);
+        } else {
+          p.stage = Math.min(3, p.stage + 1);
+          if (p.stage === 3) {
+            harvestedToday += 1;
+            score += 10;
+            coins += 2;
+            harvest += 1;
+            p.planted = false;
+            p.stage = 0;
+            p.dry = false;
+            return;
+          }
+        }
+        p.dry = true;
+      });
+
+      if (harvestedToday > 0) {
+        setMessage(`Você colheu ${harvestedToday} flor(es)! +${harvestedToday * 10} pontos 🌟`);
+      } else {
+        setMessage('O dia passou. Continue cuidando do jardim!');
+      }
+      render();
+    }
+
+    seedBtn.addEventListener('click', () => {
+      mode = 'seed';
+      setMessage('Modo plantar ativo. Clique num canteiro vazio.');
+      render();
+    });
+    waterBtn.addEventListener('click', () => {
+      mode = 'water';
+      setMessage('Modo regar ativo. Clique num canteiro com planta.');
+      render();
+    });
+    nextBtn.addEventListener('click', nextDay);
+    resetBtn.addEventListener('click', () => {
+      mode = 'seed';
+      coins = 4;
+      score = 0;
+      harvest = 0;
+      createPlots();
+      setMessage('Jardim reiniciado!');
+    });
+
+    createPlots();
+  </script>
+</body>
+</html>

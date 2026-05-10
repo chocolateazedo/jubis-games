@@ -1,0 +1,8 @@
+{
+  "title": "Jogo de Jardim",
+  "description": "Plante flores, regue e mantenha o jardim feliz!",
+  "emoji": "🌷",
+  "tags": ["casual", "simulação", "1 jogador"],
+  "entry": "index.html",
+  "order": 3
+}

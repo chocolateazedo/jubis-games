@@ -39,9 +39,11 @@
     <div class="hud">
       <strong>Pontos: <span id="score">0</span></strong>
       <strong>Vidas: <span id="lives">3</span></strong>
+      <strong>Nível: <span id="level">1</span></strong>
+      <strong>Recorde: <span id="highscore">0</span></strong>
     </div>
     <canvas id="game" width="800" height="600"></canvas>
-    <p class="hint">Use ← → ↑ ↓ para mover. Pegue moedas (amarelas) e evite inimigos (vermelhos).</p>
+    <p class="hint">Use ← → ↑ ↓ para mover. Pegue moedas (amarelas), evite inimigos (vermelhos), pressione P para pausar e R para reiniciar.</p>
   </section>
 
   <script>
@@ -49,17 +51,25 @@
     const ctx = canvas.getContext('2d');
     const scoreEl = document.getElementById('score');
     const livesEl = document.getElementById('lives');
+    const levelEl = document.getElementById('level');
+    const highscoreEl = document.getElementById('highscore');
+
+    const HIGHSCORE_KEY = 'coletadorMoedasHighscore';
 
     const state = {
       score: 0,
       lives: 3,
+      level: 1,
       keys: new Set(),
       player: { x: 380, y: 280, r: 16, speed: 4 },
       coins: [],
       enemies: [],
-      lastCoin: 0,
       gameOver: false,
+      paused: false,
+      highscore: Number(localStorage.getItem(HIGHSCORE_KEY) || 0),
     };
+
+    highscoreEl.textContent = state.highscore;
 
     function spawnCoin() {
       state.coins.push({ x: 30 + Math.random() * 740, y: 30 + Math.random() * 540, r: 10 });
@@ -79,11 +89,15 @@
     for (let i = 0; i < 5; i++) spawnCoin();
     for (let i = 0; i < 2; i++) spawnEnemy();
 
-    window.addEventListener('keydown', (e) => state.keys.add(e.key));
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'p' || e.key === 'P') state.paused = !state.paused;
+      if (e.key === 'r' || e.key === 'R') resetGame();
+      state.keys.add(e.key);
+    });
     window.addEventListener('keyup', (e) => state.keys.delete(e.key));
 
     function update() {
-      if (state.gameOver) return;
+      if (state.gameOver || state.paused) return;
       const p = state.player;
       if (state.keys.has('ArrowLeft')) p.x -= p.speed;
       if (state.keys.has('ArrowRight')) p.x += p.speed;
@@ -97,27 +111,58 @@
         if (d < c.r + p.r) {
           state.score += 10;
           scoreEl.textContent = state.score;
+          const newLevel = Math.min(10, Math.floor(state.score / 100) + 1);
+          if (newLevel !== state.level) {
+            state.level = newLevel;
+            levelEl.textContent = state.level;
+          }
           return false;
         }
         return true;
       });
 
-      if (state.coins.length < 5) spawnCoin();
-      if (Math.random() < 0.007) spawnEnemy();
+      while (state.coins.length < Math.min(7, 4 + state.level)) spawnCoin();
+      if (Math.random() < 0.005 + state.level * 0.0014) spawnEnemy();
 
       for (const e of state.enemies) {
-        e.x += e.vx;
-        e.y += e.vy;
+        const difficulty = 1 + (state.level - 1) * 0.08;
+        e.x += e.vx * difficulty;
+        e.y += e.vy * difficulty;
         const d = Math.hypot(e.x - p.x, e.y - p.y);
         if (d < e.r + p.r) {
           state.lives -= 1;
           livesEl.textContent = state.lives;
           e.x = -50;
-          if (state.lives <= 0) state.gameOver = true;
+          if (state.lives <= 0) {
+            state.gameOver = true;
+            if (state.score > state.highscore) {
+              state.highscore = state.score;
+              highscoreEl.textContent = state.highscore;
+              localStorage.setItem(HIGHSCORE_KEY, String(state.highscore));
+            }
+          }
         }
       }
 
       state.enemies = state.enemies.filter(e => e.x > -80 && e.x < 880 && e.y > -80 && e.y < 680);
+    }
+
+
+    function resetGame() {
+      state.score = 0;
+      state.lives = 3;
+      state.level = 1;
+      state.gameOver = false;
+      state.paused = false;
+      state.player.x = 380;
+      state.player.y = 280;
+      state.coins = [];
+      state.enemies = [];
+      for (let i = 0; i < 5; i++) spawnCoin();
+      for (let i = 0; i < 2; i++) spawnEnemy();
+      scoreEl.textContent = state.score;
+      livesEl.textContent = state.lives;
+      levelEl.textContent = state.level;
     }
 
     function drawCircle(x, y, r, color) {
@@ -132,6 +177,15 @@
       drawCircle(state.player.x, state.player.y, state.player.r, '#6ce3ff');
       for (const c of state.coins) drawCircle(c.x, c.y, c.r, '#ffd447');
       for (const e of state.enemies) drawCircle(e.x, e.y, e.r, '#ff4f65');
+
+      if (state.paused && !state.gameOver) {
+        ctx.fillStyle = "rgba(0, 0, 0, .5)";
+        ctx.fillRect(0, 0, 800, 600);
+        ctx.fillStyle = "#fff";
+        ctx.textAlign = "center";
+        ctx.font = "bold 46px system-ui";
+        ctx.fillText("Pausado", 400, 300);
+      }
 
       if (state.gameOver) {
         ctx.fillStyle = 'rgba(0, 0, 0, .6)';

@@ -3,20 +3,345 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Stickman runner</title>
+  <title>Stickman Runner — Jubis Games</title>
   <style>
-    body { font-family: Arial, sans-serif; display:grid; place-items:center; min-height:100vh; margin:0; background:#111; color:#fff; }
-    .card { max-width:700px; padding:24px; border:1px solid #333; border-radius:12px; background:#1a1a1a; }
-    h1 { margin-top:0; }
-    a { color:#7dd3fc; }
+    :root {
+      color-scheme: dark;
+      --bg: #0f172a;
+      --panel: #111827;
+      --line: #334155;
+      --accent: #22d3ee;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --danger: #f87171;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(circle at top, #1e293b, #020617 65%);
+      color: var(--text);
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      padding: 16px;
+    }
+
+    .game-shell {
+      width: min(900px, 100%);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: linear-gradient(180deg, #0b1222, #0a1120);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, .45);
+      padding: 14px;
+    }
+
+    .hud {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel);
+      padding: 8px 10px;
+    }
+
+    .label {
+      color: var(--muted);
+      font-size: 12px;
+      display: block;
+      margin-bottom: 2px;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+    }
+
+    .value {
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    #game {
+      width: 100%;
+      aspect-ratio: 16/9;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, #0ea5e9 0%, #7dd3fc 45%, #dff6ff 46%, #dff6ff 100%);
+      display: block;
+      touch-action: manipulation;
+    }
+
+    .actions {
+      margin-top: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .hint { color: var(--muted); font-size: 14px; }
+
+    button, a.back {
+      color: var(--text);
+      border: 1px solid var(--line);
+      background: #0f172a;
+      border-radius: 8px;
+      padding: 10px 14px;
+      text-decoration: none;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    button:hover, a.back:hover { border-color: var(--accent); }
+
+    .danger { border-color: #7f1d1d; color: #fecaca; }
+
+    @media (max-width: 640px) {
+      .value { font-size: 16px; }
+      .hint { font-size: 12px; }
+      .actions { justify-content: center; }
+    }
   </style>
 </head>
 <body>
-  <main class="card">
-    <h1>🏃 Stickman runner</h1>
-    <p>Este jogo foi publicado no catálogo do Jubis Games.</p>
-    <p>Substitua este arquivo pelo jogo final quando quiser.</p>
-    <p><a href="../../index.php">← Voltar ao catálogo</a></p>
+  <main class="game-shell">
+    <section class="hud" aria-label="Painel do jogo">
+      <div class="panel"><span class="label">Distância</span><span class="value" id="distance">0 m</span></div>
+      <div class="panel"><span class="label">Recorde</span><span class="value" id="best">0 m</span></div>
+      <div class="panel"><span class="label">Velocidade</span><span class="value" id="speed">1.0x</span></div>
+    </section>
+
+    <canvas id="game" width="1280" height="720" aria-label="Stickman Runner"></canvas>
+
+    <section class="actions">
+      <span class="hint">Pule com <strong>Espaço</strong>, <strong>Seta ↑</strong>, clique ou toque na tela.</span>
+      <div>
+        <button id="restart" class="danger">Reiniciar</button>
+        <a class="back" href="../../index.php">← Catálogo</a>
+      </div>
+    </section>
   </main>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const distanceEl = document.getElementById('distance');
+    const bestEl = document.getElementById('best');
+    const speedEl = document.getElementById('speed');
+    const restartBtn = document.getElementById('restart');
+
+    const groundY = canvas.height * 0.78;
+    const gravity = 2300;
+    const jumpVelocity = -880;
+
+    const state = {
+      player: { x: 220, y: groundY - 95, w: 55, h: 95, vy: 0, onGround: true },
+      obstacles: [],
+      particles: [],
+      distance: 0,
+      speed: 520,
+      time: 0,
+      gameOver: false,
+      started: false,
+      best: Number(localStorage.getItem('stickman_best') || 0)
+    };
+
+    bestEl.textContent = `${Math.floor(state.best)} m`;
+
+    function jump() {
+      if (state.gameOver) return reset();
+      if (state.player.onGround) {
+        state.player.vy = jumpVelocity;
+        state.player.onGround = false;
+        state.started = true;
+      }
+    }
+
+    function reset() {
+      state.player.y = groundY - state.player.h;
+      state.player.vy = 0;
+      state.player.onGround = true;
+      state.obstacles = [];
+      state.particles = [];
+      state.distance = 0;
+      state.speed = 520;
+      state.time = 0;
+      state.gameOver = false;
+      state.started = false;
+    }
+
+    function spawnObstacle() {
+      const tall = Math.random() > 0.3;
+      const h = tall ? 110 + Math.random() * 60 : 70 + Math.random() * 45;
+      const w = 35 + Math.random() * 50;
+      state.obstacles.push({ x: canvas.width + 20, y: groundY - h, w, h });
+    }
+
+    function update(dt) {
+      if (state.gameOver) return;
+
+      state.time += dt;
+      state.speed += dt * 16;
+
+      if (state.started) {
+        state.distance += (state.speed * dt) / 10;
+      }
+
+      const p = state.player;
+      p.vy += gravity * dt;
+      p.y += p.vy * dt;
+
+      if (p.y >= groundY - p.h) {
+        p.y = groundY - p.h;
+        p.vy = 0;
+        p.onGround = true;
+      }
+
+      const spawnRate = Math.max(0.5, 1.4 - state.speed / 1000);
+      if (state.started && Math.random() < dt / spawnRate) spawnObstacle();
+
+      for (const ob of state.obstacles) ob.x -= state.speed * dt;
+      state.obstacles = state.obstacles.filter(o => o.x + o.w > -40);
+
+      for (const ob of state.obstacles) {
+        if (p.x < ob.x + ob.w && p.x + p.w > ob.x && p.y < ob.y + ob.h && p.y + p.h > ob.y) {
+          state.gameOver = true;
+          if (state.distance > state.best) {
+            state.best = state.distance;
+            localStorage.setItem('stickman_best', state.best.toFixed(2));
+            bestEl.textContent = `${Math.floor(state.best)} m`;
+          }
+          break;
+        }
+      }
+
+      if (state.started && p.onGround && Math.random() < 0.22) {
+        state.particles.push({ x: p.x + 8, y: p.y + p.h - 10, r: 3 + Math.random() * 3, life: 0.35 + Math.random() * 0.2 });
+      }
+
+      for (const d of state.particles) {
+        d.x -= state.speed * dt * 0.25;
+        d.y -= dt * 50;
+        d.life -= dt;
+      }
+      state.particles = state.particles.filter(d => d.life > 0);
+
+      distanceEl.textContent = `${Math.floor(state.distance)} m`;
+      speedEl.textContent = `${(state.speed / 520).toFixed(1)}x`;
+    }
+
+    function drawStickman(p) {
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 8;
+      ctx.lineCap = 'round';
+
+      const headX = p.x + p.w * 0.55;
+      const headY = p.y + 16;
+      ctx.beginPath();
+      ctx.arc(headX, headY, 14, 0, Math.PI * 2);
+      ctx.stroke();
+
+      const bodyTop = headY + 15;
+      const bodyBottom = p.y + p.h - 32;
+      const phase = state.time * (state.gameOver ? 0 : 10);
+      const swing = Math.sin(phase) * 12;
+
+      ctx.beginPath();
+      ctx.moveTo(headX, bodyTop);
+      ctx.lineTo(headX, bodyBottom);
+      ctx.moveTo(headX, bodyTop + 18);
+      ctx.lineTo(headX - 18 + swing, bodyTop + 26);
+      ctx.moveTo(headX, bodyTop + 18);
+      ctx.lineTo(headX + 18 - swing, bodyTop + 26);
+      ctx.moveTo(headX, bodyBottom);
+      ctx.lineTo(headX - 14 - swing, p.y + p.h + 4);
+      ctx.moveTo(headX, bodyBottom);
+      ctx.lineTo(headX + 14 + swing, p.y + p.h + 4);
+      ctx.stroke();
+    }
+
+    function render() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = '#caefff';
+      ctx.fillRect(0, 0, canvas.width, groundY);
+      ctx.fillStyle = '#8ad7ff';
+      for (let i = 0; i < 5; i++) {
+        const x = ((i * 320 - (state.distance * 1.4) % 1600) + 1600) % 1600 - 300;
+        ctx.beginPath();
+        ctx.arc(x, 120 + (i % 2) * 30, 60, 0, Math.PI * 2);
+        ctx.arc(x + 55, 110 + (i % 3) * 24, 45, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.fillStyle = '#14532d';
+      ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
+
+      ctx.fillStyle = '#1e293b';
+      for (let x = -40; x < canvas.width + 80; x += 70) {
+        const off = (state.distance * 12) % 70;
+        ctx.fillRect(x - off, groundY + 28, 46, 8);
+      }
+
+      ctx.fillStyle = '#334155';
+      state.obstacles.forEach(o => {
+        ctx.fillRect(o.x, o.y, o.w, o.h);
+        ctx.fillStyle = '#475569';
+        ctx.fillRect(o.x + 4, o.y + 8, o.w - 8, 10);
+        ctx.fillStyle = '#334155';
+      });
+
+      ctx.fillStyle = 'rgba(30,41,59,0.5)';
+      state.particles.forEach(d => {
+        ctx.beginPath();
+        ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      drawStickman(state.player);
+
+      if (!state.started && !state.gameOver) {
+        drawOverlay('TOQUE OU PRESSIONE ESPAÇO PARA COMEÇAR');
+      }
+      if (state.gameOver) {
+        drawOverlay(`FIM DE JOGO · ${Math.floor(state.distance)} m`);
+      }
+    }
+
+    function drawOverlay(text) {
+      ctx.fillStyle = 'rgba(2,6,23,.52)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#f8fafc';
+      ctx.font = '700 44px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+    }
+
+    let last = performance.now();
+    function loop(now) {
+      const dt = Math.min((now - last) / 1000, 0.033);
+      last = now;
+      update(dt);
+      render();
+      requestAnimationFrame(loop);
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' || e.code === 'ArrowUp') {
+        e.preventDefault();
+        jump();
+      }
+    });
+    canvas.addEventListener('pointerdown', jump);
+    restartBtn.addEventListener('click', reset);
+
+    reset();
+    requestAnimationFrame(loop);
+  </script>
 </body>
 </html>

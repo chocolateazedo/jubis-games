@@ -1,0 +1,8 @@
+{
+  "title": "Jogo dos 7 Erros",
+  "description": "Encontre as 7 diferenças entre duas cenas antes do tempo acabar.",
+  "emoji": "🔎",
+  "tags": ["puzzle", "1 jogador", "atenção"],
+  "entry": "index.html",
+  "order": 3
+}

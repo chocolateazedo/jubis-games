@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Jogo dos 7 Erros</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: radial-gradient(circle at top, #1e2a44, #101522 62%);
+      color: #eef3ff;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+    }
+    .wrap { width: min(1100px, 96vw); padding: 18px; }
+    .hud { display:flex; flex-wrap:wrap; gap:10px; justify-content:space-between; align-items:center; margin-bottom:14px; }
+    .pill { background:#1c2437; border:1px solid #2e3f62; border-radius:12px; padding:8px 12px; font-weight:700; }
+    .board { display:grid; grid-template-columns:repeat(2,minmax(300px,1fr)); gap:12px; }
+    .scene { position:relative; border-radius:16px; overflow:hidden; border:2px solid #334367; background:#0d1423; }
+    canvas { display:block; width:100%; height:auto; cursor:crosshair; }
+    .message { margin-top:14px; font-size:1rem; font-weight:700; min-height:1.5em; }
+    button { background:#63e6be; color:#062916; border:0; border-radius:10px; padding:8px 12px; font-weight:800; cursor:pointer; }
+    .found { color:#63e6be; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="hud">
+      <div class="pill">Erros encontrados: <span id="score">0</span>/7</div>
+      <div class="pill">Tempo: <span id="time">120</span>s</div>
+      <button id="restart">Reiniciar</button>
+    </div>
+    <section class="board">
+      <div class="scene"><canvas id="left" width="520" height="340" aria-label="Imagem esquerda"></canvas></div>
+      <div class="scene"><canvas id="right" width="520" height="340" aria-label="Imagem direita"></canvas></div>
+    </section>
+    <p class="message" id="msg">Clique nas diferenças em qualquer imagem.</p>
+  </main>
+
+  <script>
+    const left = document.getElementById('left');
+    const right = document.getElementById('right');
+    const lctx = left.getContext('2d');
+    const rctx = right.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const timeEl = document.getElementById('time');
+    const msg = document.getElementById('msg');
+    const restart = document.getElementById('restart');
+
+    const diffs = [
+      { x: 90, y: 245, r: 20, type: 'sun' },
+      { x: 190, y: 180, r: 18, type: 'window' },
+      { x: 265, y: 280, r: 18, type: 'tree' },
+      { x: 360, y: 215, r: 18, type: 'cloud' },
+      { x: 430, y: 300, r: 16, type: 'flower' },
+      { x: 145, y: 305, r: 17, type: 'fence' },
+      { x: 320, y: 130, r: 20, type: 'kite' },
+    ];
+
+    let found = new Set();
+    let time = 120;
+    let timer;
+
+    function baseScene(ctx) {
+      ctx.clearRect(0, 0, 520, 340);
+      const sky = ctx.createLinearGradient(0, 0, 0, 220);
+      sky.addColorStop(0, '#8ed6ff');
+      sky.addColorStop(1, '#c6ecff');
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, 520, 220);
+
+      ctx.fillStyle = '#7ed57a';
+      ctx.fillRect(0, 220, 520, 120);
+
+      ctx.fillStyle = '#f8d86f';
+      ctx.beginPath(); ctx.arc(85, 250, 24, 0, Math.PI*2); ctx.fill();
+
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.ellipse(360, 215, 36, 20, 0, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(390, 210, 24, 16, 0, 0, Math.PI*2); ctx.fill();
+
+      ctx.fillStyle = '#e08b4f';
+      ctx.fillRect(150, 150, 110, 95);
+      ctx.fillStyle = '#9a4f2f';
+      ctx.beginPath(); ctx.moveTo(140, 150); ctx.lineTo(205, 105); ctx.lineTo(270, 150); ctx.fill();
+      ctx.fillStyle = '#93d1ff';
+      ctx.fillRect(175, 175, 26, 26);
+      ctx.fillRect(211, 175, 26, 26);
+
+      ctx.fillStyle = '#6b4b2d';
+      ctx.fillRect(258, 250, 12, 35);
+      ctx.fillStyle = '#2f9b51';
+      ctx.beginPath(); ctx.arc(264, 245, 32, 0, Math.PI*2); ctx.fill();
+
+      ctx.strokeStyle = '#8b6a43';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(120, 300); ctx.lineTo(170, 300);
+      ctx.moveTo(145, 286); ctx.lineTo(145, 314);
+      ctx.stroke();
+
+      ctx.strokeStyle = '#5f4a39';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(420, 305); ctx.lineTo(420, 286); ctx.stroke();
+      ctx.fillStyle = '#ff5ca5';
+      ctx.beginPath(); ctx.arc(420, 280, 8, 0, Math.PI*2); ctx.fill();
+
+      ctx.strokeStyle = '#333'; ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(320, 130); ctx.lineTo(305, 165); ctx.stroke();
+      ctx.fillStyle = '#ff6262';
+      ctx.beginPath();
+      ctx.moveTo(320, 130); ctx.lineTo(350, 145); ctx.lineTo(320, 160); ctx.lineTo(290, 145); ctx.closePath();
+      ctx.fill();
+    }
+
+    function alteredScene(ctx) {
+      baseScene(ctx);
+      // 7 alterações
+      ctx.fillStyle = '#ffd24a'; ctx.beginPath(); ctx.arc(90, 245, 16, 0, Math.PI*2); ctx.fill(); // sol menor
+      ctx.fillStyle = '#ffb86b'; ctx.fillRect(175, 175, 26, 26); // janela de outra cor
+      ctx.fillStyle = '#49c772'; ctx.beginPath(); ctx.arc(264, 245, 24, 0, Math.PI*2); ctx.fill(); // copa menor
+      ctx.fillStyle = '#e6f7ff'; ctx.beginPath(); ctx.ellipse(360, 215, 24, 14, 0, 0, Math.PI*2); ctx.fill(); // nuvem menor
+      ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.arc(430, 300, 8, 0, Math.PI*2); ctx.fill(); // flor deslocada/cor
+      ctx.strokeStyle = '#8b6a43'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(130, 300); ctx.lineTo(180, 300); ctx.stroke(); // cerca deslocada
+      ctx.fillStyle = '#7e5bef'; ctx.beginPath(); ctx.moveTo(320, 130); ctx.lineTo(350, 145); ctx.lineTo(320, 160); ctx.lineTo(300, 145); ctx.closePath(); ctx.fill(); // pipa diferente
+    }
+
+    function drawMarks() {
+      [lctx, rctx].forEach(ctx => {
+        found.forEach(i => {
+          const d = diffs[i];
+          ctx.strokeStyle = '#63e6be'; ctx.lineWidth = 4;
+          ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, Math.PI*2); ctx.stroke();
+        });
+      });
+    }
+
+    function render() {
+      baseScene(lctx);
+      alteredScene(rctx);
+      drawMarks();
+    }
+
+    function clickAt(ev) {
+      if (time <= 0 || found.size === 7) return;
+      const rect = ev.target.getBoundingClientRect();
+      const x = (ev.clientX - rect.left) * (ev.target.width / rect.width);
+      const y = (ev.clientY - rect.top) * (ev.target.height / rect.height);
+      const hit = diffs.findIndex((d, i) => !found.has(i) && Math.hypot(d.x - x, d.y - y) <= d.r + 5);
+      if (hit >= 0) {
+        found.add(hit);
+        scoreEl.textContent = found.size;
+        msg.innerHTML = `<span class="found">Boa! Você encontrou ${found.size}/7.</span>`;
+        render();
+        if (found.size === 7) {
+          clearInterval(timer);
+          msg.textContent = 'Parabéns! Você encontrou todos os 7 erros!';
+        }
+      }
+    }
+
+    function start() {
+      found = new Set();
+      time = 120;
+      scoreEl.textContent = '0';
+      timeEl.textContent = time;
+      msg.textContent = 'Clique nas diferenças em qualquer imagem.';
+      clearInterval(timer);
+      timer = setInterval(() => {
+        time -= 1;
+        timeEl.textContent = time;
+        if (time <= 0) {
+          clearInterval(timer);
+          msg.textContent = 'Tempo esgotado! Tente novamente.';
+        }
+      }, 1000);
+      render();
+    }
+
+    left.addEventListener('click', clickAt);
+    right.addEventListener('click', clickAt);
+    restart.addEventListener('click', start);
+
+    start();
+  </script>
+</body>
+</html>

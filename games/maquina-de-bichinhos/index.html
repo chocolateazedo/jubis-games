@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Máquina de Bichinhos</title>
+  <style>body{margin:0;font-family:system-ui;background:#101026;color:#fff;display:grid;place-items:center;min-height:100vh}.game{width:min(920px,96vw)}h1{text-align:center}.hud{display:flex;gap:8px;flex-wrap:wrap}.pill{background:#24214a;border:2px solid #5a56a8;border-radius:999px;padding:6px 10px;font-weight:700}.board-wrap{display:flex;gap:16px;align-items:flex-start}canvas{background:linear-gradient(#91d5ff 0 18%,#b7ecff 18% 20%,#85c8ff 20%);border:4px solid #2e2e52;border-radius:10px}.controls{width:190px;background:#1d1a3f;border:3px solid #48439a;border-radius:12px;padding:12px}.lever{width:100%;height:220px;border-radius:10px;border:2px dashed #6e69c8;position:relative;display:grid;place-items:center}.knob{position:absolute;width:54px;height:54px;border-radius:50%;background:#f3b13f;left:calc(50% - 27px);top:calc(50% - 27px);pointer-events:none}button{width:100%;margin-top:10px;padding:11px;border:0;border-radius:8px;font-weight:800;cursor:pointer;background:#ff4f95;color:#fff}</style>
+</head>
+<body>
+<main class="game"><h1>🧸 Máquina de Bichinhos</h1><div class="hud"><div class="pill">Prêmios: <span id="prizes">0</span></div><div class="pill">Tentativas: <span id="tries">0</span></div><div class="pill" id="msg">Use a alavanca e aperte "Descer Garra"</div></div><div class="board-wrap"><canvas id="game" width="700" height="440"></canvas><aside class="controls"><strong>🎚️ Alavanca</strong><div class="lever" id="leverArea"><div class="knob" id="knob"></div>mova aqui</div><button id="dropBtn">Descer Garra</button></aside></div></main>
+<script>
+const cvs=document.getElementById('game'),ctx=cvs.getContext('2d'),prizesEl=document.getElementById('prizes'),triesEl=document.getElementById('tries'),msgEl=document.getElementById('msg');
+const claw={x:350,y:55,baseY:55,targetY:55,state:'idle',speed:3,carrying:null},pitY=330;
+const toys=Array.from({length:12},(_,i)=>({x:90+(i%6)*95+Math.random()*30,y:pitY+24+Math.floor(i/6)*42+Math.random()*8,r:18,color:`hsl(${Math.random()*360},80%,65%)`,caught:false}));
+let prizes=0,tries=0;
+function drawClaw(){ctx.strokeStyle='#dfe6ff';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(claw.x,0);ctx.lineTo(claw.x,claw.y);ctx.stroke();ctx.fillStyle='#c6ceff';ctx.fillRect(claw.x-24,claw.y,48,14);ctx.beginPath();ctx.moveTo(claw.x-18,claw.y+14);ctx.lineTo(claw.x-8,claw.y+30);ctx.stroke();ctx.beginPath();ctx.moveTo(claw.x+18,claw.y+14);ctx.lineTo(claw.x+8,claw.y+30);ctx.stroke();}
+function drawToy(t){ctx.fillStyle=t.color;ctx.beginPath();ctx.arc(t.x,t.y,t.r,0,Math.PI*2);ctx.fill();ctx.fillStyle='#111';ctx.beginPath();ctx.arc(t.x-5,t.y-3,2.2,0,Math.PI*2);ctx.arc(t.x+5,t.y-3,2.2,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#111';ctx.beginPath();ctx.arc(t.x,t.y+2,6,0,Math.PI);ctx.stroke();}
+function update(){if(claw.state==='dropping'){claw.y+=claw.speed;if(claw.y>=claw.targetY){const c=toys.find(t=>!t.caught&&Math.hypot(t.x-claw.x,t.y-(claw.y+30))<20);if(c&&Math.random()<.72){c.caught=true;claw.carrying=c;msgEl.textContent='Pegou! Subindo...';}else msgEl.textContent='Ops! Não pegou. Tente de novo!';claw.state='rising';}}else if(claw.state==='rising'){claw.y-=claw.speed;if(claw.carrying){claw.carrying.x=claw.x;claw.carrying.y=claw.y+42;}if(claw.y<=claw.baseY){claw.y=claw.baseY;if(claw.carrying){prizes++;prizesEl.textContent=prizes;msgEl.textContent='🎉 Você ganhou um bichinho!';claw.carrying=null;}claw.state='idle';}}}
+function render(){ctx.clearRect(0,0,cvs.width,cvs.height);ctx.fillStyle='#8bd081';ctx.fillRect(0,pitY,cvs.width,cvs.height-pitY);ctx.fillStyle='#6c7fbf';ctx.fillRect(0,0,cvs.width,20);toys.filter(t=>!t.caught||t===claw.carrying).forEach(drawToy);drawClaw();update();requestAnimationFrame(render)}render();
+const leverArea=document.getElementById('leverArea'),knob=document.getElementById('knob');let dragging=false;
+function moveLever(x,y){const r=leverArea.getBoundingClientRect(),nx=Math.max(0,Math.min(1,(x-r.left)/r.width)),ny=Math.max(0,Math.min(1,(y-r.top)/r.height));knob.style.left=`calc(${nx*100}% - 27px)`;knob.style.top=`calc(${ny*100}% - 27px)`;claw.x=30+nx*(cvs.width-60);}
+leverArea.addEventListener('pointerdown',e=>{dragging=true;moveLever(e.clientX,e.clientY)});window.addEventListener('pointermove',e=>dragging&&moveLever(e.clientX,e.clientY));window.addEventListener('pointerup',()=>dragging=false);
+document.getElementById('dropBtn').addEventListener('click',()=>{if(claw.state!=='idle')return;tries++;triesEl.textContent=tries;claw.targetY=pitY-12;claw.state='dropping';msgEl.textContent='Descendo garra...';});
+</script>
+</body>
+</html>

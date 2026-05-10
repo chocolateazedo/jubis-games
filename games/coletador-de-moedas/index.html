@@ -3,209 +3,402 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Coletador de Moedas</title>
+  <title>Coletador de Moedas — Edição Deluxe</title>
   <style>
-    :root { color-scheme: dark; }
+    :root {
+      color-scheme: dark;
+      --bg-1: #0b1326;
+      --bg-2: #101f3f;
+      --card: #111a30;
+      --line: #2d3e66;
+      --text: #eef4ff;
+      --muted: #9bb0d6;
+      --accent: #72f0ff;
+      --coin: #ffd54d;
+      --danger: #ff5c75;
+      --ok: #86efac;
+    }
+    * { box-sizing: border-box; }
     body {
       margin: 0;
       min-height: 100vh;
       display: grid;
       place-items: center;
-      background: radial-gradient(circle at top, #202020, #111);
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      color: #fff;
+      background: radial-gradient(circle at 20% 0%, #1f3b78, var(--bg-1) 45%), linear-gradient(var(--bg-1), #070b17);
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      color: var(--text);
+      padding: 14px;
     }
     .card {
-      width: min(92vw, 820px);
-      background: #181818;
-      border: 1px solid #2f2f2f;
-      border-radius: 16px;
+      width: min(94vw, 920px);
+      background: linear-gradient(180deg, #152445, var(--card));
+      border: 1px solid var(--line);
+      border-radius: 20px;
       padding: 16px;
-      box-shadow: 0 12px 30px rgba(0,0,0,.35);
+      box-shadow: 0 18px 40px rgba(0,0,0,.4);
     }
-    .hud { display:flex; justify-content:space-between; margin-bottom: 12px; }
-    canvas {
+    .hud {
+      display:grid;
+      grid-template-columns: repeat(5, minmax(110px, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .hud-box {
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 12px;
+      padding: 8px 10px;
+    }
+    .label { display:block; font-size:.75rem; color: var(--muted); text-transform:uppercase; letter-spacing:.08em; }
+    .value { font-weight: 800; font-size: 1.05rem; }
+    #stateText { color: var(--accent); }
+    #game {
       width: 100%;
       aspect-ratio: 4 / 3;
-      background: linear-gradient(#0f232f, #102032);
-      border-radius: 12px;
-      display:block;
+      display: block;
+      border-radius: 14px;
+      background: #0b1b37;
+      border: 1px solid rgba(255,255,255,.12);
     }
-    .hint {opacity:.8; font-size:.9rem; margin-top:8px;}
+    .hint {
+      margin: 10px 2px 0;
+      color: var(--muted);
+      font-size: .9rem;
+      line-height: 1.45;
+    }
+    kbd {
+      border: 1px solid #4f6698;
+      border-bottom-width: 2px;
+      border-radius: 6px;
+      padding: 1px 6px;
+      background: rgba(255,255,255,.05);
+      font-size: .78rem;
+    }
+    @media (max-width: 700px) {
+      .hud { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+    }
   </style>
 </head>
 <body>
   <section class="card">
     <div class="hud">
-      <strong>Pontos: <span id="score">0</span></strong>
-      <strong>Vidas: <span id="lives">3</span></strong>
-      <strong>Nível: <span id="level">1</span></strong>
-      <strong>Recorde: <span id="highscore">0</span></strong>
+      <div class="hud-box"><span class="label">Pontos</span><span id="score" class="value">0</span></div>
+      <div class="hud-box"><span class="label">Vidas</span><span id="lives" class="value">3</span></div>
+      <div class="hud-box"><span class="label">Nível</span><span id="level" class="value">1</span></div>
+      <div class="hud-box"><span class="label">Combo</span><span id="combo" class="value">x1</span></div>
+      <div class="hud-box"><span class="label">Estado</span><span id="stateText" class="value">Jogando</span></div>
     </div>
-    <canvas id="game" width="800" height="600"></canvas>
-    <p class="hint">Use ← → ↑ ↓ para mover. Pegue moedas (amarelas), evite inimigos (vermelhos), pressione P para pausar e R para reiniciar.</p>
+
+    <canvas id="game" width="960" height="720" aria-label="Jogo Coletador de Moedas"></canvas>
+
+    <p class="hint">
+      Mova com <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> ou <kbd>WASD</kbd>. Ative turbo com <kbd>Shift</kbd> (consome energia).
+      Colete moedas amarelas, pegue estrelas para bônus e evite inimigos. <kbd>P</kbd> pausa, <kbd>R</kbd> reinicia.
+    </p>
   </section>
 
   <script>
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
+
     const scoreEl = document.getElementById('score');
     const livesEl = document.getElementById('lives');
     const levelEl = document.getElementById('level');
-    const highscoreEl = document.getElementById('highscore');
+    const comboEl = document.getElementById('combo');
+    const stateTextEl = document.getElementById('stateText');
 
-    const HIGHSCORE_KEY = 'coletadorMoedasHighscore';
+    const W = canvas.width;
+    const H = canvas.height;
 
     const state = {
       score: 0,
       lives: 3,
       level: 1,
+      combo: 1,
+      energy: 100,
       keys: new Set(),
-      player: { x: 380, y: 280, r: 16, speed: 4 },
       coins: [],
       enemies: [],
+      stars: [],
+      particles: [],
       gameOver: false,
       paused: false,
-      highscore: Number(localStorage.getItem(HIGHSCORE_KEY) || 0),
+      elapsed: 0,
+      comboTimer: 0,
+      invulnerableTimer: 0,
+      slowTimer: 0,
+      player: {
+        x: W / 2,
+        y: H / 2,
+        r: 18,
+        speed: 3.6,
+        dashSpeed: 6.2,
+      },
     };
 
-    highscoreEl.textContent = state.highscore;
+    const rand = (min, max) => min + Math.random() * (max - min);
+    const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
     function spawnCoin() {
-      state.coins.push({ x: 30 + Math.random() * 740, y: 30 + Math.random() * 540, r: 10 });
+      state.coins.push({ x: rand(40, W - 40), y: rand(40, H - 40), r: 11, value: 10 });
+    }
+
+    function spawnStar() {
+      state.stars.push({ x: rand(60, W - 60), y: rand(60, H - 60), r: 13, ttl: 10 + Math.random() * 8 });
     }
 
     function spawnEnemy() {
       const side = Math.floor(Math.random() * 4);
-      let x = 0, y = 0;
-      if (side === 0) { x = -20; y = Math.random() * 600; }
-      if (side === 1) { x = 820; y = Math.random() * 600; }
-      if (side === 2) { x = Math.random() * 800; y = -20; }
-      if (side === 3) { x = Math.random() * 800; y = 620; }
+      let x = 0;
+      let y = 0;
+      if (side === 0) { x = -20; y = Math.random() * H; }
+      if (side === 1) { x = W + 20; y = Math.random() * H; }
+      if (side === 2) { x = Math.random() * W; y = -20; }
+      if (side === 3) { x = Math.random() * W; y = H + 20; }
       const angle = Math.atan2(state.player.y - y, state.player.x - x);
-      state.enemies.push({ x, y, r: 14, vx: Math.cos(angle) * (1.5 + Math.random() * 1.5), vy: Math.sin(angle) * (1.5 + Math.random() * 1.5) });
+      const speed = rand(1.5, 2.6) + state.level * 0.08;
+      state.enemies.push({ x, y, r: 14, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed });
     }
 
-    for (let i = 0; i < 5; i++) spawnCoin();
-    for (let i = 0; i < 2; i++) spawnEnemy();
-
-    window.addEventListener('keydown', (e) => {
-      if (e.key === 'p' || e.key === 'P') state.paused = !state.paused;
-      if (e.key === 'r' || e.key === 'R') resetGame();
-      state.keys.add(e.key);
-    });
-    window.addEventListener('keyup', (e) => state.keys.delete(e.key));
-
-    function update() {
-      if (state.gameOver || state.paused) return;
-      const p = state.player;
-      if (state.keys.has('ArrowLeft')) p.x -= p.speed;
-      if (state.keys.has('ArrowRight')) p.x += p.speed;
-      if (state.keys.has('ArrowUp')) p.y -= p.speed;
-      if (state.keys.has('ArrowDown')) p.y += p.speed;
-      p.x = Math.max(p.r, Math.min(800 - p.r, p.x));
-      p.y = Math.max(p.r, Math.min(600 - p.r, p.y));
-
-      state.coins = state.coins.filter((c) => {
-        const d = Math.hypot(c.x - p.x, c.y - p.y);
-        if (d < c.r + p.r) {
-          state.score += 10;
-          scoreEl.textContent = state.score;
-          const newLevel = Math.min(10, Math.floor(state.score / 100) + 1);
-          if (newLevel !== state.level) {
-            state.level = newLevel;
-            levelEl.textContent = state.level;
-          }
-          return false;
-        }
-        return true;
-      });
-
-      while (state.coins.length < Math.min(7, 4 + state.level)) spawnCoin();
-      if (Math.random() < 0.005 + state.level * 0.0014) spawnEnemy();
-
-      for (const e of state.enemies) {
-        const difficulty = 1 + (state.level - 1) * 0.08;
-        e.x += e.vx * difficulty;
-        e.y += e.vy * difficulty;
-        const d = Math.hypot(e.x - p.x, e.y - p.y);
-        if (d < e.r + p.r) {
-          state.lives -= 1;
-          livesEl.textContent = state.lives;
-          e.x = -50;
-          if (state.lives <= 0) {
-            state.gameOver = true;
-            if (state.score > state.highscore) {
-              state.highscore = state.score;
-              highscoreEl.textContent = state.highscore;
-              localStorage.setItem(HIGHSCORE_KEY, String(state.highscore));
-            }
-          }
-        }
+    function spawnBurst(x, y, color) {
+      for (let i = 0; i < 14; i++) {
+        const a = rand(0, Math.PI * 2);
+        const s = rand(1.5, 4.5);
+        state.particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 28, color });
       }
-
-      state.enemies = state.enemies.filter(e => e.x > -80 && e.x < 880 && e.y > -80 && e.y < 680);
     }
 
+    function updateHUD() {
+      scoreEl.textContent = state.score;
+      livesEl.textContent = state.lives;
+      levelEl.textContent = state.level;
+      comboEl.textContent = `x${state.combo}`;
+      stateTextEl.textContent = state.gameOver ? 'Fim de jogo' : (state.paused ? 'Pausado' : 'Jogando');
+      stateTextEl.style.color = state.gameOver ? 'var(--danger)' : (state.paused ? '#ffd166' : 'var(--accent)');
+    }
 
     function resetGame() {
       state.score = 0;
       state.lives = 3;
       state.level = 1;
-      state.gameOver = false;
-      state.paused = false;
-      state.player.x = 380;
-      state.player.y = 280;
+      state.combo = 1;
+      state.energy = 100;
       state.coins = [];
       state.enemies = [];
-      for (let i = 0; i < 5; i++) spawnCoin();
+      state.stars = [];
+      state.particles = [];
+      state.gameOver = false;
+      state.paused = false;
+      state.elapsed = 0;
+      state.comboTimer = 0;
+      state.invulnerableTimer = 0;
+      state.slowTimer = 0;
+      state.player.x = W / 2;
+      state.player.y = H / 2;
+      for (let i = 0; i < 6; i++) spawnCoin();
       for (let i = 0; i < 2; i++) spawnEnemy();
-      scoreEl.textContent = state.score;
-      livesEl.textContent = state.lives;
-      levelEl.textContent = state.level;
+      updateHUD();
     }
 
-    function drawCircle(x, y, r, color) {
+    function handleKeyboard() {
+      addEventListener('keydown', (e) => {
+        if (e.key === 'p' || e.key === 'P') state.paused = !state.paused;
+        if (e.key === 'r' || e.key === 'R') resetGame();
+        state.keys.add(e.key.toLowerCase());
+      });
+      addEventListener('keyup', (e) => state.keys.delete(e.key.toLowerCase()));
+    }
+
+    function update(dt) {
+      if (state.paused || state.gameOver) return;
+
+      state.elapsed += dt;
+      state.comboTimer = Math.max(0, state.comboTimer - dt);
+      state.invulnerableTimer = Math.max(0, state.invulnerableTimer - dt);
+      state.slowTimer = Math.max(0, state.slowTimer - dt);
+      if (state.comboTimer === 0) state.combo = 1;
+
+      const p = state.player;
+      let dx = 0;
+      let dy = 0;
+      if (state.keys.has('arrowleft') || state.keys.has('a')) dx -= 1;
+      if (state.keys.has('arrowright') || state.keys.has('d')) dx += 1;
+      if (state.keys.has('arrowup') || state.keys.has('w')) dy -= 1;
+      if (state.keys.has('arrowdown') || state.keys.has('s')) dy += 1;
+
+      const dash = (state.keys.has('shift') && state.energy > 0);
+      const speed = dash ? p.dashSpeed : p.speed;
+      if (dash) state.energy = Math.max(0, state.energy - dt * 38);
+      else state.energy = Math.min(100, state.energy + dt * 22);
+
+      if (dx !== 0 || dy !== 0) {
+        const n = Math.hypot(dx, dy);
+        p.x += (dx / n) * speed * 60 * dt;
+        p.y += (dy / n) * speed * 60 * dt;
+      }
+
+      p.x = clamp(p.x, p.r, W - p.r);
+      p.y = clamp(p.y, p.r, H - p.r);
+
+      state.coins = state.coins.filter((c) => {
+        if (Math.hypot(c.x - p.x, c.y - p.y) <= c.r + p.r) {
+          state.score += Math.round(c.value * state.combo);
+          state.combo = Math.min(8, state.combo + 1);
+          state.comboTimer = 2.2;
+          spawnBurst(c.x, c.y, '#ffd54d');
+          return false;
+        }
+        return true;
+      });
+
+      state.stars = state.stars.filter((s) => {
+        s.ttl -= dt;
+        if (s.ttl <= 0) return false;
+        if (Math.hypot(s.x - p.x, s.y - p.y) <= s.r + p.r) {
+          state.score += 50;
+          state.slowTimer = 4;
+          spawnBurst(s.x, s.y, '#a7f3d0');
+          return false;
+        }
+        return true;
+      });
+
+      const enemyFactor = state.slowTimer > 0 ? 0.45 : 1;
+      for (const e of state.enemies) {
+        e.x += e.vx * enemyFactor;
+        e.y += e.vy * enemyFactor;
+
+        const a = Math.atan2(p.y - e.y, p.x - e.x);
+        e.vx += Math.cos(a) * 0.015;
+        e.vy += Math.sin(a) * 0.015;
+
+        const topSpeed = 3.3 + state.level * 0.12;
+        const mag = Math.hypot(e.vx, e.vy);
+        if (mag > topSpeed) {
+          e.vx = (e.vx / mag) * topSpeed;
+          e.vy = (e.vy / mag) * topSpeed;
+        }
+
+        if (Math.hypot(e.x - p.x, e.y - p.y) <= e.r + p.r && state.invulnerableTimer <= 0) {
+          state.lives -= 1;
+          state.invulnerableTimer = 1.2;
+          spawnBurst(p.x, p.y, '#ff5c75');
+          if (state.lives <= 0) {
+            state.gameOver = true;
+          }
+        }
+      }
+
+      state.enemies = state.enemies.filter((e) => e.x > -120 && e.x < W + 120 && e.y > -120 && e.y < H + 120);
+
+      const targetLevel = Math.min(20, 1 + Math.floor(state.score / 180));
+      state.level = targetLevel;
+
+      while (state.coins.length < Math.min(12, 5 + state.level)) spawnCoin();
+      while (state.enemies.length < Math.min(10, 2 + Math.floor(state.level / 2))) spawnEnemy();
+      if (Math.random() < 0.0018 && state.stars.length < 2) spawnStar();
+
+      for (const particle of state.particles) {
+        particle.x += particle.vx;
+        particle.y += particle.vy;
+        particle.vy += 0.02;
+        particle.life -= 1;
+      }
+      state.particles = state.particles.filter((p0) => p0.life > 0);
+
+      updateHUD();
+    }
+
+    function drawCircle(x, y, r, fill, alpha = 1) {
+      ctx.globalAlpha = alpha;
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fillStyle = color;
+      ctx.fillStyle = fill;
       ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    function drawPlayer() {
+      const p = state.player;
+      const pulse = 0.9 + Math.sin(performance.now() * 0.01) * 0.1;
+      drawCircle(p.x, p.y, p.r * pulse, state.invulnerableTimer > 0 ? '#ffd166' : '#70e9ff');
+      drawCircle(p.x - 5, p.y - 4, 2.5, '#0f213f');
+      drawCircle(p.x + 5, p.y - 4, 2.5, '#0f213f');
+    }
+
+    function drawBar(x, y, w, h, value, color, label) {
+      ctx.fillStyle = 'rgba(0,0,0,.35)';
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, w * clamp(value, 0, 1), h);
+      ctx.strokeStyle = 'rgba(255,255,255,.22)';
+      ctx.strokeRect(x, y, w, h);
+      ctx.fillStyle = '#d7e4ff';
+      ctx.font = 'bold 14px system-ui';
+      ctx.fillText(label, x, y - 6);
     }
 
     function render() {
-      ctx.clearRect(0, 0, 800, 600);
-      drawCircle(state.player.x, state.player.y, state.player.r, '#6ce3ff');
-      for (const c of state.coins) drawCircle(c.x, c.y, c.r, '#ffd447');
-      for (const e of state.enemies) drawCircle(e.x, e.y, e.r, '#ff4f65');
+      const grd = ctx.createLinearGradient(0, 0, 0, H);
+      grd.addColorStop(0, '#102a55');
+      grd.addColorStop(1, '#0b1833');
+      ctx.fillStyle = grd;
+      ctx.fillRect(0, 0, W, H);
 
-      if (state.paused && !state.gameOver) {
-        ctx.fillStyle = "rgba(0, 0, 0, .5)";
-        ctx.fillRect(0, 0, 800, 600);
-        ctx.fillStyle = "#fff";
-        ctx.textAlign = "center";
-        ctx.font = "bold 46px system-ui";
-        ctx.fillText("Pausado", 400, 300);
+      for (let i = 0; i < 80; i++) {
+        ctx.fillStyle = `rgba(255,255,255,${0.04 + (i % 5) * 0.015})`;
+        ctx.fillRect((i * 113) % W, (i * 67 + (performance.now() * 0.01)) % H, 2, 2);
       }
 
-      if (state.gameOver) {
-        ctx.fillStyle = 'rgba(0, 0, 0, .6)';
-        ctx.fillRect(0, 0, 800, 600);
-        ctx.fillStyle = '#fff';
+      for (const c of state.coins) {
+        drawCircle(c.x, c.y, c.r + 3, 'rgba(255,212,77,.2)');
+        drawCircle(c.x, c.y, c.r, '#ffd54d');
+        drawCircle(c.x - 3, c.y - 3, 2.2, '#fff7cc');
+      }
+
+      for (const s of state.stars) {
+        drawCircle(s.x, s.y, s.r + 3, 'rgba(167,243,208,.25)');
+        drawCircle(s.x, s.y, s.r, '#a7f3d0');
+      }
+
+      for (const e of state.enemies) {
+        drawCircle(e.x, e.y, e.r, '#ff5c75');
+        drawCircle(e.x - 4, e.y - 3, 2.2, '#3b0f19');
+        drawCircle(e.x + 4, e.y - 3, 2.2, '#3b0f19');
+      }
+
+      for (const p of state.particles) drawCircle(p.x, p.y, 2.4, p.color, p.life / 30);
+
+      drawPlayer();
+
+      drawBar(18, 32, 220, 16, state.energy / 100, '#72f0ff', 'Energia');
+      drawBar(18, 72, 220, 16, state.comboTimer / 2.2, '#ffd54d', 'Combo');
+
+      if (state.paused || state.gameOver) {
+        ctx.fillStyle = 'rgba(0,0,0,.58)';
+        ctx.fillRect(0, 0, W, H);
         ctx.textAlign = 'center';
-        ctx.font = 'bold 52px system-ui';
-        ctx.fillText('Fim de jogo', 400, 280);
-        ctx.font = '28px system-ui';
-        ctx.fillText(`Pontuação: ${state.score}`, 400, 330);
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 60px system-ui';
+        ctx.fillText(state.gameOver ? 'Fim de jogo' : 'Pausado', W / 2, H / 2 - 10);
+        ctx.font = '24px system-ui';
+        ctx.fillText(`Pontuação: ${state.score}`, W / 2, H / 2 + 34);
+        if (state.gameOver) ctx.fillText('Pressione R para jogar novamente', W / 2, H / 2 + 72);
       }
     }
 
-    function loop() {
-      update();
+    let last = performance.now();
+    function loop(now) {
+      const dt = Math.min(0.033, (now - last) / 1000);
+      last = now;
+      update(dt);
       render();
       requestAnimationFrame(loop);
     }
 
-    loop();
+    handleKeyboard();
+    resetGame();
+    requestAnimationFrame(loop);
   </script>
 </body>
 </html>

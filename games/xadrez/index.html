@@ -128,7 +128,7 @@
       bk: '♚', bq: '♛', br: '♜', bb: '♝', bn: '♞', bp: '♟'
     };
 
-    let board, turn, selected, legalMoves, gameOver;
+    let board, turn, selected, legalMoves, gameOver, castlingRights;
 
     function init() {
       board = setupBoard();
@@ -136,6 +136,10 @@
       selected = null;
       legalMoves = [];
       gameOver = false;
+      castlingRights = {
+        w: { kingMoved: false, rookA: false, rookH: false },
+        b: { kingMoved: false, rookA: false, rookH: false }
+      };
       setMessage('');
       render();
     }
@@ -154,7 +158,27 @@
 
     function cloneBoard(src) { return src.map(row => row.slice()); }
 
-    function getPseudoMoves(b, r, c) {
+    function canCastle(b, color, side) {
+      const row = color === 'w' ? 7 : 0;
+      const enemy = color === 'w' ? 'b' : 'w';
+      const rights = castlingRights[color];
+      if (rights.kingMoved) return false;
+      if (isCheck(b, color)) return false;
+
+      if (side === 'kingside') {
+        if (rights.rookH || b[row][7] !== color + 'r') return false;
+        if (b[row][5] || b[row][6]) return false;
+        if (isSquareAttacked(b, row, 5, enemy) || isSquareAttacked(b, row, 6, enemy)) return false;
+        return true;
+      }
+
+      if (rights.rookA || b[row][0] !== color + 'r') return false;
+      if (b[row][1] || b[row][2] || b[row][3]) return false;
+      if (isSquareAttacked(b, row, 3, enemy) || isSquareAttacked(b, row, 2, enemy)) return false;
+      return true;
+    }
+
+    function getPseudoMoves(b, r, c, includeCastle = true) {
       const piece = b[r][c];
       if (!piece) return [];
       const color = piece[0], type = piece[1], dir = color === 'w' ? -1 : 1;
@@ -178,6 +202,8 @@
         for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
           if (dr || dc) push(r + dr, c + dc);
         }
+        if (includeCastle && canCastle(b, color, 'kingside')) moves.push({ r, c: c + 2, capture: false, special: 'castle-k' });
+        if (includeCastle && canCastle(b, color, 'queenside')) moves.push({ r, c: c - 2, capture: false, special: 'castle-q' });
       } else {
         const dirs = [];
         if (type === 'b' || type === 'q') dirs.push([1,1],[1,-1],[-1,1],[-1,-1]);
@@ -211,8 +237,24 @@
       const enemy = color === 'w' ? 'b' : 'w';
       for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
         if (pieceColor(b[r][c]) !== enemy) continue;
-        const m = getPseudoMoves(b, r, c);
+        const m = getPseudoMoves(b, r, c, false);
         if (m.some(x => x.r === king.r && x.c === king.c)) return true;
+      }
+      return false;
+    }
+
+    function isSquareAttacked(b, targetR, targetC, byColor) {
+      for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        const piece = b[r][c];
+        if (!piece || pieceColor(piece) !== byColor) continue;
+        const type = piece[1];
+        if (type === 'p') {
+          const dir = byColor === 'w' ? -1 : 1;
+          if (r + dir === targetR && (c - 1 === targetC || c + 1 === targetC)) return true;
+          continue;
+        }
+        const m = getPseudoMoves(b, r, c, false);
+        if (m.some(x => x.r === targetR && x.c === targetC)) return true;
       }
       return false;
     }
@@ -240,11 +282,35 @@
       return any;
     }
 
-    function movePiece(fr, fc, tr, tc) {
+    function askPromotion(color) {
+      const letter = prompt('Promover para: D (dama), T (torre), B (bispo), C (cavalo)', 'D');
+      const normalized = (letter || 'D').trim().toUpperCase();
+      const map = { D: 'q', T: 'r', B: 'b', C: 'n' };
+      return color + (map[normalized] || 'q');
+    }
+
+    function movePiece(fr, fc, tr, tc, moveData = null) {
       const p = board[fr][fc];
+      const color = p[0];
       board[tr][tc] = p;
       board[fr][fc] = null;
-      if (p[1] === 'p' && (tr === 0 || tr === 7)) board[tr][tc] = p[0] + 'q';
+      if (p[1] === 'k') {
+        castlingRights[color].kingMoved = true;
+        if (moveData && moveData.special === 'castle-k') {
+          board[tr][5] = color + 'r';
+          board[tr][7] = null;
+        } else if (moveData && moveData.special === 'castle-q') {
+          board[tr][3] = color + 'r';
+          board[tr][0] = null;
+        }
+      }
+      if (p[1] === 'r') {
+        if (fr === 7 && fc === 0) castlingRights.w.rookA = true;
+        if (fr === 7 && fc === 7) castlingRights.w.rookH = true;
+        if (fr === 0 && fc === 0) castlingRights.b.rookA = true;
+        if (fr === 0 && fc === 7) castlingRights.b.rookH = true;
+      }
+      if (p[1] === 'p' && (tr === 0 || tr === 7)) board[tr][tc] = askPromotion(color);
     }
 
     function onSquareClick(r, c) {
@@ -253,7 +319,7 @@
       const move = legalMoves.find(m => m.r === r && m.c === c);
 
       if (selected && move) {
-        movePiece(selected.r, selected.c, r, c);
+        movePiece(selected.r, selected.c, r, c, move);
         selected = null;
         legalMoves = [];
         turn = turn === 'w' ? 'b' : 'w';
@@ -296,7 +362,7 @@
           if (selected && selected.r === r && selected.c === c) sq.classList.add('selected');
           const target = legalMoves.find(m => m.r === r && m.c === c);
           if (target) sq.classList.add(target.capture ? 'capture' : 'target');
-          sq.setAttribute('aria-label', `Casa ${8-r}-${String.fromCharCode(97+c)}`);
+          sq.setAttribute('aria-label', `Casa ${String.fromCharCode(97 + c)}${8 - r}`);
           sq.onclick = () => onSquareClick(r, c);
 
           const piece = board[r][c];

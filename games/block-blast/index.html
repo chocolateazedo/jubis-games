@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Block Blast</title>
+  <style>
+    :root {
+      --bg: #0e1222;
+      --panel: #171c33;
+      --grid: #222a4b;
+      --text: #f3f5ff;
+      --muted: #9fa9d8;
+      --accent: #6ee7ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(circle at top, #1e2650, var(--bg));
+      color: var(--text);
+      font-family: Inter, system-ui, Arial, sans-serif;
+      padding: 24px;
+    }
+    .wrap {
+      display: grid;
+      gap: 14px;
+      width: min(95vw, 520px);
+      background: color-mix(in srgb, var(--panel) 90%, black);
+      border: 1px solid #2e3966;
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: 0 10px 40px #0006;
+    }
+    h1 { margin: 0; font-size: 1.25rem; }
+    .hud {
+      display: flex;
+      justify-content: space-between;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    canvas {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      background: var(--grid);
+      border-radius: 12px;
+      border: 1px solid #33417a;
+      image-rendering: pixelated;
+    }
+    .actions { display: flex; gap: 8px; }
+    button {
+      border: 0;
+      padding: 10px 14px;
+      border-radius: 10px;
+      background: #2a3563;
+      color: var(--text);
+      font-weight: 700;
+      cursor: pointer;
+    }
+    button:hover { background: #34427d; }
+    .accent { background: #126a83; color: #d8fbff; }
+    .accent:hover { background: #1788a8; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <h1>🧩 Block Blast</h1>
+    <div class="hud">
+      <span>Pontos: <strong id="score">0</strong></span>
+      <span>Recorde: <strong id="best">0</strong></span>
+    </div>
+    <canvas id="game" width="360" height="360" aria-label="Jogo Block Blast"></canvas>
+    <div class="actions">
+      <button id="left">⬅️</button>
+      <button id="right">➡️</button>
+      <button id="rotate">🔄 Girar</button>
+      <button class="accent" id="drop">⏬ Descer</button>
+      <button id="restart">♻️ Reiniciar</button>
+    </div>
+  </main>
+
+<script>
+(() => {
+  const COLS = 10, ROWS = 20, SIZE = 18;
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const scoreEl = document.getElementById('score');
+  const bestEl = document.getElementById('best');
+  const bestKey = 'block-blast-best';
+
+  let board, piece, score, over, tick;
+  const colors = ['#66d9ff','#ffd166','#ef476f','#06d6a0','#b892ff','#ff9f1c','#8ecae6'];
+  const shapes = [
+    [[1,1,1],[0,1,0]],
+    [[1,1],[1,1]],
+    [[1,1,1,1]],
+    [[1,1,0],[0,1,1]],
+    [[0,1,1],[1,1,0]],
+    [[1,1,1],[1,0,0]],
+    [[1,1,1],[0,0,1]]
+  ];
+
+  const newPiece = () => {
+    const i = Math.floor(Math.random()*shapes.length);
+    return { shape: shapes[i].map(r => [...r]), color: colors[i], x: 3, y: 0 };
+  };
+
+  const reset = () => {
+    board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
+    piece = newPiece();
+    score = 0;
+    over = false;
+    scoreEl.textContent = '0';
+  };
+
+  const collide = (p = piece, offX = 0, offY = 0) => p.shape.some((row,y) =>
+    row.some((v,x) => v && (board[y + p.y + offY]?.[x + p.x + offX] !== 0))
+  );
+
+  const merge = () => {
+    piece.shape.forEach((row,y) => row.forEach((v,x) => {
+      if (v) board[y + piece.y][x + piece.x] = piece.color;
+    }));
+  };
+
+  const clearLines = () => {
+    let lines = 0;
+    for (let y = ROWS - 1; y >= 0; y--) {
+      if (board[y].every(Boolean)) {
+        board.splice(y, 1);
+        board.unshift(Array(COLS).fill(0));
+        lines++;
+        y++;
+      }
+    }
+    if (lines) {
+      score += lines * lines * 100;
+      scoreEl.textContent = score;
+      const best = Math.max(score, Number(localStorage.getItem(bestKey) || 0));
+      localStorage.setItem(bestKey, String(best));
+      bestEl.textContent = best;
+    }
+  };
+
+  const rotate = () => {
+    const s = piece.shape;
+    const next = s[0].map((_,i) => s.map(r => r[i]).reverse());
+    const old = piece.shape;
+    piece.shape = next;
+    if (collide()) piece.shape = old;
+  };
+
+  const step = () => {
+    if (over) return;
+    piece.y++;
+    if (collide()) {
+      piece.y--;
+      merge();
+      clearLines();
+      piece = newPiece();
+      if (collide()) {
+        over = true;
+        setTimeout(() => alert('Game Over! Pontos: ' + score), 20);
+      }
+    }
+    draw();
+  };
+
+  const drawCell = (x,y,color) => {
+    ctx.fillStyle = color;
+    ctx.fillRect(x*SIZE, y*SIZE, SIZE-1, SIZE-1);
+  };
+
+  const draw = () => {
+    ctx.fillStyle = '#222a4b';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    board.forEach((row,y) => row.forEach((c,x) => c && drawCell(x,y,c)));
+    if (!over) piece.shape.forEach((row,y) => row.forEach((v,x) => v && drawCell(x+piece.x,y+piece.y,piece.color)));
+  };
+
+  const move = dir => { piece.x += dir; if (collide()) piece.x -= dir; draw(); };
+  const softDrop = () => { step(); };
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowLeft') move(-1);
+    if (e.key === 'ArrowRight') move(1);
+    if (e.key === 'ArrowUp') { rotate(); draw(); }
+    if (e.key === 'ArrowDown') softDrop();
+  });
+  left.onclick = () => move(-1);
+  right.onclick = () => move(1);
+  rotate.onclick = () => { rotate(); draw(); };
+  drop.onclick = softDrop;
+  restart.onclick = () => reset();
+
+  bestEl.textContent = localStorage.getItem(bestKey) || '0';
+  reset();
+  draw();
+  clearInterval(tick);
+  tick = setInterval(step, 500);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+{
+  "title": "Block Blast",
+  "description": "Limpe linhas e bata seu recorde no estilo puzzle!",
+  "emoji": "🧩",
+  "tags": ["puzzle", "1 jogador"],
+  "entry": "index.html",
+  "order": 1
+}

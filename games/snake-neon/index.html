@@ -230,19 +230,23 @@
 
     function tick() {
       dir = queuedDir;
-      const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+      const head = {
+        x: (snake[0].x + dir.x + GRID) % GRID,
+        y: (snake[0].y + dir.y + GRID) % GRID
+      };
 
-      const hitWall = head.x < 0 || head.x >= GRID || head.y < 0 || head.y >= GRID;
-      const hitSelf = snake.some(seg => seg.x === head.x && seg.y === head.y);
+      const ateFood = head.x === food.x && head.y === food.y;
+      const bodyToCheck = ateFood ? snake : snake.slice(0, -1);
+      const hitSelf = bodyToCheck.some(seg => seg.x === head.x && seg.y === head.y);
 
-      if (hitWall || hitSelf) {
+      if (hitSelf) {
         endGame();
         return;
       }
 
       snake.unshift(head);
 
-      if (head.x === food.x && head.y === food.y) {
+      if (ateFood) {
         score += 10;
         scoreEl.textContent = score;
         if (score > best) {

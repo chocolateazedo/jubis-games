@@ -163,7 +163,7 @@
     }
   };
 
-  const rotate = () => {
+  const rotatePiece = () => {
     const s = piece.shape;
     const next = s[0].map((_, i) => s.map(r => r[i]).reverse());
     const oldShape = piece.shape;
@@ -224,12 +224,13 @@
   document.addEventListener('keydown', e => {
     if (e.key === 'ArrowLeft') move(-1);
     if (e.key === 'ArrowRight') move(1);
-    if (e.key === 'ArrowUp') { rotate(); draw(); }
+    if (e.key === 'ArrowUp') { rotatePiece(); draw(); }
     if (e.key === 'ArrowDown') softDrop();
   });
   left.onclick = () => move(-1);
   right.onclick = () => move(1);
-  rotate.onclick = () => { rotate(); draw(); };
+  const rotateBtn = document.getElementById('rotate');
+  rotateBtn.onclick = () => { rotatePiece(); draw(); };
   drop.onclick = softDrop;
   restart.onclick = () => reset();
 

@@ -69,6 +69,7 @@ Pronto! Faz upload e o jogo aparece automaticamente na página inicial. Não pre
 - Stickman runner (`games/stickman-runner`)
 - Jogo de Stop (`games/jogo-de-stop`)
 - Jogo de Inglês (`games/jogo-de-ingles`)
+- Snake Neon (`games/snake-neon`)
 
 ## Requisitos do servidor
 

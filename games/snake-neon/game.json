@@ -1,0 +1,8 @@
+{
+  "title": "Snake Neon",
+  "description": "Coma os orbes brilhantes, desvie das paredes e tente bater seu recorde no clima arcade neon.",
+  "emoji": "🐍",
+  "tags": ["arcade", "mobile", "1 jogador"],
+  "entry": "index.html",
+  "order": 3
+}

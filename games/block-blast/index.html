@@ -165,10 +165,29 @@
 
   const rotate = () => {
     const s = piece.shape;
-    const next = s[0].map((_,i) => s.map(r => r[i]).reverse());
-    const old = piece.shape;
+    const next = s[0].map((_, i) => s.map(r => r[i]).reverse());
+    const oldShape = piece.shape;
+    const oldX = piece.x;
+    const oldY = piece.y;
+    const kicks = [
+      [0, 0],
+      [-1, 0],
+      [1, 0],
+      [-2, 0],
+      [2, 0],
+      [0, -1]
+    ];
+
     piece.shape = next;
-    if (collide()) piece.shape = old;
+    for (const [dx, dy] of kicks) {
+      piece.x = oldX + dx;
+      piece.y = oldY + dy;
+      if (!collide()) return;
+    }
+
+    piece.shape = oldShape;
+    piece.x = oldX;
+    piece.y = oldY;
   };
 
   const step = () => {

@@ -106,7 +106,7 @@
 </head>
 <body>
   <header>
-    <a href="../../">← Voltar</a>
+    <a class="back" href="../../index.html">← Voltar</a>
     <h1>♟️ Xadrez</h1>
     <button id="restart">↻ Reiniciar</button>
   </header>
@@ -128,7 +128,7 @@
       bk: '♚', bq: '♛', br: '♜', bb: '♝', bn: '♞', bp: '♟'
     };
 
-    let board, turn, selected, legalMoves, gameOver, castlingRights;
+    let board, turn, selected, legalMoves, gameOver, hasMoved;
 
     function init() {
       board = setupBoard();
@@ -136,9 +136,9 @@
       selected = null;
       legalMoves = [];
       gameOver = false;
-      castlingRights = {
-        w: { kingMoved: false, rookA: false, rookH: false },
-        b: { kingMoved: false, rookA: false, rookH: false }
+      hasMoved = {
+        wk: false, wrA: false, wrH: false,
+        bk: false, brA: false, brH: false
       };
       setMessage('');
       render();
@@ -161,18 +161,17 @@
     function canCastle(b, color, side) {
       const row = color === 'w' ? 7 : 0;
       const enemy = color === 'w' ? 'b' : 'w';
-      const rights = castlingRights[color];
-      if (rights.kingMoved) return false;
+      if (hasMoved[color + 'k']) return false;
       if (isCheck(b, color)) return false;
 
       if (side === 'kingside') {
-        if (rights.rookH || b[row][7] !== color + 'r') return false;
+        if (hasMoved[color + 'rH'] || b[row][7] !== color + 'r') return false;
         if (b[row][5] || b[row][6]) return false;
         if (isSquareAttacked(b, row, 5, enemy) || isSquareAttacked(b, row, 6, enemy)) return false;
         return true;
       }
 
-      if (rights.rookA || b[row][0] !== color + 'r') return false;
+      if (hasMoved[color + 'rA'] || b[row][0] !== color + 'r') return false;
       if (b[row][1] || b[row][2] || b[row][3]) return false;
       if (isSquareAttacked(b, row, 3, enemy) || isSquareAttacked(b, row, 2, enemy)) return false;
       return true;
@@ -266,6 +265,14 @@
         const test = cloneBoard(b);
         test[m.r][m.c] = test[r][c];
         test[r][c] = null;
+        if (p[1] === 'k' && m.special === 'castle-k') {
+          test[m.r][5] = p[0] + 'r';
+          test[m.r][7] = null;
+        }
+        if (p[1] === 'k' && m.special === 'castle-q') {
+          test[m.r][3] = p[0] + 'r';
+          test[m.r][0] = null;
+        }
         return !isCheck(test, turn);
       });
     }
@@ -282,12 +289,6 @@
       return any;
     }
 
-    function askPromotion(color) {
-      const letter = prompt('Promover para: D (dama), T (torre), B (bispo), C (cavalo)', 'D');
-      const normalized = (letter || 'D').trim().toUpperCase();
-      const map = { D: 'q', T: 'r', B: 'b', C: 'n' };
-      return color + (map[normalized] || 'q');
-    }
 
     function movePiece(fr, fc, tr, tc, moveData = null) {
       const p = board[fr][fc];
@@ -295,7 +296,7 @@
       board[tr][tc] = p;
       board[fr][fc] = null;
       if (p[1] === 'k') {
-        castlingRights[color].kingMoved = true;
+        hasMoved[color + 'k'] = true;
         if (moveData && moveData.special === 'castle-k') {
           board[tr][5] = color + 'r';
           board[tr][7] = null;
@@ -305,12 +306,16 @@
         }
       }
       if (p[1] === 'r') {
-        if (fr === 7 && fc === 0) castlingRights.w.rookA = true;
-        if (fr === 7 && fc === 7) castlingRights.w.rookH = true;
-        if (fr === 0 && fc === 0) castlingRights.b.rookA = true;
-        if (fr === 0 && fc === 7) castlingRights.b.rookH = true;
+        if (fr === 7 && fc === 0) hasMoved.wrA = true;
+        if (fr === 7 && fc === 7) hasMoved.wrH = true;
+        if (fr === 0 && fc === 0) hasMoved.brA = true;
+        if (fr === 0 && fc === 7) hasMoved.brH = true;
       }
-      if (p[1] === 'p' && (tr === 0 || tr === 7)) board[tr][tc] = askPromotion(color);
+      if (p[1] === 'p' && (tr === 0 || tr === 7)) {
+        const escolha = prompt('Promover para: dama, torre, bispo ou cavalo', 'dama');
+        const mapa = { dama: 'q', rainha: 'q', d: 'q', q: 'q', torre: 'r', t: 'r', r: 'r', bispo: 'b', b: 'b', cavalo: 'n', c: 'n', n: 'n' };
+        board[tr][tc] = p[0] + (mapa[(escolha || '').trim().toLowerCase()] || 'q');
+      }
     }
 
     function onSquareClick(r, c) {
@@ -358,7 +363,7 @@
       for (let r = 0; r < 8; r++) {
         for (let c = 0; c < 8; c++) {
           const sq = document.createElement('button');
-          sq.className = `sq ${(r + c) % 2 ? 'dark' : 'light'}`;
+          sq.className = `sq ${(r + c) % 2 === 0 ? 'dark' : 'light'}`;
           if (selected && selected.r === r && selected.c === c) sq.classList.add('selected');
           const target = legalMoves.find(m => m.r === r && m.c === c);
           if (target) sq.classList.add(target.capture ? 'capture' : 'target');

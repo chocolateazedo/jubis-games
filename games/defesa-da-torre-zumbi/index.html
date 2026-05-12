@@ -36,7 +36,7 @@
   </div>
   <canvas id="game" width="960" height="540"></canvas>
   <div id="towerBar"></div>
-  <div class="help">Clique no gramado para construir torres (custo 30). Clique em uma torre para selecionar e melhorar. Sobreviva a ondas cada vez maiores e mais rápidas.</div>
+  <div class="help">Clique no gramado para construir torres. Limite de 15 torres por partida. Clique em uma torre para selecionar e melhorar. Sobreviva a ondas cada vez maiores e mais rápidas.</div>
 
 <script>
 const cvs = document.getElementById('game');
@@ -65,6 +65,7 @@ const towerTypes = [
   { key:'poison', name:'☠️ Veneno', cost:46, range:150, dmg:8, rate:32, projSpeed:5, color:'#b8ff6e', core:'#335918' }
 ];
 let selectedTowerType = 0;
+const MAX_TOWERS = 15;
 
 function renderTowerBar(){
   towerBarEl.innerHTML = '';
@@ -147,7 +148,7 @@ function updateTowerUi(){
   const enough = dinheiro >= cost;
   upgradeBtn.disabled = !enough;
   upgradeBtn.textContent = `⬆️ Melhorar torre (Lv ${selectedTower.level} → ${selectedTower.level+1}) - ${cost}💰`;
-  towerInfoEl.textContent = `${selectedTower.label} Lv ${selectedTower.level} | Dano ${selectedTower.dmg} | Alcance ${selectedTower.range} | Cadência ${selectedTower.rate}`;
+  towerInfoEl.textContent = `${selectedTower.label} Lv ${selectedTower.level} | Dano ${selectedTower.dmg} | Alcance ${selectedTower.range} | Cadência ${selectedTower.rate} | Torres ${torres.length}/${MAX_TOWERS}`;
 }
 
 function gameLoop(){
@@ -285,7 +286,7 @@ function draw(){
 
   vidaEl.textContent = `❤️ Vida: ${vida}`;
   dinheiroEl.textContent = `💰 Dinheiro: ${dinheiro}`;
-  ondaEl.textContent = `🌊 Onda: ${onda} | ☠️ Kills: ${kills} | Restantes: ${spawnLeft + zumbis.length}`;
+  ondaEl.textContent = `🌊 Onda: ${onda} | ☠️ Kills: ${kills} | Restantes: ${spawnLeft + zumbis.length} | 🏰 Torres: ${torres.length}/${MAX_TOWERS}`;
   updateTowerUi();
 }
 
@@ -303,6 +304,7 @@ cvs.addEventListener('click', e=>{
 
   const type = towerTypes[selectedTowerType];
   const buildCost = type.cost;
+  if(torres.length >= MAX_TOWERS) return;
   if(dinheiro<buildCost) return;
   if(torres.some(t=>dist(t,{x,y})<36)) return;
   const closePath = path.some((p,i)=> i<path.length-1 && pointSegDist({x,y},path[i],path[i+1])<34);

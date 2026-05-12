@@ -1,0 +1,8 @@
+{
+  "title": "Defesa da Torre de Zumbi",
+  "description": "Proteja a base contra ondas de zumbis com torres automáticas.",
+  "emoji": "🧟",
+  "tags": ["tower defense", "estratégia", "1 jogador"],
+  "entry": "index.html",
+  "order": 1
+}

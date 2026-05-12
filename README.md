@@ -57,6 +57,7 @@ Pronto! Faz upload e o jogo aparece automaticamente na página inicial. Não pre
 
 ## Jogos publicados
 
+- Defesa da Torre de Zumbi (`games/defesa-da-torre-zumbi`)
 - Block Blast (`games/block-blast`)
 - Jogo de Desenho (`games/jogo-de-desenho`)
 - Jogo dos 7 Erros (`games/jogo-dos-7-erros`)

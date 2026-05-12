@@ -101,6 +101,41 @@
       color: var(--lime);
       text-align: center;
     }
+
+    .promotion-picker {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      transform: translateX(-50%);
+      background: #fff;
+      border-radius: 999px;
+      border: 3px solid #ddd;
+      box-shadow: 0 14px 36px rgba(0, 0, 0, .35);
+      padding: 10px 14px;
+      display: flex;
+      gap: 10px;
+      z-index: 50;
+    }
+    .promotion-option {
+      width: 54px;
+      height: 54px;
+      border-radius: 50%;
+      border: 2px solid #d9d9d9;
+      background: #fff;
+      color: #181818;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 34px;
+      cursor: pointer;
+      transition: transform .12s ease, box-shadow .12s ease;
+    }
+    .promotion-option:hover,
+    .promotion-option:focus-visible {
+      transform: translateY(-2px) scale(1.04);
+      box-shadow: 0 6px 16px rgba(0,0,0,.2);
+      outline: none;
+    }
   </style>
 </head>
 <body>
@@ -281,7 +316,33 @@
     }
 
 
-    function movePiece(fr, fc, tr, tc, moveData = null) {
+    
+    function choosePromotionPiece(color) {
+      return new Promise(resolve => {
+        const picker = document.createElement('div');
+        picker.className = 'promotion-picker';
+        picker.setAttribute('role', 'dialog');
+        picker.setAttribute('aria-label', 'Selecione uma peça para promoção');
+
+        const choices = ['q', 'r', 'b', 'n'];
+        choices.forEach(type => {
+          const option = document.createElement('button');
+          option.className = 'promotion-option';
+          option.type = 'button';
+          option.setAttribute('aria-label', `Promover para ${type === 'q' ? 'dama' : type === 'r' ? 'torre' : type === 'b' ? 'bispo' : 'cavalo'}`);
+          option.textContent = PIECES[color + type];
+          option.addEventListener('click', () => {
+            picker.remove();
+            resolve(type);
+          });
+          picker.appendChild(option);
+        });
+
+        document.body.appendChild(picker);
+      });
+    }
+
+    async function movePiece(fr, fc, tr, tc, moveData = null) {
       const p = board[fr][fc];
       const color = p[0];
       board[tr][tc] = p;
@@ -303,19 +364,18 @@
         if (fr === 0 && fc === 7) hasMoved.brH = true;
       }
       if (p[1] === 'p' && (tr === 0 || tr === 7)) {
-        const escolha = prompt('Promover para: dama, torre, bispo ou cavalo', 'dama');
-        const mapa = { dama: 'q', torre: 'r', bispo: 'b', cavalo: 'n' };
-        board[tr][tc] = p[0] + (mapa[(escolha || '').toLowerCase()] || 'q');
+        const escolha = await choosePromotionPiece(p[0]);
+        board[tr][tc] = p[0] + (escolha || 'q');
       }
     }
 
-    function onSquareClick(r, c) {
+    async function onSquareClick(r, c) {
       if (gameOver) return;
       const clicked = board[r][c];
       const move = legalMoves.find(m => m.r === r && m.c === c);
 
       if (selected && move) {
-        movePiece(selected.r, selected.c, r, c, move);
+        await movePiece(selected.r, selected.c, r, c, move);
         selected = null;
         legalMoves = [];
         turn = turn === 'w' ? 'b' : 'w';

@@ -5,13 +5,14 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Defesa da Torre de Zumbi</title>
   <style>
-    body { margin:0; font-family: Arial, sans-serif; background:#0e1b12; color:#f4ffe8; display:grid; place-items:center; min-height:100vh; }
-    #hud { display:flex; gap:16px; justify-content:center; margin:10px 0; font-weight:bold; flex-wrap:wrap; }
-    #actions{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:8px;}
-    button{background:#264532;color:#e9ffd8;border:1px solid #9cff6b;border-radius:8px;padding:8px 12px;font-weight:700;cursor:pointer;}
+    body { margin:0; font-family: Arial, sans-serif; background:radial-gradient(circle at top, #163725 0%, #09120d 64%); color:#f4ffe8; display:grid; place-items:center; min-height:100vh; }
+    h1{margin:14px 0 8px; letter-spacing:.5px; text-shadow:0 3px 10px rgba(0,0,0,.45);}
+    #hud { display:flex; gap:16px; justify-content:center; margin:10px 0; font-weight:bold; flex-wrap:wrap; background:rgba(6,20,12,.55); border:1px solid #75c35d; border-radius:12px; padding:8px 14px; box-shadow:0 8px 24px rgba(0,0,0,.35); }
+    #actions{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:8px;background:rgba(8,24,15,.45);padding:10px 12px;border-radius:12px;border:1px solid rgba(158,255,107,.35);}
+    button{background:linear-gradient(180deg,#325d45,#234030);color:#e9ffd8;border:1px solid #9cff6b;border-radius:8px;padding:8px 12px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.25);}
     button:disabled{opacity:.5;cursor:not-allowed;}
-    canvas { background:#1a2e20; border:2px solid #9cff6b; width:min(95vw,960px); aspect-ratio:16/9; height:auto; }
-    .help{opacity:.9; font-size:14px; text-align:center; margin-top:8px; max-width:960px;}
+    canvas { background:#1a2e20; border:2px solid #9cff6b; width:min(95vw,960px); aspect-ratio:16/9; height:auto; border-radius:14px; box-shadow:0 12px 34px rgba(0,0,0,.45); }
+    .help{opacity:.95; font-size:14px; text-align:center; margin-top:10px; max-width:960px; background:rgba(7,18,11,.55); border:1px solid rgba(156,255,107,.32); padding:8px 10px; border-radius:10px;}
   </style>
 </head>
 <body>
@@ -164,21 +165,46 @@ function gameLoop(){
 }
 
 function drawPath(){
-  ctx.strokeStyle='#8d6a45'; ctx.lineWidth=54; ctx.lineCap='round';
+  ctx.strokeStyle='#65462d'; ctx.lineWidth=62; ctx.lineCap='round';
   ctx.beginPath(); ctx.moveTo(path[0].x,path[0].y);
   for(const p of path.slice(1)) ctx.lineTo(p.x,p.y);
   ctx.stroke();
+  ctx.strokeStyle='#b58857'; ctx.lineWidth=46; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(path[0].x,path[0].y);
+  for(const p of path.slice(1)) ctx.lineTo(p.x,p.y);
+  ctx.stroke();
+  ctx.strokeStyle='rgba(255,223,173,.22)'; ctx.lineWidth=6;
+  ctx.setLineDash([15, 16]);
+  ctx.beginPath(); ctx.moveTo(path[0].x,path[0].y);
+  for(const p of path.slice(1)) ctx.lineTo(p.x,p.y);
+  ctx.stroke();
+  ctx.setLineDash([]);
 }
 
 function draw(){
   ctx.clearRect(0,0,cvs.width,cvs.height);
+  const bgGradient = ctx.createLinearGradient(0,0,0,cvs.height);
+  bgGradient.addColorStop(0,'#2f6a35');
+  bgGradient.addColorStop(1,'#244e29');
+  ctx.fillStyle = bgGradient;
+  ctx.fillRect(0,0,cvs.width,cvs.height);
+  for(let i=0;i<26;i++){
+    const x=(i*147)%cvs.width;
+    const y=(i*89)%cvs.height;
+    ctx.fillStyle='rgba(255,255,255,.05)';
+    ctx.fillRect(x,y,2,2);
+  }
   drawPath();
   ctx.fillStyle='#d9ffbf';
   ctx.fillRect(910,184,40,72);
+  ctx.fillStyle='rgba(217,255,191,.35)';
+  ctx.fillRect(900,176,56,88);
 
   for(const t of torres){
-    ctx.fillStyle=(t===selectedTower)?'#81d4fa':'#4fc3f7';
+    ctx.fillStyle=(t===selectedTower)?'#9de9ff':'#4fc3f7';
     ctx.beginPath(); ctx.arc(t.x,t.y,15,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#15374e';
+    ctx.beginPath(); ctx.arc(t.x,t.y,8,0,Math.PI*2); ctx.fill();
     if(t===selectedTower){
       ctx.strokeStyle='#e8ff5b'; ctx.lineWidth=3;
       ctx.beginPath(); ctx.arc(t.x,t.y,20,0,Math.PI*2); ctx.stroke();
@@ -189,6 +215,8 @@ function draw(){
 
   for(const z of zumbis){
     ctx.fillStyle='#88ff55'; ctx.beginPath(); ctx.arc(z.x,z.y,14,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#22361a'; ctx.beginPath(); ctx.arc(z.x+4,z.y-3,4,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#22361a'; ctx.beginPath(); ctx.arc(z.x-5,z.y-2,3.5,0,Math.PI*2); ctx.fill();
     ctx.fillStyle='#000'; ctx.fillRect(z.x-16,z.y-24,32,4);
     ctx.fillStyle='#ff4a4a'; ctx.fillRect(z.x-16,z.y-24,32*(z.hp/z.maxHp),4);
   }

@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Defesa da Torre de Zumbi</title>
+  <style>
+    body { margin:0; font-family: Arial, sans-serif; background:#0e1b12; color:#f4ffe8; display:grid; place-items:center; min-height:100vh; }
+    #hud { display:flex; gap:16px; justify-content:center; margin:10px 0; font-weight:bold; flex-wrap:wrap; }
+    canvas { background:#1a2e20; border:2px solid #9cff6b; width:min(95vw,960px); aspect-ratio:16/9; height:auto; }
+    .help{opacity:.9; font-size:14px; text-align:center; margin-top:8px; max-width:960px;}
+  </style>
+</head>
+<body>
+  <h1>🧟 Defesa da Torre de Zumbi</h1>
+  <div id="hud">
+    <span id="vida"></span>
+    <span id="dinheiro"></span>
+    <span id="onda"></span>
+  </div>
+  <canvas id="game" width="960" height="540"></canvas>
+  <div class="help">Clique no gramado para construir torres (custo 30). As torres atiram sozinhas. Não deixe os zumbis chegarem ao fim da estrada.</div>
+
+<script>
+const cvs = document.getElementById('game');
+const ctx = cvs.getContext('2d');
+const path = [
+  {x:0,y:260},{x:180,y:260},{x:180,y:130},{x:420,y:130},{x:420,y:400},{x:670,y:400},{x:670,y:220},{x:960,y:220}
+];
+
+let vida=20, dinheiro=80, onda=1, kills=0;
+const torres=[]; const zumbis=[]; const tiros=[];
+let spawnLeft = 8;
+let spawnCooldown = 0;
+
+function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+
+function spawnZombie(){ zumbis.push({x:path[0].x,y:path[0].y,seg:0,hp:28+onda*6,speed:1+onda*0.08}); }
+
+function updateZombie(z){
+  const next = path[z.seg+1]; if(!next){vida--; z.dead=true; return;}
+  const dx=next.x-z.x, dy=next.y-z.y; const d=Math.hypot(dx,dy);
+  if(d<z.speed){z.x=next.x; z.y=next.y; z.seg++;}
+  else {z.x += dx/d*z.speed; z.y += dy/d*z.speed;}
+}
+
+function gameLoop(){
+  if(vida<=0){ draw(); ctx.fillStyle='#ff3333'; ctx.font='bold 64px Arial'; ctx.fillText('GAME OVER', 300, 280); return; }
+
+  spawnCooldown--;
+  if(spawnLeft>0 && spawnCooldown<=0){ spawnZombie(); spawnLeft--; spawnCooldown=40; }
+  if(spawnLeft===0 && zumbis.length===0){ onda++; spawnLeft=8+onda*2; dinheiro+=20; }
+
+  for(const t of torres){
+    t.cd--;
+    if(t.cd<=0){
+      const alvo = zumbis.find(z=>dist(z,t)<=t.range);
+      if(alvo){ tiros.push({x:t.x,y:t.y,target:alvo,dmg:t.dmg,speed:5}); t.cd=t.rate; }
+    }
+  }
+
+  for(const tiro of tiros){
+    if(!tiro.target || tiro.target.dead){ tiro.dead=true; continue; }
+    const dx=tiro.target.x-tiro.x, dy=tiro.target.y-tiro.y; const d=Math.hypot(dx,dy);
+    if(d<tiro.speed+4){ tiro.target.hp -= tiro.dmg; tiro.dead=true; if(tiro.target.hp<=0){ tiro.target.dead=true; kills++; dinheiro+=10; } }
+    else { tiro.x += dx/d*tiro.speed; tiro.y += dy/d*tiro.speed; }
+  }
+
+  for(const z of zumbis) updateZombie(z);
+
+  for(const arr of [zumbis,tiros]){
+    for(let i=arr.length-1;i>=0;i--) if(arr[i].dead) arr.splice(i,1);
+  }
+
+  draw();
+  requestAnimationFrame(gameLoop);
+}
+
+function drawPath(){
+  ctx.strokeStyle='#8d6a45'; ctx.lineWidth=54; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(path[0].x,path[0].y);
+  for(const p of path.slice(1)) ctx.lineTo(p.x,p.y);
+  ctx.stroke();
+}
+
+function draw(){
+  ctx.clearRect(0,0,cvs.width,cvs.height);
+  drawPath();
+  ctx.fillStyle='#d9ffbf';
+  ctx.fillRect(910,184,40,72);
+
+  for(const t of torres){
+    ctx.fillStyle='#4fc3f7'; ctx.beginPath(); ctx.arc(t.x,t.y,15,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='rgba(79,195,247,.2)'; ctx.beginPath(); ctx.arc(t.x,t.y,t.range,0,Math.PI*2); ctx.stroke();
+  }
+
+  for(const z of zumbis){
+    ctx.fillStyle='#88ff55'; ctx.beginPath(); ctx.arc(z.x,z.y,14,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#000'; ctx.fillRect(z.x-16,z.y-24,32,4); ctx.fillStyle='#ff4a4a'; ctx.fillRect(z.x-16,z.y-24,32*(z.hp/(28+onda*6)),4);
+  }
+
+  for(const t of tiros){ ctx.fillStyle='#ffe082'; ctx.beginPath(); ctx.arc(t.x,t.y,4,0,Math.PI*2); ctx.fill(); }
+
+  vidaEl.textContent = `❤️ Vida: ${vida}`;
+  dinheiroEl.textContent = `💰 Dinheiro: ${dinheiro}`;
+  ondaEl.textContent = `🌊 Onda: ${onda} | ☠️ Kills: ${kills}`;
+}
+
+const vidaEl=document.getElementById('vida');
+const dinheiroEl=document.getElementById('dinheiro');
+const ondaEl=document.getElementById('onda');
+
+cvs.addEventListener('click', e=>{
+  const r=cvs.getBoundingClientRect();
+  const scaleX=cvs.width/r.width, scaleY=cvs.height/r.height;
+  const x=(e.clientX-r.left)*scaleX, y=(e.clientY-r.top)*scaleY;
+  if(dinheiro<30) return;
+  if(torres.some(t=>dist(t,{x,y})<36)) return;
+  const closePath = path.some((p,i)=> i<path.length-1 && pointSegDist({x,y},path[i],path[i+1])<34);
+  if(closePath) return;
+  torres.push({x,y,range:150,dmg:10,rate:30,cd:0});
+  dinheiro-=30;
+});
+
+function pointSegDist(p,a,b){
+  const l2=(b.x-a.x)**2+(b.y-a.y)**2; if(!l2) return dist(p,a);
+  let t=((p.x-a.x)*(b.x-a.x)+(p.y-a.y)*(b.y-a.y))/l2; t=Math.max(0,Math.min(1,t));
+  return dist(p,{x:a.x+t*(b.x-a.x), y:a.y+t*(b.y-a.y)});
+}
+
+gameLoop();
+</script>
+</body>
+</html>

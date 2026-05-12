@@ -43,11 +43,12 @@
     }
     canvas {
       width: 100%;
-      aspect-ratio: 1 / 1;
+      height: auto;
       background: var(--grid);
       border-radius: 12px;
       border: 1px solid #33417a;
       image-rendering: pixelated;
+      display: block;
     }
     .actions { display: flex; gap: 8px; }
     button {
@@ -90,7 +91,7 @@
       <span>Pontos: <strong id="score">0</strong></span>
       <span>Recorde: <strong id="best">0</strong></span>
     </div>
-    <canvas id="game" width="360" height="360" aria-label="Jogo Block Blast"></canvas>
+    <canvas id="game" aria-label="Jogo Block Blast"></canvas>
     <div class="actions">
       <button id="left">⬅️</button>
       <button id="right">➡️</button>
@@ -102,8 +103,11 @@
 
 <script>
 (() => {
-  const COLS = 10, ROWS = 20, SIZE = 18;
+  const COLS = 10, ROWS = 20, SIZE = 36;
   const canvas = document.getElementById('game');
+  canvas.width = COLS * SIZE;
+  canvas.height = ROWS * SIZE;
+
   const ctx = canvas.getContext('2d');
   const scoreEl = document.getElementById('score');
   const bestEl = document.getElementById('best');
@@ -123,7 +127,7 @@
 
   const newPiece = () => {
     const i = Math.floor(Math.random()*shapes.length);
-    return { shape: shapes[i].map(r => [...r]), color: colors[i], x: 3, y: 0 };
+    return { shape: shapes[i].map(r => [...r]), color: colors[i], x: Math.floor((COLS - shapes[i][0].length) / 2), y: 0 };
   };
 
   const reset = () => {
@@ -135,7 +139,14 @@
   };
 
   const collide = (p = piece, offX = 0, offY = 0) => p.shape.some((row,y) =>
-    row.some((v,x) => v && (board[y + p.y + offY]?.[x + p.x + offX] !== 0))
+    row.some((v,x) => {
+      if (!v) return false;
+      const nextX = x + p.x + offX;
+      const nextY = y + p.y + offY;
+      if (nextX < 0 || nextX >= COLS || nextY >= ROWS) return true;
+      if (nextY < 0) return false;
+      return board[nextY][nextX] !== 0;
+    })
   );
 
   const merge = () => {

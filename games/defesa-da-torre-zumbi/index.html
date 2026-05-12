@@ -46,7 +46,7 @@ const path = [
   {x:0,y:260},{x:180,y:260},{x:180,y:130},{x:420,y:130},{x:420,y:400},{x:670,y:400},{x:670,y:220},{x:960,y:220}
 ];
 
-let vida=20, dinheiro=120, onda=1, kills=0;
+let vida=1000, dinheiro=120, onda=1, kills=0;
 const torres=[]; const zumbis=[]; const tiros=[];
 let spawnLeft = 0;
 let spawnedInWave = 0;
@@ -326,7 +326,13 @@ function draw(){
     const hpBarX = z.x - (hpBarW / 2);
     ctx.fillStyle='#000'; ctx.fillRect(hpBarX,z.y-30,hpBarW,5);
     ctx.fillStyle=z.isBoss ? '#ff3d8f' : '#ff4a4a'; ctx.fillRect(hpBarX,z.y-30,hpBarW*(z.hp/z.maxHp),5);
+    ctx.fillStyle='#ffffff';
+    ctx.font='bold 12px Arial';
+    ctx.textAlign='center';
+    ctx.fillText(`${Math.max(0, Math.ceil(z.hp))}/${z.maxHp}`, z.x, z.y - 34);
   }
+
+  ctx.textAlign='start';
 
   for(const t of tiros){ ctx.fillStyle='#ffe082'; ctx.beginPath(); ctx.arc(t.x,t.y,4,0,Math.PI*2); ctx.fill(); }
 

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Defesa da Torre de Zumbi</title>
   <style>
-    body { margin:0; font-family: Arial, sans-serif; background:radial-gradient(circle at top, #163725 0%, #09120d 64%); color:#f4ffe8; display:grid; place-items:center; min-height:100vh; }
+    body { margin:0; font-family: Arial, sans-serif; background:radial-gradient(circle at top, #163725 0%, #09120d 64%); color:#f4ffe8; display:grid; place-items:center; min-height:100vh; padding:46px 0 16px; }
     h1{margin:14px 0 8px; letter-spacing:.5px; text-shadow:0 3px 10px rgba(0,0,0,.45);}
     #hud { display:flex; gap:16px; justify-content:center; margin:10px 0; font-weight:bold; flex-wrap:wrap; background:rgba(6,20,12,.55); border:1px solid #75c35d; border-radius:12px; padding:8px 14px; box-shadow:0 8px 24px rgba(0,0,0,.35); }
     #actions{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:8px;background:rgba(8,24,15,.45);padding:10px 12px;border-radius:12px;border:1px solid rgba(158,255,107,.35);}
@@ -13,9 +13,12 @@
     button:disabled{opacity:.5;cursor:not-allowed;}
     canvas { background:#1a2e20; border:2px solid #9cff6b; width:min(95vw,960px); aspect-ratio:16/9; height:auto; border-radius:14px; box-shadow:0 12px 34px rgba(0,0,0,.45); }
     .help{opacity:.95; font-size:14px; text-align:center; margin-top:10px; max-width:960px; background:rgba(7,18,11,.55); border:1px solid rgba(156,255,107,.32); padding:8px 10px; border-radius:10px;}
+    .back{position:fixed;top:12px;left:12px;z-index:20;color:#d8ffbe;text-decoration:none;font-weight:700;background:rgba(5,18,10,.72);padding:8px 10px;border:1px solid #9cff6b;border-radius:10px;}
+    .back:hover{text-decoration:underline;}
   </style>
 </head>
 <body>
+  <a class="back" href="../../index.php">← Voltar</a>
   <h1>🧟 Defesa da Torre de Zumbi</h1>
   <div id="hud">
     <span id="vida"></span>
@@ -23,6 +26,7 @@
     <span id="onda"></span>
   </div>
   <div id="actions">
+    <button id="towerCycleBtn">Torre: 🔫 Básica</button>
     <button id="upgradeBtn" disabled>Selecione uma torre para melhorar</button>
     <span id="towerInfo">Sem torre selecionada</span>
   </div>
@@ -48,6 +52,14 @@ const dinheiroEl=document.getElementById('dinheiro');
 const ondaEl=document.getElementById('onda');
 const towerInfoEl=document.getElementById('towerInfo');
 const upgradeBtn=document.getElementById('upgradeBtn');
+const towerCycleBtn=document.getElementById('towerCycleBtn');
+const towerTypes = [
+  { key:'basic', name:'🔫 Básica', cost:30, range:145, dmg:12, rate:30, projSpeed:5.5, color:'#4fc3f7', core:'#15374e' },
+  { key:'fire', name:'🔥 Fogo', cost:42, range:128, dmg:18, rate:36, projSpeed:4.8, color:'#ff9b42', core:'#5a1f08' },
+  { key:'ice', name:'❄️ Gelo', cost:40, range:165, dmg:9, rate:28, projSpeed:5.2, color:'#8ae2ff', core:'#0e3b4d' },
+  { key:'poison', name:'☠️ Veneno', cost:46, range:150, dmg:8, rate:32, projSpeed:5, color:'#b8ff6e', core:'#335918' }
+];
+let selectedTowerType = 0;
 
 function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
 
@@ -83,9 +95,10 @@ function spawnZombie(){
 
 function updateZombie(z){
   const next = path[z.seg+1]; if(!next){vida--; z.dead=true; return;}
+  const velocity = z.speed * (1 - (z.slowAmount || 0));
   const dx=next.x-z.x, dy=next.y-z.y; const d=Math.hypot(dx,dy);
-  if(d<z.speed){z.x=next.x; z.y=next.y; z.seg++;}
-  else {z.x += dx/d*z.speed; z.y += dy/d*z.speed;}
+  if(d<velocity){z.x=next.x; z.y=next.y; z.seg++;}
+  else {z.x += dx/d*velocity; z.y += dy/d*velocity;}
 }
 
 function towerUpgradeCost(t){ return 25 + t.level * 20; }
@@ -98,6 +111,9 @@ function upgradeTower(t){
   t.dmg = Math.round((t.dmg + 4) * 1.06);
   t.range += 10;
   t.rate = Math.max(10, Math.round(t.rate * 0.92));
+  if(t.type === 'fire') t.burn = Math.min(0.58, (t.burn || 0.3) + 0.03);
+  if(t.type === 'ice') t.slow = Math.min(0.55, (t.slow || 0.28) + 0.03);
+  if(t.type === 'poison') t.poison = Math.min(7, (t.poison || 4) + 1);
   return true;
 }
 
@@ -112,7 +128,7 @@ function updateTowerUi(){
   const enough = dinheiro >= cost;
   upgradeBtn.disabled = !enough;
   upgradeBtn.textContent = `⬆️ Melhorar torre (Lv ${selectedTower.level} → ${selectedTower.level+1}) - ${cost}💰`;
-  towerInfoEl.textContent = `Torre Lv ${selectedTower.level} | Dano ${selectedTower.dmg} | Alcance ${selectedTower.range} | Cadência ${selectedTower.rate}`;
+  towerInfoEl.textContent = `${selectedTower.label} Lv ${selectedTower.level} | Dano ${selectedTower.dmg} | Alcance ${selectedTower.range} | Cadência ${selectedTower.rate}`;
 }
 
 function gameLoop(){
@@ -135,7 +151,7 @@ function gameLoop(){
     t.cd--;
     if(t.cd<=0){
       const alvo = zumbis.find(z=>!z.dead && dist(z,t)<=t.range);
-      if(alvo){ tiros.push({x:t.x,y:t.y,target:alvo,dmg:t.dmg,speed:5.5}); t.cd=t.rate; }
+      if(alvo){ tiros.push({x:t.x,y:t.y,target:alvo,dmg:t.dmg,speed:t.projSpeed||5.5,effect:t.type,burn:t.burn,slow:t.slow,poison:t.poison}); t.cd=t.rate; }
     }
   }
 
@@ -144,6 +160,16 @@ function gameLoop(){
     const dx=tiro.target.x-tiro.x, dy=tiro.target.y-tiro.y; const d=Math.hypot(dx,dy);
     if(d<tiro.speed+4){
       tiro.target.hp -= tiro.dmg;
+      if(tiro.effect === 'fire'){
+        tiro.target.burnTicks = 90;
+        tiro.target.burnDps = Math.max(tiro.target.burnDps || 0, Math.ceil(tiro.dmg * (tiro.burn || 0.3)));
+      } else if(tiro.effect === 'ice'){
+        tiro.target.slowTicks = 80;
+        tiro.target.slowAmount = Math.max(tiro.target.slowAmount || 0, (tiro.slow || 0.28));
+      } else if(tiro.effect === 'poison'){
+        tiro.target.poisonTicks = 140;
+        tiro.target.poisonDps = Math.max(tiro.target.poisonDps || 0, (tiro.poison || 4));
+      }
       tiro.dead=true;
       if(tiro.target.hp<=0){
         tiro.target.dead=true;
@@ -152,6 +178,17 @@ function gameLoop(){
       }
     }
     else { tiro.x += dx/d*tiro.speed; tiro.y += dy/d*tiro.speed; }
+  }
+
+  for(const z of zumbis){
+    if(z.burnTicks>0){ z.hp -= (z.burnDps || 0) / 60; z.burnTicks--; }
+    if(z.poisonTicks>0){ z.hp -= (z.poisonDps || 0) / 60; z.poisonTicks--; }
+    if(z.slowTicks>0){ z.slowTicks--; } else { z.slowAmount = 0; }
+    if(z.hp<=0 && !z.dead){
+      z.dead=true;
+      kills++;
+      dinheiro+=z.reward;
+    }
   }
 
   for(const z of zumbis) updateZombie(z);
@@ -201,9 +238,9 @@ function draw(){
   ctx.fillRect(900,176,56,88);
 
   for(const t of torres){
-    ctx.fillStyle=(t===selectedTower)?'#9de9ff':'#4fc3f7';
+    ctx.fillStyle=(t===selectedTower)?'#9de9ff':t.color;
     ctx.beginPath(); ctx.arc(t.x,t.y,15,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle='#15374e';
+    ctx.fillStyle=t.core;
     ctx.beginPath(); ctx.arc(t.x,t.y,8,0,Math.PI*2); ctx.fill();
     if(t===selectedTower){
       ctx.strokeStyle='#e8ff5b'; ctx.lineWidth=3;
@@ -214,7 +251,11 @@ function draw(){
   }
 
   for(const z of zumbis){
-    ctx.fillStyle='#88ff55'; ctx.beginPath(); ctx.arc(z.x,z.y,14,0,Math.PI*2); ctx.fill();
+    if(z.poisonTicks>0) ctx.fillStyle='#9cf36f';
+    else if(z.burnTicks>0) ctx.fillStyle='#ff9452';
+    else if(z.slowTicks>0) ctx.fillStyle='#9ce9ff';
+    else ctx.fillStyle='#88ff55';
+    ctx.beginPath(); ctx.arc(z.x,z.y,14,0,Math.PI*2); ctx.fill();
     ctx.fillStyle='#22361a'; ctx.beginPath(); ctx.arc(z.x+4,z.y-3,4,0,Math.PI*2); ctx.fill();
     ctx.fillStyle='#22361a'; ctx.beginPath(); ctx.arc(z.x-5,z.y-2,3.5,0,Math.PI*2); ctx.fill();
     ctx.fillStyle='#000'; ctx.fillRect(z.x-16,z.y-24,32,4);
@@ -241,12 +282,16 @@ cvs.addEventListener('click', e=>{
     return;
   }
 
-  const buildCost = 30;
+  const type = towerTypes[selectedTowerType];
+  const buildCost = type.cost;
   if(dinheiro<buildCost) return;
   if(torres.some(t=>dist(t,{x,y})<36)) return;
   const closePath = path.some((p,i)=> i<path.length-1 && pointSegDist({x,y},path[i],path[i+1])<34);
   if(closePath) return;
-  const tower={x,y,range:145,dmg:12,rate:30,cd:0,level:1};
+  const tower={x,y,range:type.range,dmg:type.dmg,rate:type.rate,cd:0,level:1,type:type.key,label:type.name,color:type.color,core:type.core,projSpeed:type.projSpeed};
+  if(type.key==='fire') tower.burn = 0.3;
+  if(type.key==='ice') tower.slow = 0.28;
+  if(type.key==='poison') tower.poison = 4;
   torres.push(tower);
   dinheiro-=buildCost;
   selectedTower = tower;
@@ -255,6 +300,11 @@ cvs.addEventListener('click', e=>{
 
 upgradeBtn.addEventListener('click', ()=>{
   if(selectedTower) upgradeTower(selectedTower);
+});
+
+towerCycleBtn.addEventListener('click', ()=>{
+  selectedTowerType = (selectedTowerType + 1) % towerTypes.length;
+  towerCycleBtn.textContent = `Torre: ${towerTypes[selectedTowerType].name} (${towerTypes[selectedTowerType].cost}💰)`;
 });
 
 window.addEventListener('keydown', (e)=>{
@@ -270,6 +320,7 @@ function pointSegDist(p,a,b){
 }
 
 startWave();
+towerCycleBtn.textContent = `Torre: ${towerTypes[selectedTowerType].name} (${towerTypes[selectedTowerType].cost}💰)`;
 gameLoop();
 </script>
 </body>

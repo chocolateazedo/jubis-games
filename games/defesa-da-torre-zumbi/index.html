@@ -20,11 +20,15 @@
     .tower-option{flex:0 0 132px;background:linear-gradient(180deg,#335f49,#203a2c);border:1px solid rgba(201,255,146,.5);border-radius:14px;padding:10px;cursor:pointer;color:#efffde;text-align:left}
     .tower-option small{opacity:.85;display:block}
     .tower-option:hover{transform:translateY(-2px)}
-    .xbtn{background:#263d30;border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:10px;padding:6px 10px;cursor:pointer}
+    .xbtn{background:#263d30;border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:10px;padding:6px 10px;cursor:pointer;font-size:16px}
     .panel{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:9990;background:rgba(0,0,0,.72)}
-    .card{width:min(92vw,480px);background:linear-gradient(180deg,#193928,#11271c);border:1px solid rgba(156,255,107,.5);border-radius:14px;padding:16px;box-shadow:0 20px 40px rgba(0,0,0,.55)}
+    .card{width:min(92vw,540px);background:linear-gradient(180deg,#193928,#11271c);border:1px solid rgba(156,255,107,.5);border-radius:16px;padding:16px;box-shadow:0 20px 40px rgba(0,0,0,.55);position:relative}
+    .card h3{margin:6px 0 10px 0}
     .row{display:flex;justify-content:space-between;gap:8px;margin:8px 0}
+    .stats-grid{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center}
+    .tower-big{font-size:54px;text-align:center;filter:drop-shadow(0 0 8px rgba(184,255,127,.6))}
     button{background:linear-gradient(180deg,#325d45,#234030);color:#e9ffd8;border:1px solid #9cff6b;border-radius:8px;padding:8px 12px;font-weight:700;cursor:pointer}
+    .upgrade-close{position:absolute;right:10px;top:10px}
   </style>
 </head>
 <body>
@@ -35,12 +39,12 @@
     <div id="slotInfo">Toque em um slot <strong>＋</strong> para abrir a loja de torres.</div>
 
     <div id="shopTray">
-      <div id="shopHeader"><span id="shopTitle">Escolha uma torre para construir</span><button id="closeShop" class="xbtn">Fechar</button></div>
+      <div id="shopHeader"><span id="shopTitle">Escolha uma torre para construir</span><button id="closeShop" class="xbtn">✖</button></div>
       <div id="towerBar"></div>
     </div>
   </div>
 
-  <div id="upgradePanel" class="panel"><div class="card"><h3>🔧 Torre selecionada</h3><div id="upgradeContent"></div><div class="row"><button id="panelUpgrade">⬆️ Melhorar</button><button id="panelSell">💸 Vender</button><button id="panelClose">Fechar</button></div></div></div>
+  <div id="upgradePanel" class="panel"><div class="card"><button id="panelClose" class="xbtn upgrade-close">✖</button><h3>🔧 Upgrade da Torre</h3><div id="upgradeContent"></div><div class="row"><button id="panelUpgrade">⬆️ Melhorar</button><button id="panelSell">💸 Vender</button></div></div></div>
   <div id="gameOverPanel" class="panel"><div class="card" style="text-align:center;background:#000"><h2 style="font-size:52px;color:#fff">GAME OVER</h2><button id="restartBtn" style="background:#fff;color:#000;border-color:#fff">Reiniciar</button></div></div>
 <script>
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d');
@@ -48,7 +52,7 @@ const vidaEl=document.getElementById('vida'),dinheiroEl=document.getElementById(
 const path=[{x:0,y:260},{x:180,y:260},{x:180,y:130},{x:420,y:130},{x:420,y:400},{x:670,y:400},{x:670,y:220},{x:960,y:220}];
 const buildSlots=[{x:120,y:350},{x:250,y:190},{x:300,y:350},{x:510,y:210},{x:560,y:455},{x:730,y:320},{x:830,y:170},{x:860,y:320}];
 let vida=1000,dinheiro=180,onda=1,kills=0,gameOver=false,activeSlot=-1;const MAX_TOWERS=15,MAX_TOWER_LEVEL=50;
-const torres=[],zumbis=[],tiros=[],particles=[];let selectedTower=null,spawnLeft=0,spawnedInWave=0,spawnCooldown=0;
+const torres=[],zumbis=[],tiros=[],particles=[];let selectedTower=null,spawnLeft=0,spawnedInWave=0,spawnCooldown=0,tick=0;
 const els={vida:vidaEl,dinheiro:dinheiroEl,onda:ondaEl,towerInfo,towerBar:document.getElementById('towerBar'),slotInfo:document.getElementById('slotInfo'),shopTray:document.getElementById('shopTray'),shopTitle:document.getElementById('shopTitle'),closeShop:document.getElementById('closeShop'),upgradePanel:document.getElementById('upgradePanel'),upgradeContent:document.getElementById('upgradeContent'),panelUpgrade:document.getElementById('panelUpgrade'),panelSell:document.getElementById('panelSell'),panelClose:document.getElementById('panelClose'),gameOverPanel:document.getElementById('gameOverPanel'),restartBtn:document.getElementById('restartBtn')};
 const towerTypes=[
 {key:'fire',emoji:'🔥',name:'Fogo',cost:42,range:130,dmg:20,rate:34,projSpeed:4.8,color:'#ff8f4a',core:'#5d2109'},
@@ -58,38 +62,58 @@ const towerTypes=[
 {key:'leaf',emoji:'🍃',name:'Folha',cost:32,range:135,dmg:11,rate:18,projSpeed:5.5,color:'#8bff6e',core:'#29561e'},
 {key:'light',emoji:'⚡',name:'Raio',cost:56,range:165,dmg:28,rate:42,projSpeed:7,color:'#fff085',core:'#74670a'}];
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+const audio={ctx:null,master:null};
+function ensureAudio(){if(audio.ctx)return;audio.ctx=new (window.AudioContext||window.webkitAudioContext)();audio.master=audio.ctx.createGain();audio.master.gain.value=.2;audio.master.connect(audio.ctx.destination)}
+function beep(type,freq,dur=.08,vol=.1){ensureAudio();const t=audio.ctx.currentTime,o=audio.ctx.createOscillator(),g=audio.ctx.createGain();o.type=type;o.frequency.value=freq;g.gain.value=vol;g.gain.exponentialRampToValueAtTime(0.001,t+dur);o.connect(g);g.connect(audio.master);o.start();o.stop(t+dur)}
+const SFX={shoot:()=>beep('square',520,.05,.06),hit:()=>beep('triangle',230,.05,.05),explode:()=>{beep('sawtooth',85,.2,.12);beep('triangle',120,.15,.08)},upgrade:()=>{beep('sine',600,.08,.09);beep('sine',860,.1,.08)},sell:()=>beep('triangle',300,.09,.08),boss:()=>{beep('sawtooth',120,.2,.11);setTimeout(()=>beep('sawtooth',95,.25,.11),80)},baseHit:()=>beep('square',150,.1,.1),gameOver:()=>{beep('sawtooth',180,.3,.13);setTimeout(()=>beep('sawtooth',100,.4,.1),140)},click:()=>beep('sine',700,.03,.05)};
 function waveStats(w){return{amount:9+w*3,hp:100+(w-1)*10,speed:1+w*.06,spawnGap:Math.max(10,30-w),reward:18+w*4}};
 function startWave(){const s=waveStats(onda);spawnLeft=s.amount;spawnedInWave=0;spawnCooldown=1;}
 function spawnZombie(){const s=waveStats(onda),isBoss=onda%15===0&&spawnedInWave===0;const kinds=['normal','fast','tank','explosive'];let type=isBoss?'boss':kinds[spawnedInWave%kinds.length];
 let mult={normal:1,fast:.75,tank:2.2,explosive:1.2,boss:8}[type],spd={normal:1,fast:1.8,tank:.65,explosive:1.2,boss:.45}[type];
-zumbis.push({x:path[0].x,y:path[0].y,seg:0,type,isBoss,hp:Math.floor(s.hp*mult),maxHp:Math.floor(s.hp*mult),speed:s.speed*spd,reward:Math.floor(s.reward*mult*1.2),dead:false}); spawnedInWave++;}
+zumbis.push({x:path[0].x,y:path[0].y,seg:0,type,isBoss,hp:Math.floor(s.hp*mult),maxHp:Math.floor(s.hp*mult),speed:s.speed*spd,reward:Math.floor(s.reward*mult*1.2),dead:false,step:Math.random()*6}); if(isBoss)SFX.boss(); spawnedInWave++;}
 const towerUpgradeCost=t=>20+t.level*18; const towerSellValue=t=>Math.max(1,Math.round(t.totalCost*.74*(1+(t.level-1)*.025)));
-function upgradeTower(t){const c=towerUpgradeCost(t);if(t.level>=MAX_TOWER_LEVEL||dinheiro<c)return false;dinheiro-=c;t.totalCost+=c;t.level++;t.dmg=Math.round((t.dmg+3)*1.05);t.range+=7;t.rate=Math.max(8,Math.round(t.rate*.95));return true}
+function nextTowerStats(t){return{dmg:Math.round((t.dmg+3)*1.05),range:t.range+7,rate:Math.max(8,Math.round(t.rate*.95))}}
+function upgradeTower(t){const c=towerUpgradeCost(t);if(t.level>=MAX_TOWER_LEVEL||dinheiro<c)return false;const n=nextTowerStats(t);dinheiro-=c;t.totalCost+=c;t.level++;t.dmg=n.dmg;t.range=n.range;t.rate=n.rate;SFX.upgrade();return true}
 function updateHUD(){els.vida.textContent=`❤️ ${Math.max(0,Math.round(vida))}/1000`;els.dinheiro.textContent=`💰 ${dinheiro}`;els.onda.textContent=`🌊 Onda ${onda} • ☠️ ${kills}`;els.towerInfo.textContent=selectedTower?`${selectedTower.label} Lv ${selectedTower.level}`:'Sem torre selecionada';}
 function openShop(slotIndex){activeSlot=slotIndex;els.shopTray.style.display='block';els.shopTitle.textContent=`Construir no slot ${slotIndex+1}`;renderBar();}
 function closeShop(){activeSlot=-1;els.shopTray.style.display='none';}
-function renderBar(){els.towerBar.innerHTML='';towerTypes.forEach((t)=>{const b=document.createElement('button');b.className='tower-option';b.innerHTML=`<strong>${t.emoji} ${t.name}</strong><small>${t.cost}💰 • alcance ${t.range}</small>`;b.onclick=()=>buildTowerInSlot(t);els.towerBar.appendChild(b);});}
-function buildTowerInSlot(type){if(activeSlot<0||torres.length>=MAX_TOWERS||dinheiro<type.cost)return;const slot=buildSlots[activeSlot];if(torres.some(t=>t.slot===activeSlot))return;const t={x:slot.x,y:slot.y,slot:activeSlot,range:type.range,dmg:type.dmg,rate:type.rate,cd:0,level:1,type:type.key,label:`${type.emoji} ${type.name}`,color:type.color,core:type.core,projSpeed:type.projSpeed,totalCost:type.cost};torres.push(t);dinheiro-=type.cost;selectedTower=t;closeShop();}
-function update(){if(gameOver)return;spawnCooldown--;if(spawnLeft>0&&spawnCooldown<=0){spawnZombie();spawnLeft--;spawnCooldown=waveStats(onda).spawnGap;}if(spawnLeft===0&&zumbis.length===0){dinheiro+=30+onda*8;onda++;startWave();}
-for(const t of torres){t.cd--;if(t.cd<=0){const a=zumbis.find(z=>!z.dead&&dist(z,t)<=t.range);if(a){tiros.push({x:t.x,y:t.y,target:a,dmg:t.dmg,speed:t.projSpeed,effect:t.type});t.cd=t.rate;}}}
-for(const pr of tiros){if(!pr.target||pr.target.dead){pr.dead=true;continue;}const dx=pr.target.x-pr.x,dy=pr.target.y-pr.y,d=Math.hypot(dx,dy);if(d<pr.speed+4){pr.target.hp-=pr.dmg;pr.dead=true;} else {pr.x+=dx/d*pr.speed;pr.y+=dy/d*pr.speed;}}
-for(const z of zumbis){const nxt=path[z.seg+1];if(!nxt){z.dead=true;vida-=Math.max(1,Math.round(z.hp));continue;}const v=Math.max(.25,z.speed);const dx=nxt.x-z.x,dy=nxt.y-z.y,d=Math.hypot(dx,dy);if(d<v){z.x=nxt.x;z.y=nxt.y;z.seg++;}else{z.x+=dx/d*v;z.y+=dy/d*v;}if(z.hp<=0&&!z.dead){z.dead=true;kills++;dinheiro+=z.reward;}}
-for(const arr of [zumbis,tiros,particles])for(let i=arr.length-1;i>=0;i--){if(arr[i].dead)arr.splice(i,1);}if(vida<=0){gameOver=true;els.gameOverPanel.style.display='flex';}updateHUD();}
-function draw(){ctx.clearRect(0,0,960,540);const g=ctx.createLinearGradient(0,0,0,540);g.addColorStop(0,'#38754b');g.addColorStop(.55,'#28563a');g.addColorStop(1,'#193e2a');ctx.fillStyle=g;ctx.fillRect(0,0,960,540);
-ctx.strokeStyle='#6b4b2f';ctx.lineWidth=66;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(path[0].x,path[0].y);for(const p of path.slice(1))ctx.lineTo(p.x,p.y);ctx.stroke();ctx.strokeStyle='#be8e58';ctx.lineWidth=48;ctx.stroke();
-ctx.fillStyle='#7092b4';ctx.beginPath();ctx.arc(940,220,30,0,7);ctx.fill();ctx.fillStyle='#eff8ff';ctx.fillText('🏠',926,226);
-for(let i=0;i<buildSlots.length;i++){const s=buildSlots[i];const taken=torres.some(t=>t.slot===i);if(taken)continue;ctx.fillStyle='rgba(20,35,28,.85)';ctx.beginPath();ctx.arc(s.x,s.y,20,0,7);ctx.fill();ctx.strokeStyle='rgba(194,255,132,.8)';ctx.lineWidth=2;ctx.stroke();ctx.fillStyle='#d9ff9c';ctx.font='bold 22px Arial';ctx.textAlign='center';ctx.fillText('+',s.x,s.y+8);}ctx.textAlign='start';
+function renderBar(){els.towerBar.innerHTML='';towerTypes.forEach((t)=>{const b=document.createElement('button');b.className='tower-option';b.innerHTML=`<strong>${t.emoji} ${t.name}</strong><small>${t.cost}💰 • alcance ${t.range}</small>`;b.onclick=()=>{SFX.click();buildTowerInSlot(t)};els.towerBar.appendChild(b);});}
+function buildTowerInSlot(type){if(activeSlot<0||torres.length>=MAX_TOWERS||dinheiro<type.cost)return;const slot=buildSlots[activeSlot];if(torres.some(t=>t.slot===activeSlot))return;const t={x:slot.x,y:slot.y,slot:activeSlot,range:type.range,dmg:type.dmg,rate:type.rate,cd:0,level:1,type:type.key,label:`${type.emoji} ${type.name}`,emoji:type.emoji,name:type.name,color:type.color,core:type.core,projSpeed:type.projSpeed,totalCost:type.cost};torres.push(t);dinheiro-=type.cost;selectedTower=t;closeShop();}
+function makeExplosion(x,y,isBoss=false){const qtd=isBoss?24:12;for(let i=0;i<qtd;i++){const ang=Math.random()*Math.PI*2,sp=1+Math.random()*3+(isBoss?1.5:0);particles.push({x,y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,life:28+Math.random()*20,size:2+Math.random()*4,dead:false,color:isBoss?'#ff63ba':'#a4ff70'})}SFX.explode()}
+function openUpgradePanel(t){selectedTower=t;renderUpgradePanel();els.upgradePanel.style.display='flex'}
+function renderUpgradePanel(){if(!selectedTower)return;const t=selectedTower,n=nextTowerStats(t),c=towerUpgradeCost(t);els.upgradeContent.innerHTML=`<div class='tower-big'>${t.emoji}</div>
+<div class='row'><strong>${t.name}</strong><strong>Nível ${t.level}</strong></div>
+<div class='stats-grid'><span>Dano</span><strong>${t.dmg}</strong><strong>→ ${n.dmg}</strong></div>
+<div class='stats-grid'><span>Range</span><strong>${t.range}</strong><strong>→ ${n.range}</strong></div>
+<div class='stats-grid'><span>Tempo tiro</span><strong>${t.rate}</strong><strong>→ ${n.rate}</strong></div>
+<div class='row'><span>Upgrade</span><strong>${c}💰</strong></div>
+<div class='row'><span>Vender</span><strong>${towerSellValue(t)}💰</strong></div>`;}
+function update(){if(gameOver)return;tick++;spawnCooldown--;if(spawnLeft>0&&spawnCooldown<=0){spawnZombie();spawnLeft--;spawnCooldown=waveStats(onda).spawnGap;}if(spawnLeft===0&&zumbis.length===0){dinheiro+=30+onda*8;onda++;startWave();}
+for(const t of torres){t.cd--;if(t.cd<=0){const a=zumbis.find(z=>!z.dead&&dist(z,t)<=t.range);if(a){tiros.push({x:t.x,y:t.y,target:a,dmg:t.dmg,speed:t.projSpeed,effect:t.type});t.cd=t.rate;SFX.shoot();}}}
+for(const pr of tiros){if(!pr.target||pr.target.dead){pr.dead=true;continue;}const dx=pr.target.x-pr.x,dy=pr.target.y-pr.y,d=Math.hypot(dx,dy);if(d<pr.speed+4){pr.target.hp-=pr.dmg;pr.dead=true;SFX.hit();} else {pr.x+=dx/d*pr.speed;pr.y+=dy/d*pr.speed;}}
+for(const z of zumbis){const nxt=path[z.seg+1];z.step+=0.22;if(!nxt){z.dead=true;vida-=Math.max(1,Math.round(z.hp));SFX.baseHit();continue;}const v=Math.max(.25,z.speed);const dx=nxt.x-z.x,dy=nxt.y-z.y,d=Math.hypot(dx,dy);if(d<v){z.x=nxt.x;z.y=nxt.y;z.seg++;}else{z.x+=dx/d*v;z.y+=dy/d*v;}if(z.hp<=0&&!z.dead){z.dead=true;kills++;dinheiro+=z.reward;makeExplosion(z.x,z.y,z.isBoss);}}
+for(const p of particles){p.x+=p.vx;p.y+=p.vy;p.vy+=.03;p.life--;if(p.life<=0)p.dead=true;}
+for(const arr of [zumbis,tiros,particles])for(let i=arr.length-1;i>=0;i--){if(arr[i].dead)arr.splice(i,1);}if(vida<=0&&!gameOver){gameOver=true;els.gameOverPanel.style.display='flex';SFX.gameOver();}if(els.upgradePanel.style.display==='flex')renderUpgradePanel();updateHUD();}
+function drawZombie(z){const bob=Math.sin(z.step)*2,r=z.isBoss?24:16;ctx.save();ctx.translate(z.x,z.y+bob);ctx.shadowColor='rgba(110,255,110,.9)';ctx.shadowBlur=z.isBoss?22:14;ctx.fillStyle=z.isBoss?'#6c1340':'#1c3a20';ctx.beginPath();ctx.roundRect(-r,-r,r*2,r*2,8);ctx.fill();ctx.font=`${z.isBoss?28:22}px Arial`;ctx.textAlign='center';ctx.fillText('🧟',0,8);ctx.restore();
+const w=z.isBoss?70:42,h=8,x=z.x-w/2,y=z.y-r-16;ctx.fillStyle='rgba(0,0,0,.45)';ctx.fillRect(x,y,w,h);const pct=Math.max(0,z.hp)/z.maxHp;ctx.fillStyle=pct>.66?'#55ff77':pct>.33?'#ffd23f':'#ff4f4f';ctx.fillRect(x,y,w*pct,h);ctx.strokeStyle='rgba(255,255,255,.35)';ctx.strokeRect(x,y,w,h);ctx.fillStyle='#fff';ctx.font='10px Arial';ctx.textAlign='center';ctx.fillText(`${Math.max(0,Math.ceil(z.hp))}/${z.maxHp}`,z.x,y-2)}
+function draw(){ctx.clearRect(0,0,960,540);
+const g=ctx.createLinearGradient(0,0,0,540);g.addColorStop(0,'#3b7e4f');g.addColorStop(.55,'#28563a');g.addColorStop(1,'#193e2a');ctx.fillStyle=g;ctx.fillRect(0,0,960,540);
+for(let i=0;i<180;i++){const x=(i*53)%960,y=(i*97)%540,a=.05+((i*17)%10)/220;ctx.fillStyle=`rgba(120,200,100,${a})`;ctx.fillRect(x,y,3,3)}
+ctx.strokeStyle='#5f3f24';ctx.lineWidth=70;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(path[0].x,path[0].y);for(const p of path.slice(1))ctx.lineTo(p.x,p.y);ctx.stroke();ctx.strokeStyle='#d8a56e';ctx.lineWidth=54;ctx.stroke();ctx.strokeStyle='rgba(255,235,210,.35)';ctx.lineWidth=2;ctx.setLineDash([6,8]);ctx.stroke();ctx.setLineDash([]);
+ctx.fillStyle='#4f6e90';ctx.beginPath();ctx.roundRect(900,190,52,60,10);ctx.fill();ctx.fillStyle='#eff8ff';ctx.font='26px Arial';ctx.fillText('🏠',910,228);
+for(let i=0;i<buildSlots.length;i++){const s=buildSlots[i];const taken=torres.some(t=>t.slot===i);if(taken)continue;ctx.shadowColor='rgba(170,255,115,.8)';ctx.shadowBlur=12;ctx.fillStyle='rgba(20,35,28,.9)';ctx.beginPath();ctx.arc(s.x,s.y,21,0,7);ctx.fill();ctx.shadowBlur=0;ctx.strokeStyle='rgba(194,255,132,.9)';ctx.lineWidth=2;ctx.stroke();ctx.fillStyle='#d9ff9c';ctx.font='bold 22px Arial';ctx.textAlign='center';ctx.fillText('+',s.x,s.y+8);}ctx.textAlign='start';
 for(const t of torres){ctx.save();ctx.shadowColor=t.color;ctx.shadowBlur=18;ctx.fillStyle=t===selectedTower?'#fff':t.color;ctx.beginPath();ctx.arc(t.x,t.y,15,0,7);ctx.fill();ctx.fillStyle=t.core;ctx.beginPath();ctx.arc(t.x,t.y,8,0,7);ctx.fill();ctx.restore();}
-for(const z of zumbis){ctx.fillStyle=z.isBoss?'#ff2f8a':(z.type==='fast'?'#96ff5f':z.type==='tank'?'#84a86a':z.type==='explosive'?'#ff9955':'#88ff55');const r=z.isBoss?24:14;ctx.beginPath();ctx.arc(z.x,z.y,r,0,7);ctx.fill();}
+for(const z of zumbis)drawZombie(z);
+for(const p of particles){ctx.fillStyle=p.color;ctx.globalAlpha=Math.max(0,p.life/40);ctx.beginPath();ctx.arc(p.x,p.y,p.size,0,7);ctx.fill();ctx.globalAlpha=1}
 for(const b of tiros){ctx.fillStyle='#ffe082';ctx.beginPath();ctx.arc(b.x,b.y,4,0,7);ctx.fill();}}
 function loop(){update();draw();requestAnimationFrame(loop)}
-cvs.addEventListener('click',e=>{if(gameOver)return;const r=cvs.getBoundingClientRect(),x=(e.clientX-r.left)*cvs.width/r.width,y=(e.clientY-r.top)*cvs.height/r.height;
-const ct=torres.find(t=>dist(t,{x,y})<18);if(ct){selectedTower=ct;const c=towerUpgradeCost(ct);els.upgradeContent.innerHTML=`<div class='row'><span>${ct.label} Lv ${ct.level}</span><span>Upgrade ${c}💰</span></div><div class='row'><span>Dano</span><span>${ct.dmg}</span></div><div class='row'><span>Alcance</span><span>${ct.range}</span></div>`;els.upgradePanel.style.display='flex';return;}
+cvs.addEventListener('click',e=>{ensureAudio();if(gameOver)return;SFX.click();const r=cvs.getBoundingClientRect(),x=(e.clientX-r.left)*cvs.width/r.width,y=(e.clientY-r.top)*cvs.height/r.height;
+const ct=torres.find(t=>dist(t,{x,y})<18);if(ct){openUpgradePanel(ct);return;}
 const si=buildSlots.findIndex((s,i)=>dist(s,{x,y})<24&&!torres.some(t=>t.slot===i));if(si>=0){openShop(si);return;}closeShop();selectedTower=null;});
-els.closeShop.onclick=closeShop;
-els.panelUpgrade.onclick=()=>{if(selectedTower)upgradeTower(selectedTower);};
-els.panelSell.onclick=()=>{if(!selectedTower)return;dinheiro+=towerSellValue(selectedTower);torres.splice(torres.indexOf(selectedTower),1);selectedTower=null;els.upgradePanel.style.display='none';};
-els.panelClose.onclick=()=>els.upgradePanel.style.display='none';
+els.closeShop.onclick=()=>{SFX.click();closeShop();};
+els.panelUpgrade.onclick=()=>{if(selectedTower&&upgradeTower(selectedTower))renderUpgradePanel();};
+els.panelSell.onclick=()=>{if(!selectedTower)return;dinheiro+=towerSellValue(selectedTower);SFX.sell();torres.splice(torres.indexOf(selectedTower),1);selectedTower=null;els.upgradePanel.style.display='none';};
+els.panelClose.onclick=()=>{SFX.click();els.upgradePanel.style.display='none';};
 els.restartBtn.onclick=()=>location.reload();
 startWave();updateHUD();loop();
 </script>

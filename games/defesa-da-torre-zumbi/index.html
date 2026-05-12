@@ -51,6 +51,9 @@ let spawnLeft = 0;
 let spawnedInWave = 0;
 let spawnCooldown = 0;
 let selectedTower = null;
+let gameOver = false;
+let gameOverReason = '';
+
 
 const vidaEl=document.getElementById('vida');
 const dinheiroEl=document.getElementById('dinheiro');
@@ -89,7 +92,8 @@ function waveStats(w) {
   const speed = 0.95 + w * 0.09;
   const spawnGap = Math.max(14, 36 - w);
   const reward = 18 + w * 4;
-  return { amount, hp, speed, spawnGap, reward };
+  const bossEvery = 9;
+  return { amount, hp, speed, spawnGap, reward, bossEvery };
 }
 
 function startWave(){
@@ -101,20 +105,32 @@ function startWave(){
 
 function spawnZombie(){
   const stats = waveStats(onda);
-  const variety = (spawnedInWave % 5 === 0 && onda >= 3) ? 1.6 : 1;
+  const isBoss = (spawnedInWave + 1) % stats.bossEvery === 0 && onda >= 4;
+  const variety = isBoss ? 4.6 : ((spawnedInWave % 5 === 0 && onda >= 3) ? 1.6 : 1);
   zumbis.push({
     x:path[0].x,y:path[0].y,seg:0,
     hp:Math.floor(stats.hp * variety),
     maxHp:Math.floor(stats.hp * variety),
-    speed:stats.speed * (variety > 1 ? 0.85 : 1),
-    reward:Math.floor(stats.reward * variety),
+    speed:stats.speed * (isBoss ? 0.72 : (variety > 1 ? 0.85 : 1)),
+    reward:Math.floor(stats.reward * (isBoss ? 5.5 : variety)),
+    isBoss,
     dead:false
   });
   spawnedInWave++;
 }
 
 function updateZombie(z){
-  const next = path[z.seg+1]; if(!next){vida--; z.dead=true; return;}
+  const next = path[z.seg+1]; if(!next){
+    z.dead=true;
+    if(z.isBoss){
+      vida = 0;
+      gameOver = true;
+      gameOverReason = '💥 O Boss atingiu a torre!';
+    } else {
+      vida--;
+    }
+    return;
+  }
   const velocity = z.speed * (1 - (z.slowAmount || 0));
   const dx=next.x-z.x, dy=next.y-z.y; const d=Math.hypot(dx,dy);
   if(d<velocity){z.x=next.x; z.y=next.y; z.seg++;}
@@ -152,7 +168,12 @@ function updateTowerUi(){
 }
 
 function gameLoop(){
-  if(vida<=0){ draw(); ctx.fillStyle='#ff3333'; ctx.font='bold 64px Arial'; ctx.fillText('GAME OVER', 300, 280); return; }
+  if(gameOver || vida<=0){
+    gameOver = true;
+    draw();
+    drawGameOver();
+    return;
+  }
 
   spawnCooldown--;
   if(spawnLeft>0 && spawnCooldown<=0){
@@ -271,15 +292,18 @@ function draw(){
   }
 
   for(const z of zumbis){
-    if(z.poisonTicks>0) ctx.fillStyle='#9cf36f';
+    if(z.isBoss) ctx.fillStyle='#ff3d8f';
+    else if(z.poisonTicks>0) ctx.fillStyle='#9cf36f';
     else if(z.burnTicks>0) ctx.fillStyle='#ff9452';
     else if(z.slowTicks>0) ctx.fillStyle='#9ce9ff';
     else ctx.fillStyle='#88ff55';
-    ctx.beginPath(); ctx.arc(z.x,z.y,14,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(z.x,z.y,z.isBoss ? 20 : 14,0,Math.PI*2); ctx.fill();
     ctx.fillStyle='#22361a'; ctx.beginPath(); ctx.arc(z.x+4,z.y-3,4,0,Math.PI*2); ctx.fill();
     ctx.fillStyle='#22361a'; ctx.beginPath(); ctx.arc(z.x-5,z.y-2,3.5,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle='#000'; ctx.fillRect(z.x-16,z.y-24,32,4);
-    ctx.fillStyle='#ff4a4a'; ctx.fillRect(z.x-16,z.y-24,32*(z.hp/z.maxHp),4);
+    const hpBarW = z.isBoss ? 52 : 32;
+    const hpBarX = z.x - (hpBarW / 2);
+    ctx.fillStyle='#000'; ctx.fillRect(hpBarX,z.y-30,hpBarW,5);
+    ctx.fillStyle=z.isBoss ? '#ff3d8f' : '#ff4a4a'; ctx.fillRect(hpBarX,z.y-30,hpBarW*(z.hp/z.maxHp),5);
   }
 
   for(const t of tiros){ ctx.fillStyle='#ffe082'; ctx.beginPath(); ctx.arc(t.x,t.y,4,0,Math.PI*2); ctx.fill(); }
@@ -290,7 +314,22 @@ function draw(){
   updateTowerUi();
 }
 
+
+function drawGameOver(){
+  ctx.fillStyle = 'rgba(0,0,0,.62)';
+  ctx.fillRect(0,0,cvs.width,cvs.height);
+  ctx.fillStyle='#ff4d4d';
+  ctx.font='bold 70px Arial';
+  ctx.fillText('GAME OVER', 280, 230);
+  ctx.fillStyle='#fff2f2';
+  ctx.font='bold 30px Arial';
+  ctx.fillText(gameOverReason || 'Os zumbis destruíram sua defesa.', 200, 280);
+  ctx.font='bold 24px Arial';
+  ctx.fillText('Recarregue a página para tentar novamente.', 255, 330);
+}
+
 cvs.addEventListener('click', e=>{
+  if(gameOver) return;
   const r=cvs.getBoundingClientRect();
   const scaleX=cvs.width/r.width, scaleY=cvs.height/r.height;
   const x=(e.clientX-r.left)*scaleX, y=(e.clientY-r.top)*scaleY;

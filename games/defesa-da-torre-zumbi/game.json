@@ -1,8 +1,8 @@
 {
   "title": "Defesa da Torre de Zumbi",
-  "description": "Proteja a base contra ondas de zumbis com torres automáticas.",
+  "description": "Proteja a base contra ondas escaláveis de zumbis e evolua suas torres com upgrades.",
   "emoji": "🧟",
-  "tags": ["tower defense", "estratégia", "1 jogador"],
+  "tags": ["tower defense", "estratégia", "1 jogador", "upgrades", "survival"],
   "entry": "index.html",
   "order": 1
 }

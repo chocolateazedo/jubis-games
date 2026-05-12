@@ -32,6 +32,7 @@
   </div>
   <div id="actions">
     <button id="upgradeBtn" disabled>Selecione uma torre para melhorar</button>
+    <button id="sellBtn" disabled>Selecione uma torre para vender</button>
     <span id="towerInfo">Sem torre selecionada</span>
   </div>
   <canvas id="game" width="960" height="540"></canvas>
@@ -60,6 +61,7 @@ const dinheiroEl=document.getElementById('dinheiro');
 const ondaEl=document.getElementById('onda');
 const towerInfoEl=document.getElementById('towerInfo');
 const upgradeBtn=document.getElementById('upgradeBtn');
+const sellBtn=document.getElementById('sellBtn');
 const towerBarEl=document.getElementById('towerBar');
 const towerTypes = [
   { key:'basic', name:'🔫 Básica', cost:30, range:145, dmg:12, rate:30, projSpeed:5.5, color:'#4fc3f7', core:'#15374e' },
@@ -70,6 +72,7 @@ const towerTypes = [
 let selectedTowerType = 0;
 const MAX_TOWERS = 15;
 const MAX_TOWER_LEVEL = 50;
+const SELL_RATE_BY_TYPE = { basic: 0.7, fire: 0.74, ice: 0.72, poison: 0.76 };
 
 function renderTowerBar(){
   towerBarEl.innerHTML = '';
@@ -139,12 +142,18 @@ function updateZombie(z){
 }
 
 function towerUpgradeCost(t){ return 25 + t.level * 20; }
+function towerSellValue(t){
+  const multiplier = SELL_RATE_BY_TYPE[t.type] || 0.7;
+  const levelBonus = 1 + (t.level - 1) * 0.02;
+  return Math.max(1, Math.round(t.totalCost * multiplier * levelBonus));
+}
 
 function upgradeTower(t){
   if(t.level >= MAX_TOWER_LEVEL) return false;
   const cost = towerUpgradeCost(t);
   if(dinheiro < cost) return false;
   dinheiro -= cost;
+  t.totalCost += cost;
   t.level++;
   t.dmg = Math.round((t.dmg + 4) * 1.06);
   t.range += 10;
@@ -158,10 +167,15 @@ function upgradeTower(t){
 function updateTowerUi(){
   if(!selectedTower){
     upgradeBtn.disabled = true;
+    sellBtn.disabled = true;
     upgradeBtn.textContent = 'Selecione uma torre para melhorar';
+    sellBtn.textContent = 'Selecione uma torre para vender';
     towerInfoEl.textContent = 'Sem torre selecionada';
     return;
   }
+  const sellValue = towerSellValue(selectedTower);
+  sellBtn.disabled = false;
+  sellBtn.textContent = `💸 Vender torre (+${sellValue}💰)`;
   if(selectedTower.level >= MAX_TOWER_LEVEL){
     upgradeBtn.disabled = true;
     upgradeBtn.textContent = `⬆️ Torre no nível máximo (Lv ${MAX_TOWER_LEVEL})`;
@@ -356,7 +370,7 @@ cvs.addEventListener('click', e=>{
   if(torres.some(t=>dist(t,{x,y})<36)) return;
   const closePath = path.some((p,i)=> i<path.length-1 && pointSegDist({x,y},path[i],path[i+1])<34);
   if(closePath) return;
-  const tower={x,y,range:type.range,dmg:type.dmg,rate:type.rate,cd:0,level:1,type:type.key,label:type.name,color:type.color,core:type.core,projSpeed:type.projSpeed};
+  const tower={x,y,range:type.range,dmg:type.dmg,rate:type.rate,cd:0,level:1,type:type.key,label:type.name,color:type.color,core:type.core,projSpeed:type.projSpeed,totalCost:buildCost};
   if(type.key==='fire') tower.burn = 0.3;
   if(type.key==='ice') tower.slow = 0.28;
   if(type.key==='poison') tower.poison = 4;
@@ -368,6 +382,15 @@ cvs.addEventListener('click', e=>{
 
 upgradeBtn.addEventListener('click', ()=>{
   if(selectedTower) upgradeTower(selectedTower);
+});
+
+sellBtn.addEventListener('click', ()=>{
+  if(!selectedTower || gameOver) return;
+  dinheiro += towerSellValue(selectedTower);
+  const idx = torres.indexOf(selectedTower);
+  if(idx >= 0) torres.splice(idx,1);
+  selectedTower = null;
+  updateTowerUi();
 });
 
 window.addEventListener('keydown', (e)=>{

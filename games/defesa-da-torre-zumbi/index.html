@@ -69,6 +69,7 @@ const towerTypes = [
 ];
 let selectedTowerType = 0;
 const MAX_TOWERS = 15;
+const MAX_TOWER_LEVEL = 50;
 
 function renderTowerBar(){
   towerBarEl.innerHTML = '';
@@ -140,6 +141,7 @@ function updateZombie(z){
 function towerUpgradeCost(t){ return 25 + t.level * 20; }
 
 function upgradeTower(t){
+  if(t.level >= MAX_TOWER_LEVEL) return false;
   const cost = towerUpgradeCost(t);
   if(dinheiro < cost) return false;
   dinheiro -= cost;
@@ -158,6 +160,12 @@ function updateTowerUi(){
     upgradeBtn.disabled = true;
     upgradeBtn.textContent = 'Selecione uma torre para melhorar';
     towerInfoEl.textContent = 'Sem torre selecionada';
+    return;
+  }
+  if(selectedTower.level >= MAX_TOWER_LEVEL){
+    upgradeBtn.disabled = true;
+    upgradeBtn.textContent = `⬆️ Torre no nível máximo (Lv ${MAX_TOWER_LEVEL})`;
+    towerInfoEl.textContent = `${selectedTower.label} Lv ${selectedTower.level} | Dano ${selectedTower.dmg} | Alcance ${selectedTower.range} | Cadência ${selectedTower.rate} | Torres ${torres.length}/${MAX_TOWERS}`;
     return;
   }
   const cost = towerUpgradeCost(selectedTower);

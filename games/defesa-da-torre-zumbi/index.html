@@ -123,15 +123,19 @@ function spawnZombie(){
   spawnedInWave++;
 }
 
+function damageBaseByCurrentLife(z){
+  const basePercent = z.isBoss ? 0.22 : 0.07;
+  const minDamage = z.isBoss ? 20 : 1;
+  return Math.max(minDamage, Math.round(vida * basePercent));
+}
+
 function updateZombie(z){
   const next = path[z.seg+1]; if(!next){
     z.dead=true;
+    const damage = damageBaseByCurrentLife(z);
+    vida = Math.max(0, vida - damage);
     if(z.isBoss){
-      vida = 0;
-      gameOver = true;
-      gameOverReason = '💥 O Boss atingiu a torre!';
-    } else {
-      vida--;
+      gameOverReason = `💥 O Boss causou ${damage} de dano na base!`;
     }
     return;
   }

@@ -138,16 +138,22 @@
     scoreEl.textContent = '0';
   };
 
-  const collide = (p = piece, offX = 0, offY = 0) => p.shape.some((row,y) =>
-    row.some((v,x) => {
-      if (!v) return false;
-      const nextX = x + p.x + offX;
-      const nextY = y + p.y + offY;
-      if (nextX < 0 || nextX >= COLS || nextY >= ROWS) return true;
-      if (nextY < 0) return false;
-      return board[nextY][nextX] !== 0;
-    })
-  );
+  const canMove = (dx, dy, testPiece = piece) => {
+    for (let y = 0; y < testPiece.shape.length; y++) {
+      for (let x = 0; x < testPiece.shape[y].length; x++) {
+        if (!testPiece.shape[y][x]) continue;
+
+        const nextX = testPiece.x + x + dx;
+        const nextY = testPiece.y + y + dy;
+
+        if (nextX < 0) return false;
+        if (nextX >= COLS) return false;
+        if (nextY >= ROWS) return false;
+        if (nextY >= 0 && board[nextY][nextX]) return false;
+      }
+    }
+    return true;
+  };
 
   const merge = () => {
     piece.shape.forEach((row,y) => row.forEach((v,x) => {
@@ -193,7 +199,7 @@
     for (const [dx, dy] of kicks) {
       piece.x = oldX + dx;
       piece.y = oldY + dy;
-      if (!collide()) return;
+      if (canMove(0, 0)) return;
     }
 
     piece.shape = oldShape;
@@ -203,13 +209,14 @@
 
   const step = () => {
     if (over) return;
-    piece.y++;
-    if (collide()) {
-      piece.y--;
+
+    if (canMove(0, 1)) {
+      piece.y++;
+    } else {
       merge();
       clearLines();
       piece = newPiece();
-      if (collide()) {
+      if (!canMove(0, 0)) {
         over = true;
         setTimeout(() => alert('Game Over! Pontos: ' + score), 20);
       }
@@ -229,7 +236,12 @@
     if (!over) piece.shape.forEach((row,y) => row.forEach((v,x) => v && drawCell(x+piece.x,y+piece.y,piece.color)));
   };
 
-  const move = dir => { piece.x += dir; if (collide()) piece.x -= dir; draw(); };
+  const move = dir => {
+    if (canMove(dir, 0)) {
+      piece.x += dir;
+      draw();
+    }
+  };
   const softDrop = () => { step(); };
 
   document.addEventListener('keydown', e => {

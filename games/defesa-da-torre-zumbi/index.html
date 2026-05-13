@@ -146,22 +146,23 @@ if(pr.effect==='venom'){pr.target.poisonTime=Math.max(pr.target.poisonTime||0,14
 if(pr.effect==='water')fx.push({type:'drop',x:pr.target.x,y:pr.target.y,life:16});
 if(pr.effect==='wind')fx.push({type:'tornado',x:pr.x,y:pr.y,tx:pr.target.x,ty:pr.target.y,life:18,spin:0});
 pr.dead=true;SFX.hit();} else {pr.x+=dx/d*pr.speed;pr.y+=dy/d*pr.speed;}}
-for(const z of zumbis){z.step+=0.22;z.hitFlash=Math.max(0,z.hitFlash-0.06);z.burnTime=Math.max(0,(z.burnTime||0)-1);z.poisonTime=Math.max(0,(z.poisonTime||0)-1);z.freezeTime=Math.max(0,(z.freezeTime||0)-1);z.slowTime=Math.max(0,(z.slowTime||0)-1);if(z.burnTime>0){z.hp-=(z.burnDps||0.2);if(tick%8===0)fx.push({type:'fire',x:z.x,y:z.y,life:14});}if(z.poisonTime>0){z.hp-=(z.poisonDps||0.14);if(tick%10===0)fx.push({type:'gas',x:z.x,y:z.y,life:16});}if(z.freezeTime>0&&tick%12===0)fx.push({type:'ice',x:z.x,y:z.y,life:14});if(z.dead){if(z.deathAnim>0){z.deathAnim=Math.max(0,z.deathAnim-0.03);z.deathScale*=0.94;if(z.deathAnim===0)z.deadDone=true;}continue;}const nxt=path[z.seg+1];if(!nxt){z.dead=true;z.deadDone=true;vida-=Math.max(1,Math.round(z.hp));SFX.baseHit();continue;}const moveScale=z.freezeTime>0?0.06:(z.slowTime>0?(z.slowFactor||0.7):1);const v=Math.max(.12,z.speed*moveScale);const dx=nxt.x-z.x,dy=nxt.y-z.y,d=Math.hypot(dx,dy);if(d<v){z.x=nxt.x;z.y=nxt.y;z.seg++;}else{z.x+=dx/d*v;z.y+=dy/d*v;}if(z.hp<=0&&!z.dead){z.dead=true;z.deathAnim=1;z.deathScale=1;kills++;dinheiro+=z.reward;makeExplosion(z.x,z.y,z.isBoss);} }
+for(const z of zumbis){z.step+=0.22;z.hitFlash=Math.max(0,z.hitFlash-0.18);z.burnTime=Math.max(0,(z.burnTime||0)-1);z.poisonTime=Math.max(0,(z.poisonTime||0)-1);z.freezeTime=Math.max(0,(z.freezeTime||0)-1);z.slowTime=Math.max(0,(z.slowTime||0)-1);if(z.burnTime>0){z.hp-=(z.burnDps||0.2);if(tick%8===0)fx.push({type:'fire',x:z.x,y:z.y,life:14});}if(z.poisonTime>0){z.hp-=(z.poisonDps||0.14);if(tick%10===0)fx.push({type:'gas',x:z.x,y:z.y,life:16});}if(z.freezeTime>0&&tick%12===0)fx.push({type:'ice',x:z.x,y:z.y,life:14});if(z.dead){if(z.deathAnim>0){z.deathAnim=Math.max(0,z.deathAnim-0.03);z.deathScale*=0.94;if(z.deathAnim===0)z.deadDone=true;}continue;}const nxt=path[z.seg+1];if(!nxt){z.dead=true;z.deadDone=true;vida-=Math.max(1,Math.round(z.hp));SFX.baseHit();continue;}const moveScale=z.freezeTime>0?0.06:(z.slowTime>0?(z.slowFactor||0.7):1);const v=Math.max(.12,z.speed*moveScale);const dx=nxt.x-z.x,dy=nxt.y-z.y,d=Math.hypot(dx,dy);if(d<v){z.x=nxt.x;z.y=nxt.y;z.seg++;}else{z.x+=dx/d*v;z.y+=dy/d*v;}if(z.hp<=0&&!z.dead){z.dead=true;z.deathAnim=1;z.deathScale=1;kills++;dinheiro+=z.reward;makeExplosion(z.x,z.y,z.isBoss);} }
 for(const p of particles){p.x+=p.vx;p.y+=p.vy;p.vy+=.03;p.life--;if(p.life<=0)p.dead=true;}
 for(const m of mistParticles){m.x+=m.vx;m.y+=m.vy; if(m.x>990)m.x=-40; if(m.y<-40){m.y=580;m.x=Math.random()*960;}}
 for(const s of sparkTrails){s.life--;s.size*=.93;if(s.life<=0)s.dead=true;}
 for(const e of fx){e.life--;if(e.type==='tornado'){e.spin=(e.spin||0)+0.45;e.x+=(e.tx-e.x)*0.18;e.y+=(e.ty-e.y)*0.18;}if(e.life<=0)e.dead=true;}
 for(const arr of [zumbis,tiros,particles,sparkTrails,fx])for(let i=arr.length-1;i>=0;i--){if(arr===zumbis?arr[i].deadDone:arr[i].dead)arr.splice(i,1);}if(vida<=0&&!gameOver){gameOver=true;els.gameOverPanel.style.display='flex';SFX.gameOver();}if(els.upgradePanel.style.display==='flex')renderUpgradePanel();updateHUD();}
 function drawZombie(z){
-const isDead=z.dead&&z.deathAnim>0,walk=Math.sin(z.step*1.5),sway=Math.sin(z.step*.75),scale=(z.deathScale||1)*(z.isBoss?1.34:1.22);
+const isDead=z.dead&&z.deathAnim>0,walk=Math.sin(z.step*1.5),sway=Math.sin(z.step*.75),scale=(z.deathScale||1)*(z.isBoss?1.03:1);
+const zombieSize=z.isBoss?48:32;
 ctx.save();ctx.translate(z.x+sway*(z.isBoss?7:4),z.y+walk*(z.isBoss?4.2:2.6));ctx.rotate(Math.sin(z.step*2.1)*(z.isBoss?.12:.08));ctx.scale(scale,scale);
 ctx.globalAlpha=isDead?Math.max(.06,z.deathAnim):1;
 ctx.fillStyle='rgba(0,0,0,.38)';ctx.beginPath();ctx.ellipse(0,z.isBoss?34:24,z.isBoss?31:23,z.isBoss?9:7,0,0,Math.PI*2);ctx.fill();
-ctx.shadowColor='rgba(90,255,140,.72)';ctx.shadowBlur=z.isBoss?22:14;
-ctx.filter='saturate(1.15) contrast(1.08)';
-if(z.hitFlash>0){const f=Math.min(1,z.hitFlash*.95);ctx.shadowColor=`rgba(255,48,48,${.5*f})`;ctx.shadowBlur=(z.isBoss?18:13)+(7*f);ctx.filter=`saturate(${1.1-0.35*f}) contrast(${1.06+0.12*f}) brightness(${1-0.24*f})`;}
-ctx.font=`${z.isBoss?66:56}px Arial`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(z.isBoss?'👹':'🧟',0,-6+Math.sin(z.step*3)*(z.isBoss?2.2:1.5));
-if(z.hitFlash>0){ctx.filter='none';ctx.shadowBlur=0;ctx.globalCompositeOperation='source-atop';ctx.fillStyle=`rgba(255,40,40,${Math.min(.16,z.hitFlash*.14)})`;ctx.beginPath();ctx.ellipse(0,-6,z.isBoss?31:25,z.isBoss?29:23,0,0,Math.PI*2);ctx.fill();ctx.globalCompositeOperation='source-over';}
+ctx.shadowColor='rgba(68,255,110,.95)';ctx.shadowBlur=z.isBoss?15:10;
+ctx.filter='saturate(1.55) contrast(1.2) brightness(1.03)';
+if(z.hitFlash>0){const f=Math.min(1,z.hitFlash*.95);ctx.filter=`saturate(${1.55-0.25*f}) contrast(${1.2+0.08*f}) brightness(${1.03-0.1*f})`;}
+ctx.font=`${zombieSize}px Arial`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(z.isBoss?'👹':'🧟',0,-6+Math.sin(z.step*3)*(z.isBoss?2.2:1.5));
+if(z.hitFlash>0){ctx.filter='none';ctx.globalCompositeOperation='source-atop';ctx.fillStyle=`rgba(255,45,45,${Math.min(.3,z.hitFlash*.32)})`;ctx.beginPath();ctx.ellipse(0,-6,z.isBoss?21:14,z.isBoss?22:15,0,0,Math.PI*2);ctx.fill();ctx.globalCompositeOperation='source-over';}
 ctx.filter='none';
 if(z.burnTime>0){ctx.font=z.isBoss?'22px Arial':'18px Arial';ctx.fillText('🔥',-18,-30);ctx.fillText('🔥',18,-24);}
 if(z.freezeTime>0){ctx.fillStyle='rgba(130,220,255,.22)';ctx.beginPath();ctx.arc(0,-6,z.isBoss?36:28,0,Math.PI*2);ctx.fill();ctx.font=z.isBoss?'18px Arial':'15px Arial';ctx.fillText('❄️',0,-34);}

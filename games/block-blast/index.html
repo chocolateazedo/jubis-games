@@ -103,9 +103,9 @@
 
 <script>
 (() => {
-  const COLS = 10, ROWS = 20, SIZE = 36;
+  const VISUAL_COLS = 10, ROWS = 20, SIZE = 36;
   const canvas = document.getElementById('game');
-  canvas.width = COLS * SIZE;
+  canvas.width = VISUAL_COLS * SIZE;
   canvas.height = ROWS * SIZE;
 
   const ctx = canvas.getContext('2d');
@@ -114,6 +114,7 @@
   const bestKey = 'block-blast-best';
 
   let board, piece, score, over, tick;
+  const boardCols = () => board?.[0]?.length ?? Math.floor(canvas.width / SIZE);
   const colors = ['#66d9ff','#ffd166','#ef476f','#06d6a0','#b892ff','#ff9f1c','#8ecae6'];
   const shapes = [
     [[1,1,1],[0,1,0]],
@@ -127,11 +128,13 @@
 
   const newPiece = () => {
     const i = Math.floor(Math.random()*shapes.length);
-    return { shape: shapes[i].map(r => [...r]), color: colors[i], x: Math.floor((COLS - shapes[i][0].length) / 2), y: 0 };
+    const shape = shapes[i].map(r => [...r]);
+    const cols = boardCols();
+    return { shape, color: colors[i], x: Math.floor((cols - shape[0].length) / 2), y: 0 };
   };
 
   const reset = () => {
-    board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
+    board = Array.from({length: ROWS}, () => Array(VISUAL_COLS).fill(0));
     piece = newPiece();
     score = 0;
     over = false;
@@ -139,6 +142,7 @@
   };
 
   const canMove = (dx, dy, testPiece = piece) => {
+    const cols = boardCols();
     for (let y = 0; y < testPiece.shape.length; y++) {
       for (let x = 0; x < testPiece.shape[y].length; x++) {
         if (!testPiece.shape[y][x]) continue;
@@ -147,7 +151,7 @@
         const nextY = testPiece.y + y + dy;
 
         if (nextX < 0) return false;
-        if (nextX >= COLS) return false;
+        if (nextX >= cols) return false;
         if (nextY >= ROWS) return false;
         if (nextY >= 0 && board[nextY][nextX]) return false;
       }
@@ -162,11 +166,12 @@
   };
 
   const clearLines = () => {
+    const cols = boardCols();
     let lines = 0;
     for (let y = ROWS - 1; y >= 0; y--) {
       if (board[y].every(Boolean)) {
         board.splice(y, 1);
-        board.unshift(Array(COLS).fill(0));
+        board.unshift(Array(cols).fill(0));
         lines++;
         y++;
       }

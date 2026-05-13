@@ -30,6 +30,44 @@
     .tower-big{font-size:54px;text-align:center;filter:drop-shadow(0 0 8px rgba(184,255,127,.6))}
     button{background:linear-gradient(180deg,#325d45,#234030);color:#e9ffd8;border:1px solid #9cff6b;border-radius:8px;padding:8px 12px;font-weight:700;cursor:pointer}
     .upgrade-close{position:absolute;right:10px;top:10px}
+
+    .zombie{
+      position:absolute;
+      transform:translate(-50%,-50%);
+      width:auto;
+      height:auto;
+      display:block;
+      font-size:42px;
+      background:none !important;
+      border:0 !important;
+      border-radius:0 !important;
+      box-shadow:none !important;
+      filter:drop-shadow(0 0 10px #55ff77);
+      animation:zombieWalk .55s infinite ease-in-out;
+    }
+
+    .zombie::before{
+      content:"";
+      position:absolute;
+      left:50%;
+      bottom:-4px;
+      width:42px;
+      height:12px;
+      transform:translateX(-50%);
+      background:#0008;
+      border-radius:50%;
+      filter:blur(2px);
+      z-index:-1;
+    }
+
+    .zombie::after{
+      display:none !important;
+    }
+
+    @keyframes zombieWalk{
+      0%,100%{transform:translate(-50%,-50%) rotate(-5deg) translateY(0)}
+      50%{transform:translate(-50%,-50%) rotate(5deg) translateY(-5px)}
+    }
   </style>
 </head>
 <body>
@@ -108,28 +146,17 @@ const scale=(z.deathScale||1)*(z.isBoss?1.35:1);
 const y=z.y+walk;
 ctx.save();
 ctx.translate(z.x+sway,y-lift);
+ctx.rotate(Math.sin(z.step*1.8)*(z.isBoss?0.13:0.09));
 ctx.scale(scale,scale);
 ctx.globalAlpha=isDead?Math.max(0.08,z.deathAnim):1;
-ctx.fillStyle='rgba(0,0,0,.28)';
-ctx.beginPath();ctx.ellipse(0,baseSize+(z.isBoss?17:11),baseSize*(z.isBoss?1.1:1),7+(z.isBoss?3:0),0,0,Math.PI*2);ctx.fill();
-ctx.shadowColor=z.isBoss?'rgba(255,70,70,.95)':'rgba(110,255,120,.95)';
-ctx.shadowBlur=z.isBoss?34:20;
-ctx.strokeStyle=z.isBoss?'rgba(255,170,170,.6)':'rgba(210,255,225,.45)';
-ctx.lineWidth=z.isBoss?3:2;
-ctx.fillStyle=z.isBoss?'#421115':'#1f4d28';
-ctx.beginPath();ctx.ellipse(0,6,baseSize*0.9,baseSize*1.05,0,0,Math.PI*2);ctx.fill();ctx.stroke();
-ctx.fillStyle=z.isBoss?'#5e1a20':'#2c6a36';
-ctx.beginPath();ctx.ellipse(0,-baseSize*0.95,baseSize*0.58,baseSize*0.56,0,0,Math.PI*2);ctx.fill();
-ctx.font=`${z.isBoss?33:23}px Arial`;
+ctx.fillStyle='rgba(0,0,0,.45)';
+ctx.beginPath();ctx.ellipse(0,(z.isBoss?30:20),z.isBoss?24:21,z.isBoss?8:6,0,0,Math.PI*2);ctx.fill();
+ctx.shadowColor=z.isBoss?'rgba(255,70,70,.95)':'rgba(85,255,119,.95)';
+ctx.shadowBlur=z.isBoss?24:14;
+ctx.font=`${z.isBoss?38:42}px Arial`;
 ctx.textAlign='center';ctx.textBaseline='middle';
-ctx.fillText('🧟',0,-2);
-ctx.globalCompositeOperation='source-atop';
-const glow=ctx.createRadialGradient(0,0,3,0,0,baseSize*1.1);
-glow.addColorStop(0,z.isBoss?'rgba(255,70,70,.35)':'rgba(120,255,120,.3)');
-glow.addColorStop(1,'rgba(0,0,0,0)');
-ctx.fillStyle=glow;ctx.fillRect(-baseSize*1.2,-baseSize*1.6,baseSize*2.4,baseSize*2.7);
-ctx.globalCompositeOperation='source-over';
-if(z.hitFlash>0){ctx.fillStyle=`rgba(255,40,40,${0.45*z.hitFlash})`;ctx.beginPath();ctx.ellipse(0,0,baseSize,baseSize*1.15,0,0,Math.PI*2);ctx.fill();}
+ctx.fillText('🧟',0,-2+Math.sin(z.step*2)*(z.isBoss?1.8:1.2));
+if(z.hitFlash>0){ctx.shadowBlur=0;ctx.fillStyle=`rgba(255,40,40,${0.35*z.hitFlash})`;ctx.beginPath();ctx.arc(0,0,baseSize*0.9,0,Math.PI*2);ctx.fill();}
 ctx.restore();
 const w=z.isBoss?130:68,h=z.isBoss?14:10,x=z.x-w/2,yBar=z.y-(z.isBoss?72:42);
 ctx.fillStyle='rgba(8,16,10,.72)';ctx.beginPath();ctx.roundRect(x,yBar,w,h,8);ctx.fill();

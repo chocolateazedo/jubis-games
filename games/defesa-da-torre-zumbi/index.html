@@ -7,20 +7,37 @@
   <style>
     :root{--bg:#050709;--ui:#dbe3dc}
     *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-    body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:radial-gradient(circle at 50% -20%,#243129 0%,#101619 45%,#05070a 100%);color:var(--ui);min-height:100vh;display:flex;justify-content:center;padding:12px}
-    .game-shell{width:min(96vw,1040px);position:relative}
+    body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:radial-gradient(circle at 50% -20%,#243129 0%,#101619 45%,#05070a 100%);color:var(--ui);min-height:100vh;display:flex;justify-content:center;padding:clamp(8px,2vw,14px)}
+    .game-shell{width:min(100%,1120px);position:relative;padding-top:64px}
     .back{position:absolute;top:10px;left:10px;z-index:99;color:#d8ffbe;text-decoration:none;font-weight:700;background:rgba(5,18,10,.82);padding:8px 10px;border:1px solid rgba(183,255,99,.55);border-radius:12px}
-    #hud{position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:50;display:flex;gap:10px;flex-wrap:wrap;justify-content:center;width:min(94%,960px)}
-    .hud-chip{background:linear-gradient(180deg,rgba(24,46,37,.9),rgba(12,28,21,.92));border:1px solid rgba(190,255,124,.4);padding:8px 12px;border-radius:999px;font-weight:800}
-    canvas{display:block;width:100%;aspect-ratio:16/9;height:auto;border-radius:28px;border:2px solid rgba(183,255,99,.55);box-shadow:0 16px 48px rgba(0,0,0,.6),0 0 42px rgba(134,255,109,.18) inset;touch-action:manipulation}
-    #slotInfo{margin-top:8px;text-align:center;font-weight:700;opacity:.95}
-    #shopTray{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);width:min(95%,980px);z-index:60;background:linear-gradient(180deg,rgba(21,35,28,.95),rgba(12,24,18,.97));border:1px solid rgba(183,255,99,.45);border-radius:22px;padding:12px;display:none}
+    #hud{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:50;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;width:min(98%,1080px);padding:0 56px}
+    .hud-chip{background:linear-gradient(180deg,rgba(24,46,37,.9),rgba(12,28,21,.92));border:1px solid rgba(190,255,124,.4);padding:7px 11px;border-radius:999px;font-weight:800;font-size:clamp(12px,1.6vw,15px);white-space:nowrap}
+    canvas{display:block;width:100%;aspect-ratio:16/9;max-height:calc(100vh - 180px);height:auto;border-radius:clamp(16px,2vw,28px);border:2px solid rgba(183,255,99,.55);box-shadow:0 16px 48px rgba(0,0,0,.6),0 0 42px rgba(134,255,109,.18) inset;touch-action:manipulation}
+    #slotInfo{margin-top:8px;text-align:center;font-weight:700;opacity:.95;padding:0 8px}
+    #shopTray{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);width:min(98%,980px);z-index:60;background:linear-gradient(180deg,rgba(21,35,28,.95),rgba(12,24,18,.97));border:1px solid rgba(183,255,99,.45);border-radius:22px;padding:12px;display:none}
     #towerBar{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px}.tower-option{flex:0 0 132px;background:linear-gradient(180deg,#335f49,#203a2c);border:1px solid rgba(201,255,146,.5);border-radius:14px;padding:10px;cursor:pointer;color:#efffde;text-align:left}
     .xbtn{background:#263d30;border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:10px;padding:6px 10px;cursor:pointer}
     .panel{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:9990;background:rgba(0,0,0,.72)}
     .card{width:min(92vw,560px);background:linear-gradient(180deg,#193928,#11271c);border:1px solid rgba(156,255,107,.5);border-radius:16px;padding:16px;position:relative}
     .row{display:flex;justify-content:space-between;gap:8px;margin:8px 0} button{background:linear-gradient(180deg,#325d45,#234030);color:#e9ffd8;border:1px solid #9cff6b;border-radius:8px;padding:8px 12px;font-weight:700;cursor:pointer}
     .upgrade-close{position:absolute;right:10px;top:10px}
+
+    @media (max-width: 900px){
+      .game-shell{padding-top:88px}
+      #hud{padding:0 8px}
+      .back{top:8px;left:8px;font-size:13px;padding:7px 9px}
+      #shopTray{bottom:8px;padding:10px;border-radius:16px}
+      #towerBar{gap:8px}
+      .tower-option{flex-basis:120px;padding:8px}
+    }
+    @media (max-width: 640px){
+      body{padding:6px}
+      .game-shell{padding-top:110px}
+      #hud{top:56px;gap:6px}
+      .hud-chip{padding:6px 9px;font-size:12px}
+      #slotInfo{font-size:13px}
+      canvas{max-height:calc(100vh - 220px)}
+    }
     @keyframes signDrop{0%{transform:translateY(-260px) scale(.9)}70%{transform:translateY(26px) scale(1.04)}100%{transform:translateY(0) scale(1)}}
   </style>
 </head>

@@ -13,7 +13,10 @@
     #menu{margin:auto;max-width:980px;padding:18px}
     h1{margin:0 0 8px;text-align:center;font-size:clamp(1.8rem,6vw,3rem);text-shadow:0 0 20px var(--neon)}
     .worlds{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}
-    .world{padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,.2);background:linear-gradient(160deg,rgba(27,46,95,.8),rgba(33,17,60,.7));color:#fff;cursor:pointer;text-align:left}
+    .world{padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,.2);background:linear-gradient(160deg,rgba(27,46,95,.8),rgba(33,17,60,.7));color:#fff;cursor:pointer;text-align:left;position:relative;overflow:hidden}
+    .world::after{content:'';position:absolute;inset:auto -30% -50% auto;width:180px;height:180px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.2),transparent 60%);transform:rotate(15deg)}
+    .asset{margin:8px 0 0;text-align:center;color:#bfe8ff;font-size:.92rem}
+    .asset code{color:#fff;background:rgba(0,0,0,.28);padding:.2rem .35rem;border-radius:6px}
     .world strong{display:block}
     .hidden{display:none!important}
     .hud{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
@@ -35,7 +38,7 @@
   <a class="back" href="../../">← Voltar</a>
   <main class="screen">
     <section id="menu" class="card" aria-label="Menu inicial">
-      <h1>Defesa Zumbi VIP</h1><p style="text-align:center">Escolha um mundo e defenda o caminho com torres elementais VIP.</p>
+      <h1>Defesa Zumbi VIP</h1><p style="text-align:center">Escolha um mundo e defenda o caminho com torres elementais VIP.</p><p class="asset">Visual principal (imagem estática): <code>2ca166e5-d4cc-4855-ae66-a0b3e18ed420</code></p>
       <div class="worlds" id="worlds"></div>
     </section>
     <section id="game" class="hidden" aria-label="Área do jogo">
@@ -55,7 +58,8 @@
   </main>
 <script>
 (()=>{
-const worlds=[{n:'Floresta Sombria',c1:'#193e2d',c2:'#0c2219',path:'#9ecf7d'},{n:'Caverna Tóxica',c1:'#394a1e',c2:'#1f2311',path:'#b7c85d'},{n:'Vila Assombrada',c1:'#4d3442',c2:'#221620',path:'#daa2b4'}];
+const IMAGE_ASSET_ID='2ca166e5-d4cc-4855-ae66-a0b3e18ed420';
+const worlds=[{n:'Floresta Sombria',c1:'#193e2d',c2:'#0c2219',path:'#9ecf7d',sky:'#8df0c4'},{n:'Caverna Tóxica',c1:'#394a1e',c2:'#1f2311',path:'#b7c85d',sky:'#d7ff70'},{n:'Vila Assombrada',c1:'#4d3442',c2:'#221620',path:'#daa2b4',sky:'#ff96df'}];
 const towers=[
 {id:'gelo',n:'Torre de Gelo',preco:95,alc:130,dano:11,rate:56,c:'#95f2ff',slow:.55},{id:'veneno',n:'Torre de Veneno',preco:110,alc:125,dano:9,rate:42,c:'#88ff60',dot:95},
 {id:'vento',n:'Torre de Vento',preco:105,alc:145,dano:7,rate:34,c:'#dff6ff',push:8},{id:'eletrica',n:'Torre Elétrica',preco:145,alc:128,dano:14,rate:52,c:'#b6a0ff',chain:2},
@@ -69,7 +73,9 @@ function resize(){dpr=Math.max(1,Math.min(2,devicePixelRatio||1));cv.width=cv.cl
 function start(world){$('menu').classList.add('hidden');$('game').classList.remove('hidden'); S={world,life:100,money:320,w:1,maxW:10,sel:null,towers:[],shots:[],z:[],p:[],spawnT:0,tick:0,over:false,won:false,place:null,path:[[30,95],[250,95],[250,230],[430,230],[430,120],[710,120],[710,320],[150,320],[150,455],[930,455]]}; resize(); loop();}
 function spawn(boss=false){const hp=boss?760:52+S.w*16; S.z.push({x:S.path[0][0],y:S.path[0][1],i:1,hp,max:hp,spd:boss?.36:.58+S.w*.035,size:boss?38:18,boss,slow:0,po:0,burn:0});}
 function drawBG(){const g=ctx.createLinearGradient(0,0,0,cv.clientHeight);g.addColorStop(0,S.world.c1);g.addColorStop(1,S.world.c2);ctx.fillStyle=g;ctx.fillRect(0,0,cv.clientWidth,cv.clientHeight);
-for(let i=0;i<120;i++){ctx.fillStyle=`rgba(255,255,255,${Math.random()*.03})`;ctx.fillRect((i*97)%cv.clientWidth,(i*43)%cv.clientHeight,2,2)}
+for(let i=0;i<120;i++){const tw=((i*97)+S.tick*0.08)%cv.clientWidth;const th=((i*43)+Math.sin((S.tick+i)*.01)*11)%cv.clientHeight;ctx.fillStyle='rgba(255,255,255,.03)';ctx.fillRect(tw,th,2,2)}
+ctx.fillStyle='rgba(255,255,255,.12)';ctx.font='600 12px Inter,system-ui';ctx.fillText('IMG '+IMAGE_ASSET_ID.slice(0,8),20,cv.clientHeight-18);
+ctx.beginPath();ctx.fillStyle=S.world.sky+'22';ctx.arc(cv.clientWidth-70,70,42,0,6.283);ctx.fill();
 ctx.lineWidth=36;ctx.lineJoin='round';ctx.lineCap='round';ctx.strokeStyle=S.world.path;ctx.shadowBlur=18;ctx.shadowColor='rgba(0,0,0,.45)';ctx.beginPath();S.path.forEach((p,i)=>i?ctx.lineTo(...p):ctx.moveTo(...p));ctx.stroke();ctx.shadowBlur=0;
 ctx.strokeStyle='rgba(255,255,255,.25)';ctx.lineWidth=2;ctx.beginPath();S.path.forEach((p,i)=>i?ctx.lineTo(...p):ctx.moveTo(...p));ctx.stroke();}
 function update(){if(S.over)return; S.tick++; if(S.spawnT--<=0){if(S.w===S.maxW&&S.tick%500===0&&!S.z.some(v=>v.boss)) spawn(true); else if(S.w<=S.maxW) spawn(false); S.spawnT=Math.max(38,86-S.w*4);} if(S.tick%850===0&&S.w<S.maxW)S.w++;
@@ -95,7 +101,7 @@ if(selectedTower){p.innerHTML+=`<p><strong>${selectedTower.tp.n}</strong><br>Ní
 function loop(){if(!S)return;update();draw();ui();requestAnimationFrame(loop);} 
 $('restart').onclick=()=>location.reload();
 cv.addEventListener('pointerdown',e=>{if(!S||S.over)return;audio.resume();const r=cv.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;const hitT=S.towers.find(t=>Math.hypot(t.x-x,t.y-y)<22);if(hitT){S.place=hitT;return;}S.place=null;const tp=towers.find(t=>t.id===S.sel);if(!tp||S.money<tp.preco)return; if(S.path.some(p=>Math.hypot(p[0]-x,p[1]-y)<56))return; S.money-=tp.preco;S.towers.push({x,y,lv:1,tp,cd:0,up:70});});
-const wBox=$('worlds'); worlds.forEach((w,i)=>{const b=document.createElement('button');b.className='world';b.innerHTML=`<strong>${w.n}</strong><small>Mundo ${i+1}</small>`;b.onclick=()=>start(w);wBox.appendChild(b)});
+const wBox=$('worlds'); worlds.forEach((w,i)=>{const b=document.createElement('button');b.className='world';b.innerHTML=`<strong>${w.n}</strong><small>Mundo ${i+1}</small><br><small>Visual base: ${IMAGE_ASSET_ID.slice(0,8)}...</small>`;b.onclick=()=>start(w);wBox.appendChild(b)});
 const shop=$('shop'); towers.forEach(tp=>{const c=document.createElement('button');c.className='tower';c.innerHTML=`<strong>${tp.n}</strong><small>💰${tp.preco} • 🎯${tp.alc} • ⚔️${tp.dano}</small>`;c.onclick=()=>{S&& (S.sel=tp.id);[...shop.children].forEach(x=>x.classList.remove('active'));c.classList.add('active')};shop.appendChild(c)});
 })();
 </script>

@@ -107,8 +107,7 @@ function e(string $s): string {
 
     <section id="jogos" class="games">
       <header class="section-head">
-        <h2><span class="section-head__num">01</span> Catálogo de jogos</h2>
-        <p class="section-head__sub">Clique em um cartucho para jogar</p>
+        <h2>Catálogo de jogos</h2>
       </header>
 
       <?php if (empty($games)): ?>
@@ -129,9 +128,6 @@ function e(string $s): string {
               </div>
               <div class="game-card__body">
                 <h3 class="game-card__title"><?= e($game['title']) ?></h3>
-                <?php if ($game['description']): ?>
-                  <p class="game-card__desc"><?= e($game['description']) ?></p>
-                <?php endif; ?>
                 <?php if (!empty($game['tags'])): ?>
                   <ul class="game-card__tags">
                     <?php foreach ($game['tags'] as $tag): ?>
@@ -144,6 +140,18 @@ function e(string $s): string {
           <?php endforeach; ?>
         </div>
       <?php endif; ?>
+    </section>
+
+
+    <section class="quick-questions" aria-labelledby="perguntas-rapidas">
+      <div class="about__card">
+        <h2 id="perguntas-rapidas">2 perguntas rápidas</h2>
+        <p>Antes de ativar novidades (como VIP), responde rapidinho:</p>
+        <ol class="about__list">
+          <li>Qual jogo você mais gostou no Jubis Games?</li>
+          <li>Você pagaria <strong>US$ 5,00 por mês</strong> para ter acesso VIP?</li>
+        </ol>
+      </div>
     </section>
 
     <section id="sobre" class="about">

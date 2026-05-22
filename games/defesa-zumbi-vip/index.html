@@ -4,17 +4,19 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
   <title>Defesa Zumbi VIP — Jubis Games</title>
+  <link rel="icon" href="../../assets/img/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="../../assets/img/favicon.svg" />
   <style>
-    :root{--bg:#070b18;--panel:rgba(9,14,34,.86);--line:rgba(138,237,255,.42);--txt:#e8f5ff;--muted:#9fc2dc;--gold:#ffd978;--ok:#6bffa8;--danger:#ff6e8e}
-    *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:radial-gradient(circle at 30% -20%,#395ea7,#090f27 55%,#050814);font-family:Inter,system-ui,sans-serif;color:var(--txt)}
+    :root{--bg:#070b18;--panel:rgba(9,14,34,.86);--line:rgba(138,237,255,.42);--txt:#e8f5ff;--muted:#9fc2dc;--gold:#ffd978;--ok:#6bffa8;--danger:#ff6e8e;--violet:#8b5dff;--cyan:#65e8ff}
+    *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:radial-gradient(circle at 22% -18%,#4c74c9 0%,#1a2454 38%,#0a112f 62%,#040710 100%);font-family:Inter,system-ui,sans-serif;color:var(--txt)}
     .back{position:fixed;left:10px;top:max(10px,env(safe-area-inset-top));z-index:200;padding:.45rem .7rem;border-radius:11px;text-decoration:none;color:#dbf6ff;background:rgba(4,7,19,.6);border:1px solid rgba(139,234,255,.5)}
     .screen{height:100dvh;padding:calc(46px + env(safe-area-inset-top)) 10px calc(8px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px}
-    .card{background:linear-gradient(160deg,rgba(20,27,58,.95),rgba(14,19,42,.92));border:1px solid var(--line);border-radius:16px;box-shadow:0 16px 40px rgba(0,0,0,.35),inset 0 0 45px rgba(130,89,255,.12)}
-    #menu{margin:auto;max-width:1020px;padding:20px}.title{margin:0;text-align:center;font-size:clamp(2rem,4vw,3.2rem);text-shadow:0 0 20px #67f2ff}
+    .card{background:linear-gradient(160deg,rgba(20,27,58,.95),rgba(14,19,42,.92));border:1px solid var(--line);border-radius:16px;box-shadow:0 16px 44px rgba(0,0,0,.42),inset 0 0 52px rgba(139,93,255,.16)}
+    #menu{margin:auto;max-width:1020px;padding:20px}.title{margin:0;text-align:center;font-size:clamp(2rem,4vw,3.2rem);text-shadow:0 0 12px rgba(101,232,255,.85),0 0 28px rgba(139,93,255,.4)}
     .subtitle{text-align:center;color:var(--muted);margin:.45rem 0 1rem}
     .worlds{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
-    .world{padding:14px;border-radius:13px;background:linear-gradient(145deg,rgba(37,56,108,.9),rgba(41,24,75,.86));border:1px solid rgba(255,255,255,.26);cursor:pointer;color:#fff;text-align:left}
-    .world strong{display:block;font-size:1.02rem}.world small{color:#cbe6ff}
+    .world{padding:14px;border-radius:13px;background:linear-gradient(145deg,rgba(37,56,108,.9),rgba(41,24,75,.86));border:1px solid rgba(255,255,255,.26);cursor:pointer;color:#fff;text-align:left;transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease}
+    .world strong{display:block;font-size:1.02rem}.world small{color:#cbe6ff}.world:hover{transform:translateY(-2px);border-color:rgba(101,232,255,.7);box-shadow:0 10px 20px rgba(0,0,0,.26)}
     .hidden{display:none!important}
     .hud{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
     .hud-item{padding:10px;border-radius:12px;background:linear-gradient(160deg,rgba(15,28,64,.94),rgba(36,23,71,.9));border:1px solid rgba(140,233,255,.54);text-align:center}

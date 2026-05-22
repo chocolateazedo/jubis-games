@@ -1,0 +1,17 @@
+<svg width="800" height="520" viewBox="0 0 800 520" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="800" height="520" rx="34" fill="url(#bg)"/>
+  <rect x="34" y="34" width="732" height="452" rx="26" fill="#0A0A1F" fill-opacity="0.75" stroke="#00F0FF" stroke-opacity="0.45" stroke-width="2"/>
+  <text x="72" y="140" fill="#C2FF3D" font-size="44" font-family="Arial, sans-serif" font-weight="700">JUBIS GAMES VIP</text>
+  <text x="72" y="210" fill="#F4F2FF" font-size="72" font-family="Arial, sans-serif" font-weight="800">US$ 5,00 / mês</text>
+  <text x="72" y="276" fill="#A39EC4" font-size="30" font-family="Arial, sans-serif">Sem anúncios • Conteúdo exclusivo • Apoio ao criador</text>
+  <rect x="72" y="328" width="656" height="114" rx="16" fill="#14112E" stroke="#FF2BD6" stroke-opacity="0.45"/>
+  <text x="94" y="375" fill="#FFD23F" font-size="28" font-family="Arial, sans-serif" font-weight="700">Área para foto destaque do mês</text>
+  <text x="94" y="414" fill="#F4F2FF" font-size="23" font-family="Arial, sans-serif">Substitua este bloco pela imagem/foto que você quiser.</text>
+  <defs>
+    <linearGradient id="bg" x1="40" y1="20" x2="760" y2="500" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1B1550"/>
+      <stop offset="0.56" stop-color="#2A1160"/>
+      <stop offset="1" stop-color="#092638"/>
+    </linearGradient>
+  </defs>
+</svg>

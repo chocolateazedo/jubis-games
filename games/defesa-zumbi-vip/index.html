@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Defesa Zumbi VIP — Jubis Games 2ca166e5-d4cc-4855-ae66-a0b3e18ed420 è o ID usa o visual com o dessa imagem</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <a class="back" href="../../">← Voltar</a>
+
+  <main class="app" id="app">
+    <section class="menu" id="menu">
+      <h1>Defesa Zumbi VIP</h1>
+      <p>Escolha seu mundo e segure as ondas com torres elementais premium.</p>
+      <div class="worlds" id="worlds"></div>
+    </section>
+
+    <section class="game hidden" id="gameSection">
+      <header class="hud">
+        <div class="hud-item"><span>❤️ Vida</span><strong id="life">100</strong></div>
+        <div class="hud-item"><span>💰 Dinheiro</span><strong id="money">300</strong></div>
+        <div class="hud-item"><span>🌊 Onda</span><strong id="wave">1/8</strong></div>
+        <button id="restartBtn" class="restart hidden">↻ Reiniciar</button>
+      </header>
+
+      <div class="board-wrap">
+        <canvas id="gameCanvas"></canvas>
+        <aside class="tower-panel" id="towerPanel"></aside>
+      </div>
+
+      <footer class="shop" id="shop"></footer>
+    </section>
+  </main>
+
+  <script src="game.js"></script>
+</body>
+</html>

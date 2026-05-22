@@ -1,6 +1,0 @@
-<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1024 576' preserveAspectRatio='none'>
-<defs><linearGradient id='bg' x1='0' x2='0' y1='0' y2='1'><stop stop-color='#314b36'/><stop offset='1' stop-color='#18241c'/></linearGradient></defs>
-<rect width='1024' height='576' fill='url(#bg)'/>
-<path d='M30 95h220v135h180V120h280v335H150v-135h780' fill='none' stroke='#b99e6c' stroke-width='46' stroke-linecap='round' stroke-linejoin='round'/>
-<path d='M30 95h220v135h180V120h280v335H150v-135h780' fill='none' stroke='#e1cfaa' stroke-width='8' stroke-linecap='round' stroke-linejoin='round' opacity='.6'/>
-</svg>

@@ -105,6 +105,29 @@ function e(string $s): string {
       </div>
     </section>
 
+    <section class="vip-highlight" aria-labelledby="vip-plano">
+      <div class="vip-highlight__content">
+        <p class="vip-highlight__tag">🎁 grátis por enquanto</p>
+        <h2 id="vip-plano">Banner VIP no ar — pagamento entra depois</h2>
+        <p>
+          O banner já está aparecendo no site, mas <strong>sem cobrança agora</strong>.
+          Por enquanto o acesso fica grátis para testar, melhorar os jogos e preparar tudo com calma.
+        </p>
+        <ul class="about__list vip-highlight__list">
+          <li>✅ Banner publicado para divulgar o VIP</li>
+          <li>🆓 Acesso grátis durante a fase de preparação</li>
+          <li>💳 Pagamento será ativado só quando você pedir</li>
+        </ul>
+        <div class="vip-highlight__actions" aria-label="Status do VIP">
+          <span class="vip-highlight__price">R$ 0 por enquanto</span>
+          <span class="vip-highlight__note">Cobrança pausada</span>
+        </div>
+      </div>
+      <figure class="vip-highlight__media">
+        <img src="assets/img/vip-pass.svg" alt="Banner do VIP grátis por enquanto, com pagamento planejado para depois" loading="lazy" />
+      </figure>
+    </section>
+
     <section id="jogos" class="games">
       <header class="section-head">
         <h2>Catálogo de jogos</h2>
@@ -142,25 +165,6 @@ function e(string $s): string {
       <?php endif; ?>
     </section>
 
-
-    <section class="vip-highlight" aria-labelledby="vip-plano">
-      <div class="vip-highlight__content">
-        <p class="vip-highlight__tag">⏳ em preparação</p>
-        <h2 id="vip-plano">VIP vai entrar depois, quando o jogo estiver perfeito</h2>
-        <p>
-          Perfeito! Seguindo sua orientação: <strong>não vamos ativar cobrança agora</strong>.
-          Primeiro vamos deixar os jogos redondinhos, e só depois liberamos o VIP.
-        </p>
-        <ul class="about__list">
-          <li>🧪 Foco atual: melhorar qualidade dos jogos</li>
-          <li>🔒 Cobrança pausada para não cair dinheiro no vazio</li>
-          <li>✅ Quando você falar para ativar, a gente publica o VIP</li>
-        </ul>
-      </div>
-      <figure class="vip-highlight__media">
-        <img src="assets/img/vip-pass.svg" alt="Banner do VIP em preparação para lançamento futuro" loading="lazy" />
-      </figure>
-    </section>
 
     <section id="sobre" class="about">
       <div class="about__card">

@@ -131,6 +131,47 @@ export function playSmash() {
   src.connect(lp); lp.connect(g2); g2.connect(ctx.destination); src.start(t); src.stop(t + 0.14);
 }
 
+export function playSlash() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  const src = noise();
+  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 2.2;
+  bp.frequency.setValueAtTime(900, t); bp.frequency.exponentialRampToValueAtTime(3800, t + 0.12); // corte no ar (sobe)
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.22, t + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
+  src.connect(bp); bp.connect(g); g.connect(ctx.destination);
+  src.start(t); src.stop(t + 0.16);
+}
+
+export function playIce() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  const o = ctx.createOscillator(); o.type = 'triangle';
+  o.frequency.setValueAtTime(1500, t); o.frequency.exponentialRampToValueAtTime(520, t + 0.3);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.25, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+  o.connect(g); g.connect(ctx.destination); o.start(t); o.stop(t + 0.37);
+  const src = noise(); const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 3000;
+  const g2 = ctx.createGain(); g2.gain.setValueAtTime(0.12, t); g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.25);
+  src.connect(hp); hp.connect(g2); g2.connect(ctx.destination); src.start(t); src.stop(t + 0.27);
+}
+
+export function playSpray() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  const src = noise();
+  const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2200; // chiado do spray
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.13, t + 0.03);
+  g.gain.setValueAtTime(0.1, t + 0.28);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.42);
+  src.connect(hp); hp.connect(g); g.connect(ctx.destination);
+  src.start(t); src.stop(t + 0.44);
+}
+
 export function playEmpty() {
   if (!ctx) return;
   const t = ctx.currentTime;

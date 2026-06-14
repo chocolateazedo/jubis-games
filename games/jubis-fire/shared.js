@@ -28,6 +28,8 @@ export const CONFIG = {
   PICKUP_EVERY: 30, PICKUP_MAX: 8, PICKUP_R: 1.8, // pacotes de bala surgem a cada 30s
   BIG_SCALE: 1.4, BIG_HP: 180, // personagem grandão (Bombadão)
   MELEE: { range: 5.5, dmg: 70, cooldown: 1.2, dur: 0.5 }, // golpe de marreta (X)
+  SPRAY: { range: 9, cone: 0.4, cooldown: 4, dur: 5 }, // borrifador: vira árvore por 5s
+  ICE: { range: 60, cooldown: 3, dur: 3, dmg: 25 }, // raio de gelo: congela 3s + dano
   CAM_DIST: 6.2,
   CAM_HEIGHT: 1.2,
   ZONE: {

@@ -25,7 +25,7 @@ export class Net {
     this.roster = roster;
     this.conns = new Map();   // host: peerId -> DataConnection
     this.hostConn = null;     // cliente: conexão com o host
-    this.handlers = { world: () => {}, input: () => {}, hit: () => {}, pickup: () => {}, close: () => {} };
+    this.handlers = { world: () => {}, input: () => {}, hit: () => {}, pickup: () => {}, transform: () => {}, close: () => {} };
   }
 
   on(evt, cb) { this.handlers[evt] = cb; return this; }
@@ -45,6 +45,7 @@ export class Net {
       if (d.t === 'st') this.handlers.input(c.peer, d);
       else if (d.t === 'hit') this.handlers.hit(c.peer, d);
       else if (d.t === 'pk') this.handlers.pickup(c.peer, d);
+      else if (d.t === 'tf') this.handlers.transform(c.peer, d);
     });
     c.on('close', () => { this.conns.delete(c.peer); this.handlers.close(c.peer); });
     c.on('error', () => {});
@@ -67,6 +68,7 @@ export class Net {
   sendInput(obj) { if (this.hostConn && this.hostConn.open) this.hostConn.send({ t: 'st', ...obj }); }
   sendHit(targetPeerId, dmg) { if (this.hostConn && this.hostConn.open) this.hostConn.send({ t: 'hit', tgt: targetPeerId, d: dmg }); }
   sendPickup(id) { if (this.hostConn && this.hostConn.open) this.hostConn.send({ t: 'pk', id }); }
+  sendTransform(tgt, ft, dur, dmg) { if (this.hostConn && this.hostConn.open) this.hostConn.send({ t: 'tf', tgt, ft, dur, dmg }); }
 
   // host -> todos
   broadcast(world) {

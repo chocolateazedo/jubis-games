@@ -26,7 +26,8 @@ let occluders = [], faded = []; // malhas que tapam a câmera / atualmente trans
 const grenades = [], fx = []; // granadas em voo e efeitos de explosão
 let grenadeCd = 0;
 let meleeCd = 0;                          // cooldown do golpe de marreta
-let ammo = CONFIG.AMMO_START;            // balas do jogador local
+let ammoR = CONFIG.AMMO_START, ammoL = 0;        // balas por arma (direita / esquerda)
+let maxR = CONFIG.AMMO_MAX, maxL = 0, packTotal = CONFIG.AMMO_PACK; // loadout do personagem
 let pickups = [];                         // pacotes de bala {id, pos}
 const pickupMeshes = new Map();           // id -> mesh
 const entities = new Map();   // peerId -> entity
@@ -199,10 +200,12 @@ function startMatch(room) {
   entities.clear();
   roster.forEach((p, i) => createEntity(p, i, p.peerId === myPeerId));
   me = entities.get(myPeerId);
-  $('btnMelee').classList.toggle('hidden', !(isTouch && me && me.big));
+  $('btnMelee').classList.toggle('hidden', !(isTouch && me && me.canMelee));
+  configureLoadout();
+  if (me && me.canMelee) $('btnMelee').textContent = ({ hammer: '🔨', sword: '🗡', spray: '💧', ice: '❄', dualgun: '🔫' })[me.meleeType] || '🔨';
 
   net = new Net(peer, myPeerId, isHost, hostPeerId, roster);
-  net.on('world', onWorld).on('input', onClientInput).on('hit', onClientHit).on('pickup', onClientPickup).on('close', onPeerClose);
+  net.on('world', onWorld).on('input', onClientInput).on('hit', onClientHit).on('pickup', onClientPickup).on('transform', onClientTransform).on('close', onPeerClose);
   net.start();
 
   host.startTime = nowS();
@@ -231,7 +234,9 @@ function startTraining() {
 
   const myId = myPeerId || 'me-local';
   const roster = [{ peerId: myId, name: myName || $('pname').value.trim() || 'Você', char: selectedChar }];
-  const pool = CHARACTERS.map((c) => c.id).filter((id) => id !== selectedChar);
+  // bots usam personagens com arma de fogo (a IA só sabe atirar)
+  let pool = CHARACTERS.filter((c) => !c.noGun && c.id !== selectedChar).map((c) => c.id);
+  if (!pool.length) pool = CHARACTERS.map((c) => c.id);
   for (let i = 0; i < 3; i++) roster.push({ peerId: 'bot-' + i, name: BOT_NAMES[i], char: pool[(i * 3 + 1) % pool.length], bot: true });
 
   entities.clear();
@@ -240,7 +245,9 @@ function startTraining() {
     if (p.bot) { e.isBot = true; e.ai = { fireCd: 1 + Math.random() * 2, dir: Math.random() * Math.PI * 2, dirCd: 0, ammo: CONFIG.AMMO_START }; }
   });
   me = entities.get(myId);
-  $('btnMelee').classList.toggle('hidden', !(isTouch && me && me.big));
+  $('btnMelee').classList.toggle('hidden', !(isTouch && me && me.canMelee));
+  configureLoadout();
+  if (me && me.canMelee) $('btnMelee').textContent = ({ hammer: '🔨', sword: '🗡', spray: '💧', ice: '❄', dualgun: '🔫' })[me.meleeType] || '🔨';
 
   host.startTime = nowS(); host.dmgAccum = new Map(); host.lastNet = 0;
 
@@ -257,11 +264,12 @@ function updateBots(dt) {
   const safeR = host.zoneR;
   for (const e of entities.values()) {
     if (!e.isBot || !e.alive) continue;
+    if (e.frozen) { e.anim = 'idle'; e.group.position.copy(e.pos); continue; } // árvore/gelo: parado
     const ai = e.ai;
     const cx = e.pos.x, cz = e.pos.z;
 
-    // coletar pacote de bala se estiver perto
-    for (const p of pickups) {
+    // coletar pacote de bala se estiver perto (só bots com arma de fogo)
+    if (e.hasGun) for (const p of pickups) {
       const pdx = cx - p.pos.x, pdz = cz - p.pos.z;
       if (pdx * pdx + pdz * pdz < CONFIG.PICKUP_R * CONFIG.PICKUP_R && Math.abs(e.pos.y - p.pos.y) < 2.2) {
         ai.ammo = Math.min(CONFIG.AMMO_MAX, ai.ammo + CONFIG.AMMO_PACK);
@@ -296,7 +304,7 @@ function updateBots(dt) {
     e.pos.x += dx * BOT_SPEED * dt; e.pos.z += dz * BOT_SPEED * dt;
     resolveCollisions(e.pos, CONFIG.PLAYER_R, colliders);
     e.pos.y = groundAt(e.pos.x, e.pos.z, e.pos.y); // acompanha o piso/rampa
-    const aimT = ai.ammo > 0 && target && Math.sqrt(td) < 45;
+    const aimT = e.hasGun && ai.ammo > 0 && target && Math.sqrt(td) < 45;
     e.ry = aimT ? Math.atan2(target.pos.x - cx, target.pos.z - cz) : Math.atan2(dx, dz);
     e.anim = 'run';
     e.group.position.copy(e.pos); e.group.rotation.y = e.ry;
@@ -346,14 +354,18 @@ function createEntity(p, slot, local) {
   const sp = spawns[slot % spawns.length];
   body.group.position.copy(sp);
   scene.add(body.group);
-  const big = !!preset.big;
-  const scale = big ? CONFIG.BIG_SCALE : 1;
-  const maxHp = big ? CONFIG.BIG_HP : CONFIG.MAX_HP;
+  const scale = preset.scale || 1;
+  const maxHp = preset.hp || CONFIG.MAX_HP;
+  const weapon = preset.weapon || null;
+  const dualGun = !!preset.dualGun;
   const e = {
     peerId: p.peerId, name: p.name, charId: p.char, body, group: body.group,
     pos: sp.clone(), ry: 0, vy: 0, grounded: true, anim: 'idle',
     hp: maxHp, maxHp, alive: true, isLocal: local, slot, aimTimer: 0, hitFlash: 0,
-    big, scale, eye: CONFIG.EYE * scale, meleeTimer: 0,
+    scale, eye: CONFIG.EYE * scale, meleeTimer: 0,
+    canMelee: !!weapon || dualGun, meleeType: weapon || (dualGun ? 'dualgun' : null), dualGun,
+    hasGun: !preset.noGun, growsOnHit: !!preset.growsOnHit, growth: 1, baseScale: scale,
+    frozen: false, frozenType: null, frozenTimer: 0, frozenMesh: null, npKey: '',
     targetPos: sp.clone(), targetRy: 0,
   };
   entities.set(p.peerId, e);
@@ -370,7 +382,7 @@ function createNameplate(e) {
   spr.scale.set(2.6 / s, 1.0 / s, 1);
   spr.position.y = 2.55;
   e.group.add(spr);
-  e.tag = spr; e.tagCanvas = canvas; e.tagCtx = canvas.getContext('2d'); e.tagTex = tex; e.lastDrawnHp = -1;
+  e.tag = spr; e.tagCanvas = canvas; e.tagCtx = canvas.getContext('2d'); e.tagTex = tex;
   drawNameplate(e);
 }
 
@@ -380,7 +392,8 @@ function drawNameplate(e) {
   // nome
   c.font = 'bold 26px Arial'; c.textAlign = 'center';
   c.fillStyle = 'rgba(0,0,0,.55)'; c.fillRect(28, 2, 200, 34);
-  c.fillStyle = '#fff'; c.fillText(e.name, 128, 28);
+  c.fillStyle = e.frozen ? (e.frozenType === 'ice' ? '#86e7ff' : '#7CFC6A') : '#fff';
+  c.fillText(e.frozen ? `${e.frozenType === 'ice' ? '🧊' : '🌳'} ${e.name} ${Math.ceil(e.frozenTimer)}s` : e.name, 128, 28);
   // barra de vida
   const bx = 28, by = 46, bw = 200, bh = 20;
   const frac = Math.max(0, Math.min(1, e.hp / (e.maxHp || CONFIG.MAX_HP)));
@@ -389,6 +402,22 @@ function drawNameplate(e) {
   c.fillRect(bx, by, bw * frac, bh);
   c.strokeStyle = 'rgba(255,255,255,.6)'; c.lineWidth = 2; c.strokeRect(bx, by, bw, bh);
   e.tagTex.needsUpdate = true;
+}
+
+function makeFrozenMesh(type) {
+  const g = new THREE.Group();
+  if (type === 'ice') {
+    const ice = new THREE.Mesh(new THREE.BoxGeometry(1.5, 2.5, 1.5),
+      new THREE.MeshStandardMaterial({ color: 0xbfeeff, transparent: true, opacity: 0.62, roughness: 0.08, metalness: 0.1, emissive: 0x2aa8ff, emissiveIntensity: 0.35 }));
+    ice.position.y = 1.25; g.add(ice);
+  } else {
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.35, 1.6, 7), new THREE.MeshStandardMaterial({ color: 0x6b4a2a, roughness: 0.95 }));
+    trunk.position.y = 0.8; g.add(trunk);
+    const leaves = new THREE.Mesh(new THREE.IcosahedronGeometry(1.0, 0), new THREE.MeshStandardMaterial({ color: 0x3f7d3a, roughness: 0.9 }));
+    leaves.position.y = 2.0; g.add(leaves);
+  }
+  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  return g;
 }
 
 function setEntityFlash(e, on) {
@@ -414,6 +443,7 @@ function onWorld(d) {           // cliente recebe estado do host
     if (s.hp < e.hp) { e.hitFlash = 0.18; if (pid === myPeerId) Sound.playPain(); } // tomou dano
     if (e.alive && !s.alive) Sound.playDeath(); // morreu
     e.hp = s.hp; e.alive = s.alive;
+    e.frozen = !!s.fz; e.frozenType = s.fzt || null; e.frozenTimer = s.fzr || 0;
     if (pid === myPeerId) continue;              // minha posição é local
     e.targetPos.set(s.p[0], s.p[1], s.p[2]);
     e.targetRy = s.ry; e.anim = s.a;
@@ -472,11 +502,34 @@ function loop() {
     animateBody(e.body, e.anim, dt, 1, e.aimTimer > 0, meleeP);
     if (e.hitFlash > 0) e.hitFlash -= dt;
     setEntityFlash(e, e.hitFlash > 0);
-    if (e.hp !== e.lastDrawnHp) { drawNameplate(e); e.lastDrawnHp = e.hp; }
-    e.group.visible = e.alive || e === me; // eliminados somem
+
+    const frozen = e.frozen && e.alive;
+    // árvore/gelo: cria/atualiza a malha do efeito
+    if (frozen && (!e.frozenMesh || e.frozenMesh.userData.type !== e.frozenType)) {
+      if (e.frozenMesh) scene.remove(e.frozenMesh);
+      e.frozenMesh = makeFrozenMesh(e.frozenType);
+      e.frozenMesh.userData.type = e.frozenType;
+      e.frozenMesh.scale.setScalar(e.scale || 1);
+      scene.add(e.frozenMesh);
+    }
+    if (e.frozenMesh) { e.frozenMesh.visible = frozen; e.frozenMesh.position.copy(e.pos); }
+
+    // visibilidade do grupo (pra mostrar a plaquinha) e das partes do corpo
+    e.group.visible = e.alive || e === me;
+    const fpLocal = (e === me && camMode === 'first');
+    const showBody = !frozen;
+    const p = e.body.parts;
+    p.head.visible = showBody && !fpLocal;
+    p.torso.visible = showBody && !fpLocal;
+    p.legL.visible = showBody && !fpLocal;
+    p.legR.visible = showBody && !fpLocal;
+    p.armR.visible = showBody;
+    p.armL.visible = showBody && (!fpLocal || !!e.canMelee);
+    if (e.tag) e.tag.visible = !(fpLocal && !frozen);
+
+    const npKey = e.hp + '|' + (frozen ? e.frozenType + Math.ceil(e.frozenTimer) : '');
+    if (npKey !== e.npKey) { e.npKey = npKey; drawNameplate(e); }
   }
-  // 1ª pessoa: do meu corpo mostro só o braço direito + o revólver (viewmodel)
-  if (me) setLocalFirstPerson(camMode === 'first');
   updateHud();
   renderer.render(scene, camera);
   requestAnimationFrame(loop);
@@ -484,6 +537,12 @@ function loop() {
 
 function updateLocal(dt) {
   if (!me || !me.alive) { me && (me.anim = 'idle'); return; }
+  if (me.frozen) { // virou árvore/gelo: parado no lugar
+    me.anim = 'idle'; me.vy = 0; me.grounded = true;
+    me.pos.y = groundAt(me.pos.x, me.pos.z, me.pos.y);
+    me.group.position.copy(me.pos);
+    return;
+  }
   // base de movimento a partir do yaw (right = forward × up, senão A/D invertem)
   const fwd = tmp.set(Math.sin(yaw), 0, Math.cos(yaw));
   const right = tmp2.set(-Math.cos(yaw), 0, Math.sin(yaw));
@@ -564,6 +623,11 @@ function hostStep(dt) {
   }
 
   // transmissão periódica
+  // contagem regressiva do efeito (árvore/gelo)
+  for (const e of entities.values()) {
+    if (e.frozen) { e.frozenTimer -= dt; if (e.frozenTimer <= 0) { e.frozen = false; e.frozenTimer = 0; } }
+  }
+
   // pacotes de bala surgem a cada 30s
   host.pickupTimer -= dt;
   if (host.pickupTimer <= 0) { host.pickupTimer = CONFIG.PICKUP_EVERY; if (pickups.length < CONFIG.PICKUP_MAX) spawnPickup(); }
@@ -583,7 +647,7 @@ function broadcastWorld() {
   if (!net) return; // modo treino: não há rede
   const players = {};
   for (const e of entities.values()) {
-    players[e.peerId] = { p: [e.pos.x, e.pos.y, e.pos.z], ry: e.ry, a: e.anim, hp: e.hp, alive: e.alive, aim: e.aimTimer > 0, ml: e.meleeTimer > 0 };
+    players[e.peerId] = { p: [e.pos.x, e.pos.y, e.pos.z], ry: e.ry, a: e.anim, hp: e.hp, alive: e.alive, aim: e.aimTimer > 0, ml: e.meleeTimer > 0, fz: e.frozen, fzt: e.frozenType, fzr: e.frozenTimer };
   }
   const pk = pickups.map((p) => ({ id: p.id, p: [p.pos.x, p.pos.y, p.pos.z] }));
   net.broadcast({ players, zone: { r: host.zoneR, dps: host.zoneDps }, status, winner, pickups: pk });
@@ -594,33 +658,41 @@ function sendInput() {
   net.sendInput({ p: [me.pos.x, me.pos.y, me.pos.z], ry: me.ry, a: me.anim, aim: me.aimTimer > 0, ml: me.meleeTimer > 0 });
 }
 
+// configura a munição conforme o personagem (chamado quando 'me' é criado)
+function configureLoadout() {
+  if (!me) return;
+  const c = getCharacter(me.charId);
+  const total = c.ammoStart || CONFIG.AMMO_START;
+  const max = c.ammoMax || CONFIG.AMMO_MAX;
+  packTotal = c.ammoPack || CONFIG.AMMO_PACK;
+  if (me.dualGun) { maxR = Math.floor(max / 2); maxL = max - maxR; ammoR = Math.floor(total / 2); ammoL = total - ammoR; }
+  else { maxR = max; maxL = 0; ammoR = total; ammoL = 0; }
+}
+
 // ---------- tiro ----------
 function handleFire(dt) {
   fireCooldown -= dt;
-  if (!input.firing || fireCooldown > 0 || !me || !me.alive) return;
-  if (ammo <= 0) { fireCooldown = 0.3; Sound.playEmpty(); return; } // sem balas
+  if (!input.firing || fireCooldown > 0 || !me || !me.alive || !me.hasGun || me.frozen) return;
+  if (ammoR <= 0) { fireCooldown = 0.3; Sound.playEmpty(); return; } // sem balas
   fireCooldown = CONFIG.FIRE_COOLDOWN;
-  fire();
+  fireFrom('R');
 }
-// ponta do cano no espaço local do braço direito (mão + arma estendida)
+function fire() { fireFrom('R'); }
+// ponta do cano no espaço local do braço (mão + arma estendida)
 const MUZZLE_LOCAL = new THREE.Vector3(0, -0.98, 0.08);
 
-function fire() {
-  // levanta o braço e lê a ponta real do revólver (de onde sai o traçado)
-  const armR = me.body.parts.armR;
-  armR.rotation.x = -Math.PI / 2; armR.rotation.z = 0;
-  armR.updateWorldMatrix(true, false);
-  const muzzle = MUZZLE_LOCAL.clone().applyMatrix4(armR.matrixWorld);
+function fireFrom(side) {
+  const left = side === 'L';
+  if ((left ? ammoL : ammoR) <= 0) { Sound.playEmpty(); return; }
+  const arm = me.body.parts[left ? 'armL' : 'armR'];
+  arm.rotation.x = -Math.PI / 2; arm.rotation.z = 0;
+  arm.updateWorldMatrix(true, false);
+  const muzzle = MUZZLE_LOCAL.clone().applyMatrix4(arm.matrixWorld);
 
-  // 1ª pessoa: mira pela câmera (crosshair preciso). 3ª pessoa: reto na frente do boneco.
+  // 1ª pessoa: mira pela câmera. 3ª pessoa: reto na frente do boneco.
   let origin, dir;
-  if (camMode === 'first') {
-    origin = camera.position.clone();
-    dir = camera.getWorldDirection(new THREE.Vector3());
-  } else {
-    origin = muzzle.clone();
-    dir = new THREE.Vector3(Math.sin(me.ry), 0, Math.cos(me.ry));
-  }
+  if (camMode === 'first') { origin = camera.position.clone(); dir = camera.getWorldDirection(new THREE.Vector3()); }
+  else { origin = muzzle.clone(); dir = new THREE.Vector3(Math.sin(me.ry), 0, Math.cos(me.ry)); }
 
   let best = null, bestT = CONFIG.RANGE;
   for (const e of entities.values()) {
@@ -632,23 +704,32 @@ function fire() {
     if (tca < 0 || tca > bestT) continue;
     const d2 = oc.lengthSq() - tca * tca;
     const hr = 0.9 * sc;
-    if (d2 > hr * hr) continue; // raio de acerto (maior pra alvo grande)
+    if (d2 > hr * hr) continue;
     best = e; bestT = tca;
   }
   const end = origin.clone().add(dir.clone().multiplyScalar(best ? bestT : CONFIG.RANGE));
-  tracer(muzzle, end); // o traçado sempre sai da arma e vai até o alvo
+  tracer(muzzle, end);
   me.aimTimer = 0.3;
-  ammo--; Sound.playShoot();
+  if (left) ammoL--; else ammoR--;
+  Sound.playShoot();
   if (best) {
-    if (isHost) damage(best, CONFIG.BULLET_DMG);
-    else net.sendHit(best.peerId, CONFIG.BULLET_DMG);
+    const dmg = Math.round(CONFIG.BULLET_DMG * (me.growth || 1)); // Morgadinho: dano cresce
+    if (isHost) damage(best, dmg); else net.sendHit(best.peerId, dmg);
+    if (me.growsOnHit) growMe();
   }
 }
-function tracer(a, b) {
+function growMe() {
+  me.growth = Math.min(3, me.growth * 1.1); // +10% de tamanho e força por acerto (até 3x)
+  me.scale = me.baseScale * me.growth;
+  me.body.group.scale.setScalar(me.scale);
+  me.eye = CONFIG.EYE * me.scale;
+  if (me.tag) me.tag.scale.set(2.6 / me.scale, 1 / me.scale, 1); // mantém a plaquinha do mesmo tamanho
+}
+function tracer(a, b, color = 0xfff176, ms = 60) {
   const geo = new THREE.BufferGeometry().setFromPoints([a, b]);
-  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xfff176 }));
+  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color }));
   scene.add(line);
-  setTimeout(() => { scene.remove(line); geo.dispose(); }, 60);
+  setTimeout(() => { scene.remove(line); geo.dispose(); }, ms);
 }
 
 // ---------- câmera / zona visual ----------
@@ -697,7 +778,8 @@ function updateOcclusion() {
 function setLocalFirstPerson(fp) {
   const p = me.body.parts;
   p.head.visible = !fp; p.torso.visible = !fp;
-  p.legL.visible = !fp; p.legR.visible = !fp; p.armL.visible = !fp;
+  p.legL.visible = !fp; p.legR.visible = !fp;
+  p.armL.visible = !fp || !!me.canMelee; // em 1ª pessoa mostra o braço da arma de mão
   if (me.tag) me.tag.visible = !fp;
 }
 function updateZoneVisual() {
@@ -732,7 +814,7 @@ function resetGrenades() {
   grenades.length = 0; fx.length = 0; grenadeCd = 0;
 }
 function throwGrenade() {
-  if (!me || !me.alive || grenadeCd > 0 || status !== 'playing') return;
+  if (!me || !me.alive || me.frozen || grenadeCd > 0 || status !== 'playing') return;
   grenadeCd = CONFIG.GRENADE.cooldown;
   const dir = new THREE.Vector3(Math.sin(me.ry), 0, Math.cos(me.ry)); // pra frente (em 1ª pessoa = pra onde olha)
   const pos = me.pos.clone(); pos.y += 1.4; pos.add(dir.clone().multiplyScalar(0.6));
@@ -786,7 +868,7 @@ function updateFx(dt) {
 
 // ---------- munição e pacotes de bala ----------
 function resetAmmoPickups() {
-  ammo = CONFIG.AMMO_START;
+  ammoR = CONFIG.AMMO_START; ammoL = 0;
   for (const m of pickupMeshes.values()) if (scene) scene.remove(m);
   pickupMeshes.clear();
   pickups = [];
@@ -825,11 +907,16 @@ function syncPickups(dt) {
   }
 }
 function checkPickups() {
-  if (!me || !me.alive) return;
+  if (!me || !me.alive || !me.hasGun) return; // quem não tem arma de fogo não pega balas
   for (const p of pickups) {
     const dx = me.pos.x - p.pos.x, dz = me.pos.z - p.pos.z, dy = me.pos.y - p.pos.y;
     if (dx * dx + dz * dz < CONFIG.PICKUP_R * CONFIG.PICKUP_R && Math.abs(dy) < 2.2) {
-      ammo = Math.min(CONFIG.AMMO_MAX, ammo + CONFIG.AMMO_PACK);
+      if (me.dualGun) { // distribui o pacote entre as duas armas
+        ammoR = Math.min(maxR, ammoR + Math.ceil(packTotal / 2));
+        ammoL = Math.min(maxL, ammoL + Math.floor(packTotal / 2));
+      } else {
+        ammoR = Math.min(maxR, ammoR + packTotal);
+      }
       Sound.playPickup();
       pickups = pickups.filter((q) => q.id !== p.id);
       if (net) net.sendPickup(p.id); // avisa o host (no-op se eu for o host)
@@ -839,12 +926,10 @@ function checkPickups() {
 }
 function onClientPickup(pid, d) { if (isHost) pickups = pickups.filter((p) => p.id !== d.id); }
 
-// ---------- golpe de marreta (só o grandão) ----------
-function doMelee() {
-  if (!me || !me.alive || !me.big || meleeCd > 0 || status !== 'playing') return;
-  meleeCd = CONFIG.MELEE.cooldown;
-  me.meleeTimer = CONFIG.MELEE.dur;
-  Sound.playSmash();
+// ---------- golpe corpo-a-corpo (marreta / espada) ----------
+function meleeStrike(dmg) {
+  if (!me || !me.alive) return;
+  me.meleeTimer = CONFIG.MELEE.dur; // (re)dispara o swing do braço
   const fwd = new THREE.Vector3(Math.sin(me.ry), 0, Math.cos(me.ry));
   const reach = CONFIG.MELEE.range * (me.scale || 1);
   for (const e of entities.values()) {
@@ -853,9 +938,79 @@ function doMelee() {
     const d = v.length();
     if (d > reach || d < 0.01) continue;
     if (v.normalize().dot(fwd) < 0.2) continue; // só acerta quem está na frente
-    if (isHost) damage(e, CONFIG.MELEE.dmg);
-    else net.sendHit(e.peerId, CONFIG.MELEE.dmg);
+    if (isHost) damage(e, dmg);
+    else net.sendHit(e.peerId, dmg);
   }
+}
+function doSpecial() {
+  if (!me || !me.alive || !me.canMelee || meleeCd > 0 || status !== 'playing' || me.frozen) return;
+  const w = me.meleeType;
+  if (w === 'sword') {
+    meleeCd = CONFIG.MELEE.cooldown;
+    for (let i = 0; i < 3; i++) setTimeout(() => { if (status === 'playing' && me && me.alive) { Sound.playSlash(); meleeStrike(28); } }, i * 150);
+  } else if (w === 'spray') {
+    meleeCd = CONFIG.SPRAY.cooldown; me.meleeTimer = CONFIG.MELEE.dur; Sound.playSpray();
+    transformInFront('tree', CONFIG.SPRAY.dur, CONFIG.SPRAY.range, 0);
+  } else if (w === 'ice') {
+    meleeCd = CONFIG.ICE.cooldown; me.meleeTimer = CONFIG.MELEE.dur; Sound.playIce();
+    doIce();
+  } else if (w === 'dualgun') {
+    if (ammoL <= 0) { Sound.playEmpty(); meleeCd = 0.25; return; }
+    meleeCd = CONFIG.FIRE_COOLDOWN; fireFrom('L'); // 2ª arma do Pistoleiro
+  } else { // hammer
+    meleeCd = CONFIG.MELEE.cooldown; Sound.playSmash(); meleeStrike(CONFIG.MELEE.dmg);
+  }
+}
+
+// vira o alvo (à frente, num cone) em árvore/gelo por 'dur' segundos
+function transformInFront(type, dur, range, dmg) {
+  const fwd = new THREE.Vector3(Math.sin(me.ry), 0, Math.cos(me.ry));
+  const reach = range * (me.scale || 1);
+  let best = null, bd = Infinity;
+  for (const e of entities.values()) {
+    if (e === me || !e.alive) continue;
+    const v = new THREE.Vector3().subVectors(e.pos, me.pos); const d = v.length();
+    if (d > reach || d < 0.01) continue;
+    if (v.normalize().dot(fwd) < 0.4) continue;
+    if (d < bd) { bd = d; best = e; }
+  }
+  if (best) applyTransform(best, type, dur, dmg);
+}
+
+// raio de gelo: hitscan a partir da mão que brilha
+function doIce() {
+  const armL = me.body.parts.armL; armL.updateWorldMatrix(true, false);
+  const muzzle = new THREE.Vector3(0, -0.78, 0.08).applyMatrix4(armL.matrixWorld);
+  let origin, dir;
+  if (camMode === 'first') { origin = camera.position.clone(); dir = camera.getWorldDirection(new THREE.Vector3()); }
+  else { origin = muzzle.clone(); dir = new THREE.Vector3(Math.sin(me.ry), 0, Math.cos(me.ry)); }
+  let best = null, bestT = CONFIG.ICE.range;
+  for (const e of entities.values()) {
+    if (e === me || !e.alive) continue;
+    const sc = e.scale || 1;
+    const center = tmp.copy(e.pos); center.y += 1.3 * sc;
+    const oc = tmp2.copy(center).sub(origin);
+    const tca = oc.dot(dir);
+    if (tca < 0 || tca > bestT) continue;
+    const d2 = oc.lengthSq() - tca * tca; const hr = 1.0 * sc;
+    if (d2 > hr * hr) continue;
+    best = e; bestT = tca;
+  }
+  const end = origin.clone().add(dir.clone().multiplyScalar(best ? bestT : CONFIG.ICE.range));
+  tracer(muzzle, end, 0x66e8ff, 90); // feixe gelado
+  if (best) applyTransform(best, 'ice', CONFIG.ICE.dur, CONFIG.ICE.dmg);
+}
+
+// aplica o efeito (host aplica direto; cliente avisa o host)
+function applyTransform(target, type, dur, dmg) {
+  if (isHost) { transform(target, type, dur); if (dmg > 0) damage(target, dmg); }
+  else net.sendTransform(target.peerId, type, dur, dmg);
+}
+function transform(e, type, dur) { e.frozen = true; e.frozenType = type; e.frozenTimer = dur; }
+function onClientTransform(pid, d) {
+  if (!isHost) return;
+  const e = entities.get(d.tgt);
+  if (e && e.alive) { transform(e, d.ft, d.dur); if (d.dmg > 0) damage(e, d.dmg); }
 }
 
 // ---------- HUD ----------
@@ -866,9 +1021,20 @@ function updateHud() {
   const alive = [...entities.values()].filter((e) => e.alive).length;
   $('aliveCount').textContent = `Vivos: ${alive}/${entities.size}`;
   $('zoneInfo').textContent = ZONE_DAMAGE ? (host.zoneDps ? `Zona · dano ${host.zoneDps}/s fora` : 'Zona') : 'Sem zona';
-  $('ammo').textContent = ammo > 0 ? `🔫 ${ammo}/${CONFIG.AMMO_MAX}` : '🔫 Sem balas! (pegue um pacote)';
-  $('ammo').style.color = ammo > 0 ? '#fff' : '#ff6e8e';
-  $('crosshair').classList.toggle('hidden', camMode !== 'first'); // mira só na 1ª pessoa
+  if (!me.hasGun) {
+    $('ammo').textContent = me.meleeType === 'ice' ? '❄ raio gelado (X)' : '🗡 corpo a corpo (X)';
+    $('ammo').style.color = '#9fd6ff';
+  } else if (me.dualGun) {
+    $('ammo').textContent = `🔫 D:${ammoR} | E:${ammoL}`;
+    $('ammo').style.color = (ammoR + ammoL) > 0 ? '#fff' : '#ff6e8e';
+  } else {
+    $('ammo').textContent = ammoR > 0 ? `🔫 ${ammoR}/${maxR}` : '🔫 Sem balas! (pegue um pacote)';
+    $('ammo').style.color = ammoR > 0 ? '#fff' : '#ff6e8e';
+  }
+  const tt = $('treeTag');
+  if (me.frozen) { tt.classList.remove('hidden'); tt.textContent = (me.frozenType === 'ice' ? '🧊 Congelado!' : '🌳 Virou árvore!') + ' ' + Math.ceil(me.frozenTimer) + 's'; }
+  else tt.classList.add('hidden');
+  $('crosshair').classList.toggle('hidden', camMode !== 'first' || !me.hasGun); // mira só na 1ª pessoa
   $('deadTag').classList.toggle('hidden', me.alive);
 }
 
@@ -912,7 +1078,7 @@ function bindInput() {
     if (e.code === 'Space') input.jump = true;
     if (e.code === 'KeyQ' && !e.repeat) toggleCamMode();
     if (e.code === 'KeyE' && !e.repeat) throwGrenade();
-    if (e.code === 'KeyX' && !e.repeat) doMelee();
+    if (e.code === 'KeyX' && !e.repeat) doSpecial();
     // elevador: escolher andar pelo teclado (1/2/3 ou numpad) quando estiver nele
     if (onElevator && !e.repeat) {
       if (e.code === 'Digit1' || e.code === 'Numpad1') pickFloor(0);
@@ -959,7 +1125,7 @@ function bindInput() {
   $('mapBackrooms').addEventListener('click', () => selectMap('backrooms'));
   $('mapBosque').addEventListener('click', () => selectMap('bosque'));
   $('btnGrenade').addEventListener('click', throwGrenade);
-  $('btnMelee').addEventListener('click', doMelee);
+  $('btnMelee').addEventListener('click', doSpecial);
   $('elv0').addEventListener('click', () => pickFloor(0));
   $('elv1').addEventListener('click', () => pickFloor(1));
   $('elv2').addEventListener('click', () => pickFloor(2));

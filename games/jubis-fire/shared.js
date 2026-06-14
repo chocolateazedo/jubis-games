@@ -20,6 +20,10 @@ export const CONFIG = {
   RANGE: 90,
   MAX_HP: 100,
   NET_HZ: 15,          // pacotes de rede por segundo
+  FLOORS: [0, 8, 16],  // alturas dos 3 andares (pé-direito alto)
+  STEP_UP: 0.7,        // o quanto o jogador "sobe" automaticamente (degraus/rampas)
+  ELEV_SPEED: 5,       // velocidade do elevador (u/s)
+  GRENADE: { speed: 16, up: 7.5, gravity: 20, fuse: 3, radius: 7, dmg: 90, cooldown: 1.0, bounce: 0.4 },
   CAM_DIST: 6.2,
   CAM_HEIGHT: 1.2,
   ZONE: {

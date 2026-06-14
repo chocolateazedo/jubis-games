@@ -3,6 +3,7 @@
 // posição; o host decide zona, vida e eliminações e transmite o "mundo".
 
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { CONFIG, ZONE_DAMAGE, computeZone, clamp, lerp } from './shared.js?v=3';
 import { CHARACTERS, getCharacter, buildBody, animateBody } from './characters.js?v=3';
 import { buildArena, resolveCollisions } from './arena.js?v=3';
@@ -18,6 +19,11 @@ let net = null;
 let scene, renderer, camera, clock;
 let colliders = [], spawns = [];
 let zoneMesh = null;
+let groundAt = (x, z, y) => 0; // preenchido por buildArena
+let elevator = null, onElevator = false;
+let occluders = [], faded = []; // malhas que tapam a câmera / atualmente translúcidas
+const grenades = [], fx = []; // granadas em voo e efeitos de explosão
+let grenadeCd = 0;
 const entities = new Map();   // peerId -> entity
 let me = null;
 let status = 'lobby';         // 'lobby' | 'playing' | 'ended'
@@ -174,7 +180,8 @@ function startMatch(room) {
 
   setupThree();
   const built = buildArena(scene);
-  colliders = built.colliders; spawns = built.spawns;
+  colliders = built.colliders; spawns = built.spawns; groundAt = built.groundAt; elevator = built.elevator; occluders = built.occluders; faded = [];
+  resetGrenades();
   buildZoneMesh();
 
   entities.clear();
@@ -204,7 +211,8 @@ function startTraining() {
 
   setupThree();
   const built = buildArena(scene);
-  colliders = built.colliders; spawns = built.spawns;
+  colliders = built.colliders; spawns = built.spawns; groundAt = built.groundAt; elevator = built.elevator; occluders = built.occluders; faded = [];
+  resetGrenades();
   buildZoneMesh();
 
   const myId = myPeerId || 'me-local';
@@ -253,8 +261,9 @@ function updateBots(dt) {
       }
     }
     const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
-    e.pos.x += dx * BOT_SPEED * dt; e.pos.z += dz * BOT_SPEED * dt; e.pos.y = 0;
+    e.pos.x += dx * BOT_SPEED * dt; e.pos.z += dz * BOT_SPEED * dt;
     resolveCollisions(e.pos, CONFIG.PLAYER_R, colliders);
+    e.pos.y = groundAt(e.pos.x, e.pos.z, e.pos.y); // acompanha o piso/rampa
     const aimT = target && Math.sqrt(td) < 45;
     e.ry = aimT ? Math.atan2(target.pos.x - cx, target.pos.z - cz) : Math.atan2(dx, dz);
     e.anim = 'run';
@@ -282,8 +291,15 @@ function setupThree() {
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.15;
   $('glmount').appendChild(renderer.domElement);
   scene = new THREE.Scene();
+  // iluminação por ambiente (IBL) — deixa os materiais bem mais bonitos
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
   camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 400);
   addEventListener('resize', () => {
     camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
@@ -397,8 +413,13 @@ function loop() {
     if (isHost) hostStep(dt); else { sendAccum += dt; if (sendAccum >= 1 / CONFIG.NET_HZ) { sendInput(); sendAccum = 0; } }
     updateRemotes(dt);
     handleFire(dt);
+    updateElevator(dt);
+    grenadeCd -= dt;
+    updateGrenades(dt);
   }
+  updateFx(dt);
   updateCamera();
+  updateOcclusion();
   updateZoneVisual();
   for (const e of entities.values()) {
     if (e.aimTimer > 0) e.aimTimer -= dt;
@@ -427,15 +448,17 @@ function updateLocal(dt) {
   if (moving) { mvx /= len; mvz /= len; }
   me.pos.x += mvx * CONFIG.MOVE_SPEED * dt;
   me.pos.z += mvz * CONFIG.MOVE_SPEED * dt;
+  resolveCollisions(me.pos, CONFIG.PLAYER_R, colliders);
 
-  // pulo / gravidade
+  // chão sob o jogador (andares / escadas / rampa / elevador)
+  const gy = groundAt(me.pos.x, me.pos.z, me.pos.y);
+  onElevator = elevator && me.pos.x >= elevator.x0 && me.pos.x <= elevator.x1 &&
+    me.pos.z >= elevator.z0 && me.pos.z <= elevator.z1 && Math.abs(gy - elevator.y) < 0.2;
   if (input.jump && me.grounded) { me.vy = CONFIG.JUMP_V; me.grounded = false; }
   input.jump = false;
   me.vy -= CONFIG.GRAVITY * dt;
   me.pos.y += me.vy * dt;
-  if (me.pos.y <= 0) { me.pos.y = 0; me.vy = 0; me.grounded = true; }
-
-  resolveCollisions(me.pos, CONFIG.PLAYER_R, colliders);
+  if (me.pos.y <= gy) { me.pos.y = gy; me.vy = 0; me.grounded = true; } else me.grounded = false;
   if (camMode === 'first') {
     // 1ª pessoa: o corpo encara para onde você olha (mira pela câmera)
     me.ry = yaw;
@@ -585,6 +608,24 @@ function toggleCamMode() {
   camMode = camMode === 'third' ? 'first' : 'third';
 }
 
+// deixa translúcido o que estiver entre a câmera e o jogador (só 3ª pessoa)
+function updateOcclusion() {
+  for (const m of faded) { m.material.opacity = 1; m.material.transparent = false; }
+  faded.length = 0;
+  if (camMode !== 'third' || !me) return;
+  const head = tmp.set(me.pos.x, me.pos.y + CONFIG.EYE, me.pos.z);
+  const dir = tmp2.copy(head).sub(camera.position);
+  const dist = dir.length(); if (dist < 0.1) return;
+  dir.divideScalar(dist);
+  raycaster.set(camera.position, dir);
+  raycaster.near = 0.1; raycaster.far = dist - 0.6;
+  for (const h of raycaster.intersectObjects(occluders, false)) {
+    h.object.material.transparent = true;
+    h.object.material.opacity = 0.18;
+    faded.push(h.object);
+  }
+}
+
 // em 1ª pessoa, esconde do próprio corpo tudo menos o braço direito + arma
 function setLocalFirstPerson(fp) {
   const p = me.body.parts;
@@ -596,6 +637,82 @@ function updateZoneVisual() {
   if (!zoneMesh) return;
   const r = Math.max(0.5, host.zoneR);
   zoneMesh.scale.set(r, 1, r);
+}
+
+// ---------- elevador ----------
+function updateElevator(dt) {
+  if (!elevator) return;
+  if (elevator.target !== null) {
+    const dir = Math.sign(elevator.target - elevator.y);
+    elevator.y += dir * CONFIG.ELEV_SPEED * dt;
+    if (dir === 0 || (dir > 0 && elevator.y >= elevator.target) || (dir < 0 && elevator.y <= elevator.target)) {
+      elevator.y = elevator.target; elevator.target = null;
+    }
+    elevator.mesh.position.y = elevator.y;
+  }
+  const show = onElevator && elevator.target === null && me && me.alive;
+  $('elevatorUI').classList.toggle('hidden', !show);
+}
+function pickFloor(i) {
+  if (!elevator || elevator.target !== null) return;
+  elevator.target = elevator.floors[i];
+  $('elevatorUI').classList.add('hidden');
+}
+
+// ---------- granadas ----------
+function resetGrenades() {
+  if (scene) { for (const g of grenades) scene.remove(g.mesh); for (const e of fx) scene.remove(e.mesh); }
+  grenades.length = 0; fx.length = 0; grenadeCd = 0;
+}
+function throwGrenade() {
+  if (!me || !me.alive || grenadeCd > 0 || status !== 'playing') return;
+  grenadeCd = CONFIG.GRENADE.cooldown;
+  const dir = new THREE.Vector3(Math.sin(me.ry), 0, Math.cos(me.ry)); // pra frente (em 1ª pessoa = pra onde olha)
+  const pos = me.pos.clone(); pos.y += 1.4; pos.add(dir.clone().multiplyScalar(0.6));
+  const vel = dir.multiplyScalar(CONFIG.GRENADE.speed); vel.y = CONFIG.GRENADE.up; // arco
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), new THREE.MeshStandardMaterial({ color: 0x2f7d32, roughness: 0.6 }));
+  mesh.position.copy(pos); mesh.castShadow = true; scene.add(mesh);
+  grenades.push({ mesh, pos, vel, fuse: CONFIG.GRENADE.fuse, landed: false });
+}
+function updateGrenades(dt) {
+  for (let i = grenades.length - 1; i >= 0; i--) {
+    const g = grenades[i];
+    g.vel.y -= CONFIG.GRENADE.gravity * dt;
+    g.pos.addScaledVector(g.vel, dt);
+    resolveCollisions(g.pos, 0.22, colliders);
+    const gy = groundAt(g.pos.x, g.pos.z, g.pos.y) + 0.22;
+    if (g.pos.y <= gy) {
+      g.pos.y = gy;
+      if (g.vel.y < -2) { g.vel.y = -g.vel.y * CONFIG.GRENADE.bounce; g.vel.x *= 0.6; g.vel.z *= 0.6; }
+      else g.vel.set(0, 0, 0);
+      g.landed = true; // o pavio só começa ao tocar o chão
+    }
+    if (g.landed) { g.fuse -= dt; if (g.fuse <= 0) { explode(g.pos.clone()); scene.remove(g.mesh); grenades.splice(i, 1); continue; } }
+    g.mesh.position.copy(g.pos);
+  }
+}
+function explode(at) {
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 12), new THREE.MeshBasicMaterial({ color: 0xff8a1e, transparent: true, opacity: 0.85 }));
+  mesh.position.copy(at); scene.add(mesh);
+  fx.push({ mesh, life: 0.45, max: 0.45 });
+  if (isHost) { // dano em área só o host/treino aplica
+    const R = CONFIG.GRENADE.radius;
+    for (const e of entities.values()) {
+      if (!e.alive) continue;
+      const c = new THREE.Vector3(e.pos.x, e.pos.y + 1.0, e.pos.z);
+      const d = c.distanceTo(at);
+      if (d < R) { const dmg = Math.round(CONFIG.GRENADE.dmg * (1 - d / R)); if (dmg > 0) damage(e, dmg); }
+    }
+  }
+}
+function updateFx(dt) {
+  for (let i = fx.length - 1; i >= 0; i--) {
+    const e = fx[i]; e.life -= dt;
+    const k = 1 - e.life / e.max;
+    e.mesh.scale.setScalar(0.5 + k * CONFIG.GRENADE.radius);
+    e.mesh.material.opacity = 0.85 * (1 - k);
+    if (e.life <= 0) { scene.remove(e.mesh); fx.splice(i, 1); }
+  }
 }
 
 // ---------- HUD ----------
@@ -611,6 +728,7 @@ function updateHud() {
 
 function showEnd(customMsg) {
   status = 'ended';
+  $('elevatorUI').classList.add('hidden');
   $('endBox').classList.remove('hidden');
   let txt = customMsg;
   if (!txt) {
@@ -626,6 +744,8 @@ function showEnd(customMsg) {
 function backToLobby() {
   status = 'lobby'; training = false;
   net?.destroy(); net = null;
+  resetGrenades();
+  $('elevatorUI').classList.add('hidden');
   for (const e of entities.values()) scene.remove(e.group);
   entities.clear(); me = null;
   $('screen-game').classList.add('hidden');
@@ -644,6 +764,7 @@ function bindInput() {
     keys[e.code] = true;
     if (e.code === 'Space') input.jump = true;
     if (e.code === 'KeyQ' && !e.repeat) toggleCamMode();
+    if (e.code === 'KeyE' && !e.repeat) throwGrenade();
     if (FIRE_KEYS.has(e.code)) { input.firing = true; if (status === 'playing') e.preventDefault(); }
     updateMoveFromKeys();
   });
@@ -681,6 +802,10 @@ function bindInput() {
   $('btnBackLobby').addEventListener('click', backToLobby);
   $('btnExit').addEventListener('click', backToLobby);
   $('btnView').addEventListener('click', toggleCamMode);
+  $('btnGrenade').addEventListener('click', throwGrenade);
+  $('elv0').addEventListener('click', () => pickFloor(0));
+  $('elv1').addEventListener('click', () => pickFloor(1));
+  $('elv2').addEventListener('click', () => pickFloor(2));
 }
 
 function updateMoveFromKeys() {

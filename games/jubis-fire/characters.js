@@ -33,15 +33,6 @@ function limb(w, h, d, color) {
   return pivot;
 }
 
-function addEyes(head) {
-  const white = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
-  const pupil = new THREE.MeshStandardMaterial({ color: 0x18120c });
-  for (const sx of [-0.1, 0.1]) {
-    const w = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), white); w.position.set(sx, 0.04, 0.21); head.add(w);
-    const p = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 6), pupil); p.position.set(sx, 0.04, 0.26); head.add(p);
-  }
-}
-
 // Monta o boneco. Pés no y=0; altura total ~1.8 (×2.2 se for "grandão").
 export function buildBody(preset) {
   const g = new THREE.Group();
@@ -53,33 +44,27 @@ export function buildBody(preset) {
   const legW = muscular ? 0.36 : 0.26, legH = 0.8, legD = muscular ? 0.36 : 0.28;
   const legColor = preset.pants;
 
-  // pernas (pivô no quadril, y ~0.8) + sapatos
+  // pernas (pivô no quadril, y ~0.8)
   const legL = limb(legW, legH, legD, legColor); legL.position.set(-0.18, 0.8, 0);
   const legR = limb(legW, legH, legD, legColor); legR.position.set(0.18, 0.8, 0);
-  legL.add(box(legW + 0.05, 0.16, legD + 0.1, 0x2e2620).translateY(-legH + 0.08).translateZ(0.05));
-  legR.add(box(legW + 0.05, 0.16, legD + 0.1, 0x2e2620).translateY(-legH + 0.08).translateZ(0.05));
 
-  // torso + cinto
+  // torso
   const torso = box(torsoW, 0.72, torsoD, preset.shirt);
   torso.position.y = 1.15; torso.castShadow = true;
-  const belt = box(torsoW + 0.03, 0.13, torsoD + 0.03, 0x3a2e22); belt.position.y = 0.85;
 
-  // braços (pivô no ombro, y ~1.45) + mãos
+  // braços (pivô no ombro, y ~1.45)
   const armL = limb(armW, armH, armD, preset.shirt); armL.position.set(-(torsoW / 2 + 0.12), 1.45, 0);
   const armR = limb(armW, armH, armD, preset.shirt); armR.position.set(torsoW / 2 + 0.12, 1.45, 0);
-  armL.add(box(armW + 0.02, 0.18, armD + 0.02, preset.skin).translateY(-armH + 0.09));
-  armR.add(box(armW + 0.02, 0.18, armD + 0.02, preset.skin).translateY(-armH + 0.09));
+  armL.add(box(armW, 0.18, armD, preset.skin).translateY(-armH + 0.09));
+  armR.add(box(armW, 0.18, armD, preset.skin).translateY(-armH + 0.09));
 
   // revólver na mão direita (cano no -Y do braço) — alguns personagens não têm
   let gun = null;
   if (!preset.noGun) { gun = buildGun(); gun.position.set(0, -0.62, 0.08); armR.add(gun); }
 
-  // pescoço + cabeça redonda com olhos
-  const neck = box(0.2, 0.12, 0.2, preset.skin); neck.position.y = 1.6;
-  const head = new THREE.Group(); head.position.y = 1.84;
-  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.27, 16, 12), new THREE.MeshStandardMaterial({ color: preset.skin, roughness: 0.85 }));
-  skull.castShadow = true; head.add(skull);
-  addEyes(head);
+  // cabeça
+  const head = box(0.42, 0.42, 0.42, preset.skin);
+  head.position.y = 1.75; head.castShadow = true;
   const hair = buildHair(preset);
   if (hair) head.add(hair);
 
@@ -93,7 +78,7 @@ export function buildBody(preset) {
   // segunda arma de fogo na mão esquerda (Pistoleiro) — dispara no X
   if (preset.dualGun) { const gunL = buildGun(); gunL.position.set(0, -0.62, 0.08); armL.add(gunL); parts.gunL = gunL; }
 
-  g.add(legL, legR, torso, belt, neck, armL, armR, head);
+  g.add(legL, legR, torso, armL, armR, head);
   g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   const scale = preset.scale || 1;
   if (scale !== 1) g.scale.setScalar(scale);

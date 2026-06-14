@@ -59,6 +59,12 @@ export function buildBody(preset) {
   armL.add(box(0.2, 0.18, 0.22, preset.skin).translateY(-0.66 + 0.09));
   armR.add(box(0.2, 0.18, 0.22, preset.skin).translateY(-0.66 + 0.09));
 
+  // revólver na mão direita (o cano aponta no -Y do braço, igual à direção
+  // do braço quando ele está estendido para a frente)
+  const gun = buildGun();
+  gun.position.set(0, -0.62, 0.08);
+  armR.add(gun);
+
   // cabeça
   const head = box(0.42, 0.42, 0.42, preset.skin);
   head.position.y = 1.75; head.castShadow = true;
@@ -70,7 +76,17 @@ export function buildBody(preset) {
   g.add(legL, legR, torso, armL, armR, head);
   g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
 
-  return { group: g, parts: { legL, legR, armL, armR, torso, head }, t: 0 };
+  return { group: g, parts: { legL, legR, armL, armR, torso, head, gun }, t: 0 };
+}
+
+function buildGun() {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x26262b, roughness: 0.5, metalness: 0.35 });
+  const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.36, 0.09), mat); barrel.position.y = -0.16; // cano (-Y)
+  const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.14, 10), mat); drum.position.y = -0.02; // tambor
+  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.18, 0.11), mat); grip.position.set(0, 0.07, 0.12); grip.rotation.x = 0.5; // cabo
+  g.add(barrel, drum, grip);
+  return g;
 }
 
 function buildHair(preset) {
@@ -91,7 +107,7 @@ function buildHair(preset) {
 }
 
 // Anima o boneco. anim: 'idle' | 'run' | 'jump'. speed01 = 0..1 intensidade do passo.
-export function animateBody(entity, anim, dt, speed01 = 1) {
+export function animateBody(entity, anim, dt, speed01 = 1, aiming = false) {
   const p = entity.parts;
   entity.t += dt;
   const t = entity.t;
@@ -110,4 +126,6 @@ export function animateBody(entity, anim, dt, speed01 = 1) {
     p.armL.rotation.x = b; p.armR.rotation.x = -b;
     p.torso.rotation.x = 0;
   }
+  // mira: braço direito (com o revólver) apontando reto pra frente
+  if (aiming) { p.armR.rotation.x = -Math.PI / 2; p.armR.rotation.z = 0; }
 }

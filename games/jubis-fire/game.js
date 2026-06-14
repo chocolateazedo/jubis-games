@@ -28,6 +28,7 @@ const BOT_NAMES = ['Robô Zé', 'Bot Tina', 'CPU Rex', 'Dummy', 'Bot Max', 'Rob�
 
 // câmera / input
 let yaw = 0, pitch = 0.35;
+let camMode = 'third'; // 'third' | 'first'
 const input = { mx: 0, my: 0, jump: false, firing: false };
 const keys = {};
 let fireCooldown = 0;
@@ -44,6 +45,7 @@ const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
 // ============================================================
 function boot() {
   buildCharGrid();
+  if (isTouch) $('pcHint').classList.add('hidden'); // no celular usa o botão 👁 Visão
   $('pname').value = localStorage.getItem('jubis-fire-name') || '';
   lobbyMsg('Conectando…');
   peer = new window.Peer(undefined, { debug: 1 });
@@ -261,8 +263,12 @@ function updateBots(dt) {
     ai.fireCd -= dt;
     if (aimT && ai.fireCd <= 0) {
       ai.fireCd = 0.8 + Math.random() * 1.4;
-      const from = e.pos.clone(); from.y += 1.3;
-      const to = target.pos.clone(); to.y += 1.0;
+      e.aimTimer = 0.3; // levanta a arma
+      const armR = e.body.parts.armR;
+      armR.rotation.x = -Math.PI / 2; armR.rotation.z = 0;
+      armR.updateWorldMatrix(true, false);
+      const from = MUZZLE_LOCAL.clone().applyMatrix4(armR.matrixWorld);
+      const to = target.pos.clone(); to.y += 1.3;
       tracer(from, to);
       if (Math.random() < 0.45) damage(target, CONFIG.BULLET_DMG);
     }
@@ -294,26 +300,46 @@ function createEntity(p, slot, local) {
   const e = {
     peerId: p.peerId, name: p.name, charId: p.char, body, group: body.group,
     pos: sp.clone(), ry: 0, vy: 0, grounded: true, anim: 'idle',
-    hp: CONFIG.MAX_HP, alive: true, isLocal: local, slot,
+    hp: CONFIG.MAX_HP, alive: true, isLocal: local, slot, aimTimer: 0, hitFlash: 0,
     targetPos: sp.clone(), targetRy: 0,
   };
   entities.set(p.peerId, e);
-  // nametag
-  e.tag = makeTag(p.name);
-  e.group.add(e.tag); e.tag.position.y = 2.3;
+  createNameplate(e); // nome + barra de vida flutuante
   return e;
 }
 
-function makeTag(text) {
-  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 64;
-  const c = cv.getContext('2d');
-  c.font = 'bold 30px Arial'; c.textAlign = 'center';
-  c.fillStyle = 'rgba(0,0,0,.5)'; c.fillRect(0, 0, 256, 64);
-  c.fillStyle = '#fff'; c.fillText(text, 128, 42);
-  const tex = new THREE.CanvasTexture(cv);
-  const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }));
-  spr.scale.set(2.4, 0.6, 1);
-  return spr;
+// plaquinha (sprite) com nome e barra de vida, sempre virada pra câmera
+function createNameplate(e) {
+  const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 96;
+  const tex = new THREE.CanvasTexture(canvas);
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  spr.scale.set(2.6, 1.0, 1);
+  spr.position.y = 2.55;
+  e.group.add(spr);
+  e.tag = spr; e.tagCanvas = canvas; e.tagCtx = canvas.getContext('2d'); e.tagTex = tex; e.lastDrawnHp = -1;
+  drawNameplate(e);
+}
+
+function drawNameplate(e) {
+  const c = e.tagCtx; const W = 256;
+  c.clearRect(0, 0, W, 96);
+  // nome
+  c.font = 'bold 26px Arial'; c.textAlign = 'center';
+  c.fillStyle = 'rgba(0,0,0,.55)'; c.fillRect(28, 2, 200, 34);
+  c.fillStyle = '#fff'; c.fillText(e.name, 128, 28);
+  // barra de vida
+  const bx = 28, by = 46, bw = 200, bh = 20;
+  const frac = Math.max(0, Math.min(1, e.hp / CONFIG.MAX_HP));
+  c.fillStyle = 'rgba(0,0,0,.65)'; c.fillRect(bx - 3, by - 3, bw + 6, bh + 6);
+  c.fillStyle = frac > 0.5 ? '#69f0ae' : frac > 0.25 ? '#ffd54f' : '#ff5252';
+  c.fillRect(bx, by, bw * frac, bh);
+  c.strokeStyle = 'rgba(255,255,255,.6)'; c.lineWidth = 2; c.strokeRect(bx, by, bw, bh);
+  e.tagTex.needsUpdate = true;
+}
+
+function setEntityFlash(e, on) {
+  const hex = on ? 0xcc0000 : 0x000000; // emissive vermelho no acerto
+  e.group.traverse((o) => { if (o.isMesh && o.material && o.material.emissive) o.material.emissive.setHex(hex); });
 }
 
 function buildZoneMesh() {
@@ -331,10 +357,12 @@ function onWorld(d) {           // cliente recebe estado do host
   for (const pid in d.players) {
     const e = entities.get(pid); if (!e) continue;
     const s = d.players[pid];
+    if (s.hp < e.hp) e.hitFlash = 0.18; // levou dano desde o último estado -> pisca
     e.hp = s.hp; e.alive = s.alive;
     if (pid === myPeerId) continue;              // minha posição é local
     e.targetPos.set(s.p[0], s.p[1], s.p[2]);
     e.targetRy = s.ry; e.anim = s.a;
+    e.aimTimer = s.aim ? 0.3 : 0;
   }
   host.zoneR = d.zone.r; host.zoneDps = d.zone.dps;
   if (d.status === 'ended' && status === 'playing') { status = 'ended'; winner = d.winner; showEnd(); }
@@ -343,6 +371,7 @@ function onClientInput(pid, d) { // host recebe input de um cliente
   if (!isHost) return;
   const e = entities.get(pid); if (!e) return;
   e.targetPos.set(d.p[0], d.p[1], d.p[2]); e.targetRy = d.ry; e.anim = d.a;
+  e.aimTimer = d.aim ? 0.3 : 0;
 }
 function onClientHit(pid, d) {   // host recebe alegação de acerto
   if (!isHost) return;
@@ -372,9 +401,15 @@ function loop() {
   updateCamera();
   updateZoneVisual();
   for (const e of entities.values()) {
-    animateBody(e.body, e.anim, dt, 1);
-    e.group.visible = e.alive || e === me; // eliminados somem; você continua vendo seu boneco
+    if (e.aimTimer > 0) e.aimTimer -= dt;
+    animateBody(e.body, e.anim, dt, 1, e.aimTimer > 0);
+    if (e.hitFlash > 0) e.hitFlash -= dt;
+    setEntityFlash(e, e.hitFlash > 0);
+    if (e.hp !== e.lastDrawnHp) { drawNameplate(e); e.lastDrawnHp = e.hp; }
+    e.group.visible = e.alive || e === me; // eliminados somem
   }
+  // 1ª pessoa: do meu corpo mostro só o braço direito + o revólver (viewmodel)
+  if (me) setLocalFirstPerson(camMode === 'first');
   updateHud();
   renderer.render(scene, camera);
   requestAnimationFrame(loop);
@@ -401,9 +436,12 @@ function updateLocal(dt) {
   if (me.pos.y <= 0) { me.pos.y = 0; me.vy = 0; me.grounded = true; }
 
   resolveCollisions(me.pos, CONFIG.PLAYER_R, colliders);
-  // vira o boneco para a direção em que ele se move (frente=0°, trás=180°,
-  // lados=90°/270°, diagonais=45°/135°/...). Parado, mantém a última direção.
-  if (moving) {
+  if (camMode === 'first') {
+    // 1ª pessoa: o corpo encara para onde você olha (mira pela câmera)
+    me.ry = yaw;
+  } else if (moving) {
+    // 3ª pessoa: vira o boneco para a direção em que ele se move (frente=0°,
+    // trás=180°, lados=90°/270°, diagonais=45°/...). Parado, mantém a direção.
     const targetRy = Math.atan2(mvx, mvz);
     me.ry = lerpAngle(me.ry, targetRy, Math.min(1, dt * 16));
   }
@@ -463,6 +501,7 @@ function hostStep(dt) {
 
 function damage(e, amount) {
   e.hp = Math.max(0, e.hp - amount);
+  e.hitFlash = 0.18; // reação visual ao acerto
   if (e.hp <= 0 && e.alive) { e.alive = false; }
 }
 
@@ -470,14 +509,14 @@ function broadcastWorld() {
   if (!net) return; // modo treino: não há rede
   const players = {};
   for (const e of entities.values()) {
-    players[e.peerId] = { p: [e.pos.x, e.pos.y, e.pos.z], ry: e.ry, a: e.anim, hp: e.hp, alive: e.alive };
+    players[e.peerId] = { p: [e.pos.x, e.pos.y, e.pos.z], ry: e.ry, a: e.anim, hp: e.hp, alive: e.alive, aim: e.aimTimer > 0 };
   }
   net.broadcast({ players, zone: { r: host.zoneR, dps: host.zoneDps }, status, winner });
 }
 
 function sendInput() {
   if (!me || !net) return;
-  net.sendInput({ p: [me.pos.x, me.pos.y, me.pos.z], ry: me.ry, a: me.anim });
+  net.sendInput({ p: [me.pos.x, me.pos.y, me.pos.z], ry: me.ry, a: me.anim, aim: me.aimTimer > 0 });
 }
 
 // ---------- tiro ----------
@@ -487,31 +526,35 @@ function handleFire(dt) {
   fireCooldown = CONFIG.FIRE_COOLDOWN;
   fire();
 }
+// ponta do cano no espaço local do braço direito (mão + arma estendida)
+const MUZZLE_LOCAL = new THREE.Vector3(0, -0.98, 0.08);
+
 function fire() {
-  const origin = camera.position.clone();
-  const dir = camera.getWorldDirection(new THREE.Vector3());
+  // tiro reto, na horizontal, na direção para onde o boneco está virado
+  const dir = new THREE.Vector3(Math.sin(me.ry), 0, Math.cos(me.ry));
+  // levanta o braço já agora e lê a posição real da ponta do revólver
+  const armR = me.body.parts.armR;
+  armR.rotation.x = -Math.PI / 2; armR.rotation.z = 0;
+  armR.updateWorldMatrix(true, false);
+  const origin = MUZZLE_LOCAL.clone().applyMatrix4(armR.matrixWorld);
   let best = null, bestT = CONFIG.RANGE;
   for (const e of entities.values()) {
     if (e === me || !e.alive) continue;
-    const center = tmp.copy(e.pos); center.y += 1.0;
+    const center = tmp.copy(e.pos); center.y += 1.3;
     const oc = tmp2.copy(center).sub(origin);
     const tca = oc.dot(dir);
     if (tca < 0 || tca > bestT) continue;
     const d2 = oc.lengthSq() - tca * tca;
-    if (d2 > 0.7 * 0.7) continue;
+    if (d2 > 0.9 * 0.9) continue; // raio de acerto
     best = e; bestT = tca;
   }
   const end = origin.clone().add(dir.clone().multiplyScalar(best ? bestT : CONFIG.RANGE));
-  tracer(muzzlePos(), end);
+  tracer(origin, end);
+  me.aimTimer = 0.3; // levanta o braço/arma
   if (best) {
     if (isHost) damage(best, CONFIG.BULLET_DMG);
     else net.sendHit(best.peerId, CONFIG.BULLET_DMG);
   }
-}
-function muzzlePos() {
-  const p = me.group.position.clone(); p.y += 1.3;
-  p.x += Math.sin(yaw) * 0.6; p.z += Math.cos(yaw) * 0.6;
-  return p;
 }
 function tracer(a, b) {
   const geo = new THREE.BufferGeometry().setFromPoints([a, b]);
@@ -525,12 +568,29 @@ function updateCamera() {
   if (!me) return;
   const head = tmp.copy(me.pos); head.y += CONFIG.EYE;
   const cp = Math.cos(pitch), sp = Math.sin(pitch);
-  camera.position.set(
-    head.x - Math.sin(yaw) * cp * CONFIG.CAM_DIST,
-    head.y + sp * CONFIG.CAM_DIST + CONFIG.CAM_HEIGHT,
-    head.z - Math.cos(yaw) * cp * CONFIG.CAM_DIST
-  );
-  camera.lookAt(head);
+  if (camMode === 'first') {
+    camera.position.copy(head);
+    camera.lookAt(head.x + Math.sin(yaw) * cp, head.y - sp, head.z + Math.cos(yaw) * cp);
+  } else {
+    camera.position.set(
+      head.x - Math.sin(yaw) * cp * CONFIG.CAM_DIST,
+      head.y + sp * CONFIG.CAM_DIST + CONFIG.CAM_HEIGHT,
+      head.z - Math.cos(yaw) * cp * CONFIG.CAM_DIST
+    );
+    camera.lookAt(head);
+  }
+}
+
+function toggleCamMode() {
+  camMode = camMode === 'third' ? 'first' : 'third';
+}
+
+// em 1ª pessoa, esconde do próprio corpo tudo menos o braço direito + arma
+function setLocalFirstPerson(fp) {
+  const p = me.body.parts;
+  p.head.visible = !fp; p.torso.visible = !fp;
+  p.legL.visible = !fp; p.legR.visible = !fp; p.armL.visible = !fp;
+  if (me.tag) me.tag.visible = !fp;
 }
 function updateZoneVisual() {
   if (!zoneMesh) return;
@@ -579,8 +639,19 @@ function backToLobby() {
 // ============================================================
 function bindInput() {
   // teclado
-  addEventListener('keydown', (e) => { keys[e.code] = true; if (e.code === 'Space') input.jump = true; updateMoveFromKeys(); });
-  addEventListener('keyup', (e) => { keys[e.code] = false; updateMoveFromKeys(); });
+  const FIRE_KEYS = new Set(['ControlLeft', 'ControlRight', 'Enter', 'NumpadEnter', 'KeyF']);
+  addEventListener('keydown', (e) => {
+    keys[e.code] = true;
+    if (e.code === 'Space') input.jump = true;
+    if (e.code === 'KeyQ' && !e.repeat) toggleCamMode();
+    if (FIRE_KEYS.has(e.code)) { input.firing = true; if (status === 'playing') e.preventDefault(); }
+    updateMoveFromKeys();
+  });
+  addEventListener('keyup', (e) => {
+    keys[e.code] = false;
+    if (FIRE_KEYS.has(e.code)) input.firing = false;
+    updateMoveFromKeys();
+  });
 
   // mouse (pointer lock)
   const cv = () => renderer?.domElement;
@@ -600,14 +671,16 @@ function bindInput() {
   if (isTouch) bindTouch();
 
   // botões de UI
-  $('btnQuick').addEventListener('click', quickJoin);
-  $('btnCreate').addEventListener('click', createPrivate);
-  $('btnJoin').addEventListener('click', joinPrivate);
-  $('btnTrain').addEventListener('click', startTraining);
-  $('btnStart').addEventListener('click', startGameAsHost);
+  // os botões de jogar disparam tela cheia (precisa ser no gesto do clique)
+  $('btnQuick').addEventListener('click', () => { goFullscreen(); quickJoin(); });
+  $('btnCreate').addEventListener('click', () => { goFullscreen(); createPrivate(); });
+  $('btnJoin').addEventListener('click', () => { goFullscreen(); joinPrivate(); });
+  $('btnTrain').addEventListener('click', () => { goFullscreen(); startTraining(); });
+  $('btnStart').addEventListener('click', () => { goFullscreen(); startGameAsHost(); });
   $('btnLeaveRoom').addEventListener('click', leaveRoom);
   $('btnBackLobby').addEventListener('click', backToLobby);
   $('btnExit').addEventListener('click', backToLobby);
+  $('btnView').addEventListener('click', toggleCamMode);
 }
 
 function updateMoveFromKeys() {
@@ -656,6 +729,11 @@ function bindTouch() {
 }
 
 // ---------- util ----------
+function goFullscreen() {
+  const el = document.documentElement;
+  const fn = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+  if (fn && !document.fullscreenElement) { try { fn.call(el); } catch {} }
+}
 const nowS = () => performance.now() / 1000;
 function lerpAngle(a, b, t) {
   let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI;

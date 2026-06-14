@@ -1,0 +1,9 @@
+{
+  "title": "Nome do Jogo",
+  "description": "Frase curtinha que aparece no cartão.",
+  "emoji": "🎮",
+  "tags": ["arcade", "1 jogador"],
+  "entry": "index.html",
+  "order": 10,
+  "hidden": false
+}

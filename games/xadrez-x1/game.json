@@ -1,0 +1,8 @@
+{
+  "title": "Xadrez x1",
+  "description": "Xadrez 1 contra 1 online: ache um oponente ou jogue com um amigo usando uma senha.",
+  "emoji": "♟️",
+  "tags": ["tabuleiro", "2 jogadores", "online", "xadrez"],
+  "entry": "index.html",
+  "order": 2
+}

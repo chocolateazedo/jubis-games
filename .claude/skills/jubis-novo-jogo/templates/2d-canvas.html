@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nome do Jogo</title>
+  <!--
+    TEMPLATE 2D (canvas) do Jubis Games.
+    Demo: mova a cestinha (mouse / dedo / setas) e pegue as estrelas que caem.
+    Troque a lógica entre os comentários "=== LÓGICA DO JOGO ===" pela sua.
+    Mantenha: link Voltar, tema escuro, responsivo, recorde no localStorage, reiniciar.
+  -->
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      font-family: Arial, sans-serif;
+      background: radial-gradient(circle at top, #1d2b64 0%, #10172a 55%, #0a0f1d 100%);
+      color: #fff;
+    }
+    a.back {
+      position: fixed; top: 12px; left: 12px; z-index: 10;
+      color: #c9b3ff; text-decoration: none; font-weight: 700;
+    }
+    .wrap { width: min(92vw, 760px); text-align: center; }
+    h1 { margin: 0 0 8px; }
+    p { margin: 0 0 12px; opacity: .9; }
+    .hud { display: flex; justify-content: center; gap: 16px; font-weight: 700; margin-bottom: 10px; }
+    canvas {
+      width: 100%;
+      max-width: 760px;
+      border-radius: 14px;
+      border: 2px solid rgba(255,255,255,.2);
+      background: linear-gradient(180deg, #0f1f3b 0%, #091326 100%);
+      box-shadow: 0 10px 35px rgba(0,0,0,.35);
+      touch-action: none; /* não rolar a página ao arrastar */
+    }
+    button {
+      margin-top: 12px; border: none; border-radius: 8px;
+      padding: 10px 14px; font-weight: 700;
+      background: #63e; color: #fff; cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <a class="back" href="../../">← Voltar</a>
+  <div class="wrap">
+    <h1>🎮 Nome do Jogo</h1>
+    <p>Pegue as estrelas! Use o mouse, o dedo ou as setas. Aperte espaço para pausar.</p>
+    <div class="hud">
+      <span id="score">Pontos: 0</span>
+      <span id="best">Recorde: 0</span>
+    </div>
+    <canvas id="game" width="760" height="460" aria-label="Área do jogo"></canvas>
+    <div><button id="restart" type="button">Reiniciar</button></div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const bestEl = document.getElementById('best');
+    const restartBtn = document.getElementById('restart');
+
+    const W = canvas.width, H = canvas.height;
+    const BEST_KEY = 'nome-do-jogo-best'; // <-- troque pelo slug do seu jogo
+
+    let best = Number(localStorage.getItem(BEST_KEY) || 0);
+    let score, items, player, running, paused, lastTime, spawnTimer;
+
+    // ----- Entrada (teclado, mouse e toque) -----
+    const keys = { left: false, right: false };
+    let pointerX = null;
+
+    addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowLeft' || e.key === 'a') keys.left = true;
+      if (e.key === 'ArrowRight' || e.key === 'd') keys.right = true;
+      if (e.key === ' ') { paused = !paused; }
+    });
+    addEventListener('keyup', (e) => {
+      if (e.key === 'ArrowLeft' || e.key === 'a') keys.left = false;
+      if (e.key === 'ArrowRight' || e.key === 'd') keys.right = false;
+    });
+    function pointerMove(clientX) {
+      const rect = canvas.getBoundingClientRect();
+      pointerX = (clientX - rect.left) * (W / rect.width);
+    }
+    canvas.addEventListener('mousemove', (e) => pointerMove(e.clientX));
+    canvas.addEventListener('touchmove', (e) => { pointerMove(e.touches[0].clientX); e.preventDefault(); }, { passive: false });
+    canvas.addEventListener('touchstart', (e) => pointerMove(e.touches[0].clientX), { passive: true });
+
+    // ======================= LÓGICA DO JOGO =======================
+    function reset() {
+      score = 0;
+      items = [];
+      player = { x: W / 2, y: H - 30, w: 90, h: 16, speed: 7 };
+      running = true;
+      paused = false;
+      spawnTimer = 0;
+      pointerX = null;
+      updateHud();
+    }
+
+    function spawnItem() {
+      items.push({ x: 24 + Math.random() * (W - 48), y: -20, r: 14, vy: 2 + Math.random() * 2.5 });
+    }
+
+    function update(dt) {
+      // mover o jogador
+      if (pointerX !== null) {
+        player.x += (pointerX - player.x) * 0.25; // segue o dedo/mouse suavemente
+      }
+      if (keys.left) player.x -= player.speed;
+      if (keys.right) player.x += player.speed;
+      player.x = Math.max(player.w / 2, Math.min(W - player.w / 2, player.x));
+
+      // criar estrelas
+      spawnTimer += dt;
+      if (spawnTimer > 700) { spawnItem(); spawnTimer = 0; }
+
+      // mover estrelas e checar colisão
+      for (let i = items.length - 1; i >= 0; i--) {
+        const it = items[i];
+        it.y += it.vy;
+        const pegou = it.y + it.r >= player.y - player.h / 2 &&
+                      Math.abs(it.x - player.x) < player.w / 2 + it.r;
+        if (pegou) { score += 1; items.splice(i, 1); updateHud(); continue; }
+        if (it.y - it.r > H) items.splice(i, 1); // caiu fora (sem punição na demo)
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, W, H);
+
+      // estrelas
+      ctx.fillStyle = '#ffd978';
+      for (const it of items) {
+        ctx.beginPath();
+        ctx.arc(it.x, it.y, it.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // jogador (cestinha)
+      ctx.fillStyle = '#65e8ff';
+      ctx.fillRect(player.x - player.w / 2, player.y - player.h / 2, player.w, player.h);
+
+      if (paused) overlay('Pausado', 'Aperte espaço para continuar');
+    }
+    // ===================== FIM DA LÓGICA DO JOGO ===================
+
+    function overlay(title, subtitle) {
+      ctx.fillStyle = 'rgba(0,0,0,.5)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 40px Arial';
+      ctx.fillText(title, W / 2, H / 2 - 8);
+      if (subtitle) { ctx.font = '20px Arial'; ctx.fillText(subtitle, W / 2, H / 2 + 28); }
+    }
+
+    function updateHud() {
+      scoreEl.textContent = `Pontos: ${score}`;
+      bestEl.textContent = `Recorde: ${best}`;
+    }
+
+    function gameOver() {
+      running = false;
+      if (score > best) { best = score; localStorage.setItem(BEST_KEY, String(best)); updateHud(); }
+      overlay('Fim de jogo!', `Pontuação: ${score}`);
+    }
+
+    function loop(now) {
+      const dt = lastTime ? now - lastTime : 16;
+      lastTime = now;
+      if (running && !paused) update(dt);
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    restartBtn.addEventListener('click', () => { reset(); });
+    document.addEventListener('visibilitychange', () => { if (document.hidden) paused = true; });
+
+    reset();
+    lastTime = 0;
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>

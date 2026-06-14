@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nome do Jogo (2 Jogadores Online)</title>
+  <!--
+    TEMPLATE MULTIPLAYER ONLINE (2 jogadores) do Jubis Games — WebRTC via PeerJS (CDN), sem servidor próprio.
+    Como funciona: um jogador "Cria sala" e recebe um código; o outro "Entra" digitando o código.
+    Os dados vão direto entre os dois navegadores (peer-to-peer).
+    A demo sincroniza a posição de dois pontos coloridos. Onde está "=== LÓGICA DO JOGO ===",
+    troque por sua mecânica e use sendState() / onState() para sincronizar.
+
+    ATENÇÃO: o aperto de mão depende do broker público do PeerJS (pode cair/ter latência).
+    Para algo sério, hospede um PeerServer próprio. Sempre ofereça também um modo local/1 jogador.
+  -->
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; display: grid; place-items: center;
+      font-family: Arial, sans-serif; color: #fff;
+      background: radial-gradient(circle at top, #1d2b64 0%, #10172a 55%, #0a0f1d 100%);
+    }
+    a.back { position: fixed; top: 12px; left: 12px; z-index: 10; color: #c9b3ff; text-decoration: none; font-weight: 700; }
+    .wrap { width: min(92vw, 720px); text-align: center; }
+    h1 { margin: 0 0 8px; }
+    .lobby, .status { margin: 12px 0; }
+    input {
+      padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,.3);
+      background: #0f1f3b; color: #fff; font-size: 16px; text-transform: uppercase; width: 160px; text-align: center;
+    }
+    button {
+      border: none; border-radius: 8px; padding: 10px 14px; font-weight: 700;
+      background: #63e; color: #fff; cursor: pointer; margin: 4px;
+    }
+    code { background: rgba(255,255,255,.12); padding: 4px 8px; border-radius: 6px; font-size: 18px; letter-spacing: 2px; }
+    canvas {
+      width: 100%; max-width: 720px; border-radius: 14px; touch-action: none;
+      border: 2px solid rgba(255,255,255,.2); background: linear-gradient(180deg, #0f1f3b, #091326);
+    }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <a class="back" href="../../">← Voltar</a>
+  <div class="wrap">
+    <h1>🎮 Nome do Jogo — 2 Jogadores</h1>
+
+    <div class="lobby" id="lobby">
+      <p>Joguem juntos online! Um cria a sala, o outro entra com o código.</p>
+      <button id="hostBtn" type="button">Criar sala</button>
+      <span> ou </span>
+      <input id="codeInput" placeholder="CÓDIGO" maxlength="8" />
+      <button id="joinBtn" type="button">Entrar</button>
+      <p class="status" id="status"></p>
+    </div>
+
+    <div id="gameArea" class="hidden">
+      <p class="status" id="statusGame"></p>
+      <canvas id="game" width="720" height="460" aria-label="Área do jogo"></canvas>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <script>
+    const ROOM_PREFIX = 'jubis-nome-do-jogo-'; // <-- troque pelo slug; evita colisão de códigos no broker público
+    const statusEl = document.getElementById('status');
+    const statusGameEl = document.getElementById('statusGame');
+    const lobby = document.getElementById('lobby');
+    const gameArea = document.getElementById('gameArea');
+
+    let peer = null;
+    let conn = null;
+    let isHost = false;
+
+    function randomCode() {
+      // sem Math.random "previsível" demais; suficiente para uma sala efêmera
+      const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let s = '';
+      for (let i = 0; i < 4; i++) s += a[Math.floor(Math.random() * a.length)];
+      return s;
+    }
+
+    function setStatus(msg) { statusEl.textContent = msg; statusGameEl.textContent = msg; }
+
+    function startGameUI() {
+      lobby.classList.add('hidden');
+      gameArea.classList.remove('hidden');
+      setStatus(isHost ? 'Conectado! Você é o jogador 1 (azul).' : 'Conectado! Você é o jogador 2 (rosa).');
+      requestAnimationFrame(loop);
+    }
+
+    // ----- HOST: cria a sala -----
+    document.getElementById('hostBtn').addEventListener('click', () => {
+      isHost = true;
+      const code = randomCode();
+      peer = new Peer(ROOM_PREFIX + code);
+      setStatus('Criando sala...');
+      peer.on('open', () => {
+        statusEl.innerHTML = `Sala criada! Passe este código para o amigo: <code>${code}</code>`;
+      });
+      peer.on('connection', (c) => { conn = c; wireConn(); });
+      peer.on('error', (e) => setStatus('Erro: ' + e.type + ' (tente outro código ou recarregue)'));
+    });
+
+    // ----- GUEST: entra na sala -----
+    document.getElementById('joinBtn').addEventListener('click', () => {
+      const code = (document.getElementById('codeInput').value || '').trim().toUpperCase();
+      if (!code) { setStatus('Digite o código da sala.'); return; }
+      isHost = false;
+      peer = new Peer();
+      setStatus('Conectando...');
+      peer.on('open', () => {
+        conn = peer.connect(ROOM_PREFIX + code, { reliable: true });
+        wireConn();
+      });
+      peer.on('error', (e) => setStatus('Erro: ' + e.type + ' (confira o código)'));
+    });
+
+    function wireConn() {
+      conn.on('open', startGameUI);
+      conn.on('data', onState);
+      conn.on('close', () => setStatus('O outro jogador saiu.'));
+    }
+
+    // Enviar/receber estado
+    function sendState(obj) { if (conn && conn.open) conn.send(obj); }
+    function onState(data) {
+      // estado do OUTRO jogador
+      if (data && data.t === 'pos') { other.x = data.x; other.y = data.y; }
+    }
+
+    // ======================= LÓGICA DO JOGO =======================
+    // Demo mínima: cada jogador controla um ponto; as posições são sincronizadas.
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+
+    const me = { x: W / 2, y: isHost ? H - 60 : 60, color: '#65e8ff' };
+    const other = { x: W / 2, y: H / 2, color: '#ff6e8e' };
+
+    function pointerMove(clientX, clientY) {
+      const rect = canvas.getBoundingClientRect();
+      me.x = (clientX - rect.left) * (W / rect.width);
+      me.y = (clientY - rect.top) * (H / rect.height);
+      sendState({ t: 'pos', x: me.x, y: me.y });
+    }
+    canvas.addEventListener('mousemove', (e) => pointerMove(e.clientX, e.clientY));
+    canvas.addEventListener('touchmove', (e) => { pointerMove(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); }, { passive: false });
+
+    function dot(p, label) {
+      ctx.fillStyle = p.color;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 18, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.font = '12px Arial'; ctx.textAlign = 'center';
+      ctx.fillText(label, p.x, p.y - 24);
+    }
+
+    function loop() {
+      ctx.clearRect(0, 0, W, H);
+      // o "me" pinta com a cor do papel (host=azul, guest=rosa)
+      me.color = isHost ? '#65e8ff' : '#ff6e8e';
+      other.color = isHost ? '#ff6e8e' : '#65e8ff';
+      dot(other, 'Amigo');
+      dot(me, 'Você');
+      requestAnimationFrame(loop);
+    }
+    // ===================== FIM DA LÓGICA DO JOGO ===================
+  </script>
+</body>
+</html>

@@ -1,56 +1,94 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" width="640" height="400">
   <defs>
     <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#243a6b"/>
-      <stop offset=".5" stop-color="#1a2c2a"/>
-      <stop offset="1" stop-color="#0c1410"/>
+      <stop offset="0" stop-color="#3b2c6b"/><stop offset=".45" stop-color="#243a5e"/>
+      <stop offset=".75" stop-color="#1c3a2c"/><stop offset="1" stop-color="#0a140d"/>
     </linearGradient>
-    <radialGradient id="moon" cx="50%" cy="50%" r="50%">
-      <stop offset="0" stop-color="#fff7d6"/>
-      <stop offset="1" stop-color="#cfe0b0"/>
+    <radialGradient id="moon" cx="42%" cy="40%" r="60%">
+      <stop offset="0" stop-color="#fffefb"/><stop offset=".7" stop-color="#f3edcf"/><stop offset="1" stop-color="#c9d3a6"/>
     </radialGradient>
-    <linearGradient id="tw" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#9af3ff"/>
-      <stop offset="1" stop-color="#3aa0d6"/>
-    </linearGradient>
-    <filter id="glow"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <radialGradient id="halo" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#fff7cf" stop-opacity=".5"/><stop offset="1" stop-color="#fff7cf" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="tw" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b8f7ff"/><stop offset="1" stop-color="#2e8fd0"/></linearGradient>
+    <linearGradient id="path" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#caa978"/><stop offset="1" stop-color="#a98a5e"/></linearGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="soft"><feGaussianBlur stdDeviation="2.2"/></filter>
   </defs>
 
   <rect width="640" height="400" fill="url(#sky)"/>
-  <circle cx="540" cy="78" r="46" fill="url(#moon)"/>
-  <circle cx="555" cy="66" r="9" fill="#c3d6a6" opacity=".6"/>
-  <g fill="#fff" opacity=".7">
-    <circle cx="80" cy="60" r="2"/><circle cx="160" cy="40" r="1.6"/><circle cx="300" cy="70" r="2"/><circle cx="430" cy="44" r="1.6"/><circle cx="120" cy="110" r="1.4"/>
+  <circle cx="505" cy="92" r="120" fill="url(#halo)"/>
+  <circle cx="505" cy="92" r="52" fill="url(#moon)"/>
+  <circle cx="488" cy="78" r="9" fill="#d7dcb4" opacity=".7"/><circle cx="520" cy="104" r="6" fill="#d7dcb4" opacity=".7"/><circle cx="524" cy="74" r="4" fill="#d7dcb4" opacity=".6"/>
+  <g fill="#fff"><circle cx="70" cy="50" r="2"/><circle cx="150" cy="34" r="1.5"/><circle cx="250" cy="60" r="2"/><circle cx="360" cy="40" r="1.6"/><circle cx="120" cy="96" r="1.4"/><circle cx="300" cy="96" r="1.4"/><circle cx="600" cy="150" r="1.6"/></g>
+
+  <!-- colinas -->
+  <path d="M0 230 Q160 175 330 220 T640 210 L640 400 L0 400 Z" fill="#16331f" opacity=".85"/>
+  <path d="M0 270 Q200 230 420 265 T640 260 L640 400 L0 400 Z" fill="#0f2616"/>
+
+  <!-- base/castelo -->
+  <g>
+    <rect x="22" y="232" width="96" height="86" rx="6" fill="#5a6478"/>
+    <rect x="22" y="232" width="96" height="14" fill="#6b7690"/>
+    <rect x="30" y="222" width="14" height="16" fill="#5a6478"/><rect x="54" y="222" width="14" height="16" fill="#5a6478"/><rect x="78" y="222" width="14" height="16" fill="#5a6478"/><rect x="100" y="222" width="14" height="16" fill="#5a6478"/>
+    <rect x="58" y="270" width="26" height="48" rx="13" fill="#2a3145"/>
+    <circle cx="71" cy="258" r="9" fill="#ffd978"/>
   </g>
 
   <!-- caminho -->
-  <path d="M-20 250 C 120 250 120 150 260 150 S 420 300 600 300 L 700 300" fill="none" stroke="#b89f76" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M-20 250 C 120 250 120 150 260 150 S 420 300 600 300 L 700 300" fill="none" stroke="#ffe8bf" stroke-width="4" stroke-dasharray="8 12" opacity=".7"/>
+  <path d="M105 300 C 230 300 230 175 350 175 S 520 320 700 320" fill="none" stroke="url(#path)" stroke-width="42" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M105 300 C 230 300 230 175 350 175 S 520 320 700 320" fill="none" stroke="#ffe8bf" stroke-width="4" stroke-dasharray="9 13" opacity=".75"/>
 
   <!-- slot brilhando -->
-  <circle cx="330" cy="245" r="22" fill="#6bffa8" opacity=".35"/>
-  <circle cx="330" cy="245" r="22" fill="none" stroke="#eaffff" stroke-width="3" stroke-dasharray="6 7"/>
-  <text x="330" y="253" font-family="Arial" font-size="26" font-weight="bold" fill="#fff" text-anchor="middle">+</text>
+  <g filter="url(#glow)"><circle cx="300" cy="250" r="22" fill="#6bffa8" opacity=".4"/></g>
+  <circle cx="300" cy="250" r="22" fill="none" stroke="#eaffff" stroke-width="3" stroke-dasharray="6 7"/>
+  <text x="300" y="259" font-family="Arial" font-size="26" font-weight="bold" fill="#fff" text-anchor="middle">+</text>
 
   <!-- torre -->
-  <ellipse cx="200" cy="262" rx="26" ry="10" fill="#000" opacity=".4"/>
-  <rect x="184" y="214" width="32" height="44" rx="8" fill="#2a3566"/>
-  <circle cx="200" cy="206" r="24" fill="url(#tw)" stroke="#fff" stroke-width="3"/>
-  <circle cx="200" cy="206" r="9" fill="#eaffff"/>
+  <ellipse cx="205" cy="252" rx="30" ry="11" fill="#000" opacity=".4"/>
+  <rect x="188" y="206" width="34" height="48" rx="9" fill="#2b3568"/>
+  <rect x="193" y="214" width="24" height="6" rx="3" fill="#46538f"/>
+  <g filter="url(#glow)"><circle cx="205" cy="196" r="26" fill="url(#tw)" stroke="#fff" stroke-width="3"/></g>
+  <circle cx="205" cy="196" r="10" fill="#f2ffff"/>
+  <!-- raio do tiro -->
+  <path d="M228 198 L300 230" stroke="#bdeeff" stroke-width="4" stroke-linecap="round" opacity=".85"/>
+  <circle cx="300" cy="230" r="6" fill="#fff"/>
 
-  <!-- zumbis -->
+  <!-- horda de zumbis -->
   <g>
-    <ellipse cx="430" cy="296" rx="22" ry="8" fill="#000" opacity=".4"/>
-    <circle cx="430" cy="276" r="20" fill="#62c56b"/>
-    <circle cx="423" cy="272" r="3.4" fill="#1d3a22"/><circle cx="437" cy="272" r="3.4" fill="#1d3a22"/>
+    <g transform="translate(415,272)">
+      <ellipse cx="0" cy="26" rx="22" ry="8" fill="#000" opacity=".4"/>
+      <rect x="-13" y="-6" width="26" height="30" rx="9" fill="#62c56b"/>
+      <rect x="-20" y="0" width="8" height="7" rx="3" fill="#62c56b"/><rect x="12" y="0" width="8" height="7" rx="3" fill="#62c56b"/>
+      <circle cx="0" cy="-12" r="13" fill="#6cd075"/>
+      <circle cx="-5" cy="-13" r="2.6" fill="#1d3a22"/><circle cx="5" cy="-13" r="2.6" fill="#1d3a22"/>
+    </g>
+    <g transform="translate(478,292) scale(.82)">
+      <ellipse cx="0" cy="26" rx="22" ry="8" fill="#000" opacity=".4"/>
+      <rect x="-13" y="-6" width="26" height="30" rx="9" fill="#7bd47f"/>
+      <circle cx="0" cy="-12" r="13" fill="#86db89"/>
+      <circle cx="-5" cy="-13" r="2.6" fill="#1d3a22"/><circle cx="5" cy="-13" r="2.6" fill="#1d3a22"/>
+    </g>
+    <!-- chefão -->
+    <g transform="translate(560,300)">
+      <ellipse cx="0" cy="40" rx="34" ry="11" fill="#000" opacity=".45"/>
+      <rect x="-22" y="-8" width="44" height="48" rx="13" fill="#8a1b1b"/>
+      <circle cx="0" cy="-18" r="22" fill="#a32525"/>
+      <circle cx="-8" cy="-20" r="4" fill="#ffd14d"/><circle cx="8" cy="-20" r="4" fill="#ffd14d"/>
+      <text x="0" y="-44" font-size="26" text-anchor="middle">👑</text>
+    </g>
   </g>
-  <g>
-    <ellipse cx="500" cy="306" rx="18" ry="7" fill="#000" opacity=".4"/>
-    <circle cx="500" cy="290" r="16" fill="#7bd47f"/>
-    <circle cx="494" cy="287" r="2.8" fill="#1d3a22"/><circle cx="506" cy="287" r="2.8" fill="#1d3a22"/>
+
+  <!-- grama -->
+  <g stroke="#2f6b39" stroke-width="3" stroke-linecap="round">
+    <path d="M30 392 l0 -12"/><path d="M60 394 l0 -10"/><path d="M120 392 l0 -12"/><path d="M380 394 l0 -10"/><path d="M620 392 l0 -12"/>
   </g>
 
   <!-- título -->
-  <text x="320" y="64" font-family="Arial Black, Arial" font-size="46" font-weight="900" fill="#ffd978" text-anchor="middle" filter="url(#glow)">DEFESA ZUMBI</text>
-  <text x="320" y="104" font-family="Arial Black, Arial" font-size="30" font-weight="900" fill="#65e8ff" text-anchor="middle">★ VIP ★</text>
+  <text x="320" y="60" font-family="Arial Black, Arial" font-size="50" font-weight="900" fill="#ffd978" text-anchor="middle" filter="url(#glow)">DEFESA ZUMBI</text>
+  <g transform="translate(320,98)">
+    <rect x="-58" y="-22" width="116" height="40" rx="10" fill="#8b1f3a"/>
+    <rect x="-58" y="-22" width="116" height="40" rx="10" fill="none" stroke="#ffd978" stroke-width="2"/>
+    <text x="0" y="8" font-family="Arial Black, Arial" font-size="26" font-weight="900" fill="#fff" text-anchor="middle">★ VIP ★</text>
+  </g>
 </svg>

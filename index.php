@@ -143,25 +143,6 @@ function e(string $s): string {
     </section>
 
 
-    <section class="vip-highlight" aria-labelledby="vip-plano">
-      <div class="vip-highlight__content">
-        <p class="vip-highlight__tag">⏳ em preparação</p>
-        <h2 id="vip-plano">VIP vai entrar depois, quando o jogo estiver perfeito</h2>
-        <p>
-          Perfeito! Seguindo sua orientação: <strong>não vamos ativar cobrança agora</strong>.
-          Primeiro vamos deixar os jogos redondinhos, e só depois liberamos o VIP.
-        </p>
-        <ul class="about__list">
-          <li>🧪 Foco atual: melhorar qualidade dos jogos</li>
-          <li>🔒 Cobrança pausada para não cair dinheiro no vazio</li>
-          <li>✅ Quando você falar para ativar, a gente publica o VIP</li>
-        </ul>
-      </div>
-      <figure class="vip-highlight__media">
-        <img src="assets/img/vip-pass.svg" alt="Banner do VIP em preparação para lançamento futuro" loading="lazy" />
-      </figure>
-    </section>
-
     <section id="sobre" class="about">
       <div class="about__card">
         <h2>Sobre o Jubis Games</h2>

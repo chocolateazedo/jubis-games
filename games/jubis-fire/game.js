@@ -191,6 +191,7 @@ function startMatch(room) {
   isHost = (hostPeerId === myPeerId);
 
   setupThree();
+  scene.clear(); // remove o mapa/objetos da partida anterior (evita sobreposição)
   const built = buildArena(scene, room.map || 'backrooms');
   colliders = built.colliders; spawns = built.spawns; groundAt = built.groundAt; elevator = built.elevator; occluders = built.occluders; faded = [];
   resetGrenades();
@@ -226,6 +227,7 @@ function startTraining() {
   status = 'playing'; winner = null;
 
   setupThree();
+  scene.clear(); // remove o mapa/objetos da partida anterior (evita sobreposição)
   const built = buildArena(scene, selectedMap);
   colliders = built.colliders; spawns = built.spawns; groundAt = built.groundAt; elevator = built.elevator; occluders = built.occluders; faded = [];
   resetGrenades();

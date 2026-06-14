@@ -80,7 +80,7 @@ export function buildBody(preset) {
 
   g.add(legL, legR, torso, armL, armR, head);
   g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  if (big) g.scale.setScalar(2.2);
+  if (big) g.scale.setScalar(1.4);
 
   return { group: g, parts, t: 0 };
 }

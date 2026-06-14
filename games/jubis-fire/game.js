@@ -22,6 +22,9 @@ const entities = new Map();   // peerId -> entity
 let me = null;
 let status = 'lobby';         // 'lobby' | 'playing' | 'ended'
 let winner = null;
+let training = false;         // modo treino offline contra bots
+const BOT_SPEED = CONFIG.MOVE_SPEED * 0.8;
+const BOT_NAMES = ['Robô Zé', 'Bot Tina', 'CPU Rex', 'Dummy', 'Bot Max', 'Robô Lia'];
 
 // câmera / input
 let yaw = 0, pitch = 0.35;
@@ -192,6 +195,81 @@ function startMatch(room) {
   requestAnimationFrame(loop);
 }
 
+// ---- MODO TREINO (offline contra bots) ----
+function startTraining() {
+  training = true; isHost = true; net = null;
+  status = 'playing'; winner = null;
+
+  setupThree();
+  const built = buildArena(scene);
+  colliders = built.colliders; spawns = built.spawns;
+  buildZoneMesh();
+
+  const myId = myPeerId || 'me-local';
+  const roster = [{ peerId: myId, name: myName || $('pname').value.trim() || 'Você', char: selectedChar }];
+  const pool = CHARACTERS.map((c) => c.id).filter((id) => id !== selectedChar);
+  for (let i = 0; i < 3; i++) roster.push({ peerId: 'bot-' + i, name: BOT_NAMES[i], char: pool[(i * 3 + 1) % pool.length], bot: true });
+
+  entities.clear();
+  roster.forEach((p, i) => {
+    const e = createEntity(p, i, p.peerId === myId);
+    if (p.bot) { e.isBot = true; e.ai = { fireCd: 1 + Math.random() * 2, dir: Math.random() * Math.PI * 2, dirCd: 0 }; }
+  });
+  me = entities.get(myId);
+
+  host.startTime = nowS(); host.dmgAccum = new Map(); host.lastNet = 0;
+
+  $('screen-lobby').classList.add('hidden');
+  $('screen-game').classList.remove('hidden');
+  $('touchControls').classList.toggle('hidden', !isTouch);
+  $('endBox').classList.add('hidden');
+
+  clock = new THREE.Clock();
+  requestAnimationFrame(loop);
+}
+
+function updateBots(dt) {
+  const safeR = host.zoneR;
+  for (const e of entities.values()) {
+    if (!e.isBot || !e.alive) continue;
+    const ai = e.ai;
+    // alvo vivo mais próximo
+    let target = null, td = Infinity;
+    for (const o of entities.values()) { if (o === e || !o.alive) continue; const d = dist2(e.pos, o.pos); if (d < td) { td = d; target = o; } }
+    const cx = e.pos.x, cz = e.pos.z;
+    const distC = Math.hypot(cx, cz);
+    let dx, dz;
+    if (distC > safeR - 3) { dx = -cx; dz = -cz; }            // volta pra dentro da zona
+    else {
+      ai.dirCd -= dt;
+      if (ai.dirCd <= 0) { ai.dir += (Math.random() - 0.5) * 1.5; ai.dirCd = 0.6 + Math.random() * 1.2; }
+      dx = Math.sin(ai.dir); dz = Math.cos(ai.dir);
+      if (target && Math.sqrt(td) < 26) {                      // aproxima + dá uma circulada no alvo
+        const ax = target.pos.x - cx, az = target.pos.z - cz, al = Math.hypot(ax, az) || 1;
+        dx = (ax / al) * 0.7 + (-az / al) * 0.5;
+        dz = (az / al) * 0.7 + (ax / al) * 0.5;
+      }
+    }
+    const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
+    e.pos.x += dx * BOT_SPEED * dt; e.pos.z += dz * BOT_SPEED * dt; e.pos.y = 0;
+    resolveCollisions(e.pos, CONFIG.PLAYER_R, colliders);
+    const aimT = target && Math.sqrt(td) < 45;
+    e.ry = aimT ? Math.atan2(target.pos.x - cx, target.pos.z - cz) : Math.atan2(dx, dz);
+    e.anim = 'run';
+    e.group.position.copy(e.pos); e.group.rotation.y = e.ry;
+    // tiro com imprecisão
+    ai.fireCd -= dt;
+    if (aimT && ai.fireCd <= 0) {
+      ai.fireCd = 0.8 + Math.random() * 1.4;
+      const from = e.pos.clone(); from.y += 1.3;
+      const to = target.pos.clone(); to.y += 1.0;
+      tracer(from, to);
+      if (Math.random() < 0.45) damage(target, CONFIG.BULLET_DMG);
+    }
+  }
+}
+const dist2 = (a, b) => { const dx = a.x - b.x, dz = a.z - b.z; return dx * dx + dz * dz; };
+
 function setupThree() {
   if (renderer) return;
   renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -285,6 +363,7 @@ function loop() {
   const dt = Math.min(clock.getDelta(), 0.05);
   if (status === 'playing') {
     updateLocal(dt);
+    if (training) updateBots(dt);
     if (isHost) hostStep(dt); else { sendAccum += dt; if (sendAccum >= 1 / CONFIG.NET_HZ) { sendInput(); sendAccum = 0; } }
     updateRemotes(dt);
     handleFire(dt);
@@ -329,7 +408,7 @@ function updateLocal(dt) {
 
 function updateRemotes(dt) {
   for (const e of entities.values()) {
-    if (e === me) continue;
+    if (e === me || e.isBot) continue; // bots são movidos pela IA, não pela rede
     e.pos.lerp(e.targetPos, Math.min(1, dt * 12));
     e.ry = lerpAngle(e.ry, e.targetRy, Math.min(1, dt * 12));
     e.group.position.copy(e.pos);
@@ -379,6 +458,7 @@ function damage(e, amount) {
 }
 
 function broadcastWorld() {
+  if (!net) return; // modo treino: não há rede
   const players = {};
   for (const e of entities.values()) {
     players[e.peerId] = { p: [e.pos.x, e.pos.y, e.pos.z], ry: e.ry, a: e.anim, hp: e.hp, alive: e.alive };
@@ -387,7 +467,7 @@ function broadcastWorld() {
 }
 
 function sendInput() {
-  if (!me) return;
+  if (!me || !net) return;
   net.sendInput({ p: [me.pos.x, me.pos.y, me.pos.z], ry: me.ry, a: me.anim });
 }
 
@@ -465,7 +545,7 @@ function showEnd(customMsg) {
   $('endBox').classList.remove('hidden');
   let txt = customMsg;
   if (!txt) {
-    if (winner === myPeerId) txt = '🏆 Vitória Royale! Você foi o último de pé!';
+    if (me && winner === me.peerId) txt = '🏆 Vitória Royale! Você foi o último de pé!';
     else if (winner) txt = `Fim de jogo! Vencedor: ${entities.get(winner)?.name || '???'}`;
     else txt = 'Fim de jogo!';
   }
@@ -475,7 +555,7 @@ function showEnd(customMsg) {
 }
 
 function backToLobby() {
-  status = 'lobby';
+  status = 'lobby'; training = false;
   net?.destroy(); net = null;
   for (const e of entities.values()) scene.remove(e.group);
   entities.clear(); me = null;
@@ -514,9 +594,11 @@ function bindInput() {
   $('btnQuick').addEventListener('click', quickJoin);
   $('btnCreate').addEventListener('click', createPrivate);
   $('btnJoin').addEventListener('click', joinPrivate);
+  $('btnTrain').addEventListener('click', startTraining);
   $('btnStart').addEventListener('click', startGameAsHost);
   $('btnLeaveRoom').addEventListener('click', leaveRoom);
   $('btnBackLobby').addEventListener('click', backToLobby);
+  $('btnExit').addEventListener('click', backToLobby);
 }
 
 function updateMoveFromKeys() {

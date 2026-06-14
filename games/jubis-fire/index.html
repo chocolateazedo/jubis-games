@@ -87,8 +87,11 @@
 
       <div id="joinPanel">
         <div class="divider"></div>
-        <div class="row"><button id="btnQuick" class="btn" disabled>🎮 Procurar partida</button></div>
-        <p class="sub" style="margin:8px 0 0">Entra numa sala com outros jogadores. Começa quando o host iniciar.</p>
+        <div class="row">
+          <button id="btnQuick" class="btn" disabled>🎮 Procurar partida</button>
+          <button id="btnTrain" class="btn alt">🤖 Modo treino</button>
+        </div>
+        <p class="sub" style="margin:8px 0 0">Partida online com outros jogadores, ou treino offline contra bots.</p>
         <div class="divider"></div>
         <p class="lbl" style="text-align:center">Jogar com amigos</p>
         <div class="row">
@@ -121,6 +124,7 @@
         <span id="aliveCount">Vivos: —</span>
         <span id="zoneInfo">Zona</span>
       </div>
+      <button id="btnExit" class="btn ghost" style="position:fixed; top:10px; right:12px; pointer-events:auto;">Sair</button>
       <div id="hpwrap">
         <div id="hpLabel">Vida: <span id="hpText">100</span></div>
         <div id="hpbar"><div id="hpFill"></div></div>

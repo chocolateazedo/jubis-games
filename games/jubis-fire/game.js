@@ -630,6 +630,10 @@ function hostStep(dt) {
     if (e.frozen) { e.frozenTimer -= dt; if (e.frozenTimer <= 0) { e.frozen = false; e.frozenTimer = 0; } }
   }
 
+  // regeneração de vida automática (a cada 1 segundo)
+  host.regenT = (host.regenT || 0) + dt;
+  if (host.regenT >= 1) { host.regenT -= 1; for (const e of entities.values()) if (e.alive && e.hp < e.maxHp) heal(e, CONFIG.REGEN); }
+
   // pacotes de bala surgem a cada 30s
   host.pickupTimer -= dt;
   if (host.pickupTimer <= 0) { host.pickupTimer = CONFIG.PICKUP_EVERY; if (pickups.length < CONFIG.PICKUP_MAX) spawnPickup(); }

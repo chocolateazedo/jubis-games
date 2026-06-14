@@ -1,0 +1,8 @@
+{
+  "title": "Plantão dos Vovôs",
+  "description": "Aventura top-down: seja o cuidador de uma casa de repouso e atenda os idosos a tempo!",
+  "emoji": "🧓",
+  "tags": ["aventura", "cuidado", "1 jogador"],
+  "entry": "index.html",
+  "order": 4
+}

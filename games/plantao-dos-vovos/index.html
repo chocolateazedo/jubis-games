@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>Plantão dos Vovôs</title>
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body {
+      margin: 0; min-height: 100vh; display: grid; place-items: center;
+      font-family: 'Rubik', Arial, sans-serif; color: #3a2b1a;
+      background: radial-gradient(circle at top, #ffe9c7 0%, #f6d9a8 55%, #e9c48a 100%);
+    }
+    a.back { position: fixed; top: 12px; left: 12px; z-index: 20; color: #6b4a22; text-decoration: none; font-weight: 800; }
+    .wrap { width: min(96vw, 940px); text-align: center; }
+    h1 { margin: 4px 0 2px; }
+    p.sub { margin: 0 0 8px; opacity: .85; font-size: 14px; }
+    .hud { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; font-weight: 800; margin: 6px 0; }
+    .hud span { background: rgba(255,255,255,.65); padding: 4px 10px; border-radius: 10px; }
+    canvas {
+      width: 100%; max-width: 940px; border-radius: 14px; display: block;
+      border: 3px solid #b9874a; background: #f3e2c2; box-shadow: 0 10px 30px rgba(0,0,0,.25);
+      touch-action: none;
+    }
+    button {
+      margin-top: 10px; border: none; border-radius: 10px; padding: 10px 16px;
+      font-weight: 800; background: #e8853b; color: #fff; cursor: pointer; font-size: 15px;
+    }
+    .touch { display: none; }
+    @media (hover: none) and (pointer: coarse) { .touch { display: block; } }
+    #joy { position: fixed; left: 24px; bottom: 26px; width: 120px; height: 120px; border-radius: 50%;
+           background: rgba(255,255,255,.35); border: 2px solid rgba(120,80,30,.4); z-index: 15; }
+    #stick { position: absolute; left: 50%; top: 50%; width: 50px; height: 50px; margin: -25px; border-radius: 50%; background: rgba(232,133,59,.8); }
+    #act { position: fixed; right: 26px; bottom: 40px; width: 96px; height: 96px; border-radius: 50%; z-index: 15;
+           background: rgba(56,160,80,.85); color: #fff; border: none; font-weight: 800; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <a class="back" href="../../">← Voltar</a>
+  <div class="wrap">
+    <h1>🧓 Plantão dos Vovôs</h1>
+    <p class="sub">Atravesse os cômodos, pegue o item certo e atenda cada vovô antes da paciência acabar. Mover: <kbd>WASD/setas</kbd> · Agir: <kbd>E</kbd></p>
+    <div class="hud">
+      <span id="time">⏱ 120</span>
+      <span id="score">⭐ 0</span>
+      <span id="best">🏆 0</span>
+      <span id="carry">🧺 mãos vazias</span>
+    </div>
+    <canvas id="game" width="920" height="600" aria-label="Casa de repouso"></canvas>
+    <div><button id="restart" type="button">Reiniciar plantão</button></div>
+  </div>
+
+  <div class="touch">
+    <div id="joy"><div id="stick"></div></div>
+    <button id="act" type="button">AGIR</button>
+  </div>
+
+  <script>
+    const cv = document.getElementById('game');
+    const ctx = cv.getContext('2d');
+    const W = cv.width, H = cv.height;
+    const BEST_KEY = 'plantao-dos-vovos-best';
+    const SHIFT = 120, PATIENCE = 13, RANGE = 62;
+    const NEED_EMOJI = { pill: '💊', shot: '💉', food: '🍲', water: '💧', bath: '🚿', company: '❤️' };
+    const NEED_NAME = { pill: 'comprimido', shot: 'vacina', food: 'comida', water: 'água', bath: 'banho', company: 'companhia' };
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+    // ---------- mapa: cômodos com portas ----------
+    const walls = [];
+    function wall(x, y, w, h) { walls.push({ x, y, w, h }); }
+    // borda
+    wall(0, 0, W, 16); wall(0, H - 16, W, 16); wall(0, 0, 16, H); wall(W - 16, 0, 16, H);
+    // parede superior do corredor (y=264) com portas nos 3 cômodos de cima
+    for (const [a, b] of [[16, 131], [187, 439], [495, 740], [796, 904]]) wall(a, 264, b - a, 14);
+    // parede inferior do corredor (y=362) com portas
+    for (const [a, b] of [[16, 131], [187, 439], [495, 740], [796, 904]]) wall(a, 362, b - a, 14);
+    // divisórias verticais (cima e baixo)
+    wall(302, 16, 14, 248); wall(618, 16, 14, 248);
+    wall(302, 362, 14, 222); wall(618, 362, 14, 222);
+
+    // rótulos dos cômodos
+    const rooms = [
+      { name: 'Farmácia', x: 159, y: 36 }, { name: 'Cozinha', x: 467, y: 36 }, { name: 'Banho/Quarto', x: 768, y: 36 },
+      { name: 'Quarto', x: 159, y: 384 }, { name: 'Sala', x: 467, y: 384 }, { name: 'Quarto', x: 768, y: 384 },
+    ];
+
+    // ---------- estações ----------
+    const stations = [
+      { type: 'pill', emoji: '💊', x: 90, y: 110, name: 'Comprimidos' },
+      { type: 'shot', emoji: '💉', x: 230, y: 110, name: 'Vacinas' },
+      { type: 'food', emoji: '🍲', x: 385, y: 110, name: 'Cozinha' },
+      { type: 'water', emoji: '🚰', x: 545, y: 110, name: 'Bebedouro' },
+      { type: 'bath', emoji: '🚿', x: 690, y: 110, name: 'Rouparia' },
+    ];
+
+    // ---------- idosos ----------
+    const elderEmojis = ['🧓', '👵', '👴', '👵', '🧓'];
+    let elders = [];
+    function makeElders() {
+      const spots = [[840, 180], [159, 480], [410, 480], [545, 480], [768, 480]];
+      elders = spots.map((s, i) => ({ x: s[0], y: s[1], emoji: elderEmojis[i], need: null, patience: 0, cooldown: 2 + i * 0.6, happy: 0, sad: 0 }));
+    }
+
+    const player = { x: 467, y: 313, r: 16, carry: null, moving: false };
+    let score, timeLeft, running, spawnTimer, served, toastMsg, toastT, time, floaters;
+
+    function reset() {
+      score = 0; timeLeft = SHIFT; running = true; spawnTimer = 3; served = 0;
+      toastMsg = ''; toastT = 0; time = 0; floaters = [];
+      player.x = 467; player.y = 313; player.carry = null;
+      makeElders(); updateHud();
+    }
+
+    let best = Number(localStorage.getItem(BEST_KEY) || 0);
+    function updateHud() {
+      document.getElementById('time').textContent = '⏱ ' + Math.ceil(timeLeft);
+      document.getElementById('score').textContent = '⭐ ' + score;
+      document.getElementById('best').textContent = '🏆 ' + best;
+      document.getElementById('carry').textContent = player.carry ? ('🧺 ' + NEED_EMOJI[player.carry]) : '🧺 mãos vazias';
+    }
+    function toast(m) { toastMsg = m; toastT = 1.4; }
+    function floater(x, y, txt, color) { floaters.push({ x, y, txt, color, life: 1.1 }); }
+
+    // ---------- som (Web Audio) ----------
+    let actx;
+    function A() { if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } } if (actx.state === 'suspended') actx.resume(); return actx; }
+    function beep(freq, dur, type, vol, slideTo) {
+      const c = A(); if (!c) return; const t = c.currentTime;
+      const o = c.createOscillator(); o.type = type || 'square'; o.frequency.setValueAtTime(freq, t);
+      if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+      const g = c.createGain(); g.gain.setValueAtTime(vol || 0.2, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(c.destination); o.start(t); o.stop(t + dur + 0.02);
+    }
+    const sndPickup = () => beep(520, 0.08, 'square', 0.18, 760);
+    const sndDeliver = () => { beep(660, 0.1, 'triangle', 0.2); setTimeout(() => beep(990, 0.13, 'triangle', 0.2), 90); };
+    const sndFail = () => beep(220, 0.28, 'sawtooth', 0.22, 80);
+    const sndEnd = () => { beep(523, 0.18, 'triangle', 0.22); setTimeout(() => beep(392, 0.3, 'triangle', 0.22), 160); };
+
+    // ---------- input ----------
+    const keys = {};
+    addEventListener('keydown', (e) => {
+      keys[e.code] = true; A();
+      if (['KeyE', 'Space', 'Enter'].includes(e.code)) { action(); e.preventDefault(); }
+    });
+    addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+    const joy = { x: 0, y: 0, id: null, cx: 0, cy: 0 };
+    const joyEl = document.getElementById('joy'), stickEl = document.getElementById('stick');
+    joyEl.addEventListener('touchstart', (e) => {
+      A(); const t = e.changedTouches[0]; joy.id = t.identifier;
+      const r = joyEl.getBoundingClientRect(); joy.cx = r.left + r.width / 2; joy.cy = r.top + r.height / 2; e.preventDefault();
+    }, { passive: false });
+    addEventListener('touchmove', (e) => {
+      for (const t of e.changedTouches) if (t.identifier === joy.id) {
+        joy.x = clamp((t.clientX - joy.cx) / 50, -1, 1); joy.y = clamp((t.clientY - joy.cy) / 50, -1, 1);
+        stickEl.style.transform = `translate(${joy.x * 32}px,${joy.y * 32}px)`;
+      }
+    }, { passive: false });
+    addEventListener('touchend', (e) => {
+      for (const t of e.changedTouches) if (t.identifier === joy.id) { joy.id = null; joy.x = joy.y = 0; stickEl.style.transform = ''; }
+    });
+    document.getElementById('act').addEventListener('touchstart', (e) => { A(); action(); e.preventDefault(); }, { passive: false });
+    document.getElementById('restart').addEventListener('click', reset);
+
+    const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+    function action() {
+      if (!running) return;
+      let target = null, td = 1e9;
+      for (const e of elders) { if (!e.need) continue; const d = dist(player, e); if (d < RANGE && d < td) { td = d; target = e; } }
+      if (target && (target.need === 'company' || player.carry === target.need)) {
+        score += 10; served++; target.happy = 1.0;
+        if (target.need !== 'company') player.carry = null;
+        floater(target.x, target.y - 40, '+10', '#2e7d32'); sndDeliver();
+        target.need = null; target.cooldown = 2; updateHud(); return;
+      }
+      let st = null, sd = 1e9;
+      for (const s of stations) { const d = dist(player, s); if (d < RANGE && d < sd) { sd = d; st = s; } }
+      if (st) { player.carry = st.type; sndPickup(); toast('Pegou ' + st.emoji); updateHud(); return; }
+      if (target) toast('Precisa de ' + NEED_EMOJI[target.need] + ' ' + NEED_NAME[target.need]);
+    }
+
+    function spawnInterval() { return 4.6 - (1 - timeLeft / SHIFT) * 2.8; }
+    function randNeed() { const p = ['pill', 'shot', 'food', 'water', 'bath', 'company']; return p[Math.floor(Math.random() * p.length)]; }
+
+    function update(dt) {
+      time += dt;
+      let mx = (keys['KeyD'] || keys['ArrowRight'] ? 1 : 0) - (keys['KeyA'] || keys['ArrowLeft'] ? 1 : 0) + joy.x;
+      let my = (keys['KeyS'] || keys['ArrowDown'] ? 1 : 0) - (keys['KeyW'] || keys['ArrowUp'] ? 1 : 0) + joy.y;
+      const len = Math.hypot(mx, my);
+      player.moving = len > 0.1;
+      if (len > 1) { mx /= len; my /= len; }
+      const SPEED = 178;
+      player.x += mx * SPEED * dt; collide();
+      player.y += my * SPEED * dt; collide();
+
+      for (const e of elders) {
+        if (e.need) { e.patience -= dt; if (e.patience <= 0) { e.need = null; e.cooldown = 3; e.sad = 1.4; score = Math.max(0, score - 5); floater(e.x, e.y - 40, '-5', '#c0392b'); sndFail(); updateHud(); } }
+        else if (e.cooldown > 0) e.cooldown -= dt;
+        if (e.happy > 0) e.happy -= dt; if (e.sad > 0) e.sad -= dt;
+      }
+
+      spawnTimer -= dt;
+      if (spawnTimer <= 0) {
+        const idle = elders.filter((e) => !e.need && e.cooldown <= 0);
+        if (idle.length) { const e = idle[Math.floor(Math.random() * idle.length)]; e.need = randNeed(); e.patience = PATIENCE; }
+        spawnTimer = spawnInterval();
+      }
+
+      for (let i = floaters.length - 1; i >= 0; i--) { const f = floaters[i]; f.y -= 34 * dt; f.life -= dt; if (f.life <= 0) floaters.splice(i, 1); }
+
+      timeLeft -= dt;
+      if (timeLeft <= 0) { timeLeft = 0; running = false; sndEnd(); if (score > best) { best = score; localStorage.setItem(BEST_KEY, String(best)); } }
+      if (toastT > 0) toastT -= dt;
+      updateHud();
+    }
+
+    function collide() {
+      for (const w of walls) {
+        const cx = clamp(player.x, w.x, w.x + w.w), cy = clamp(player.y, w.y, w.y + w.h);
+        const dx = player.x - cx, dy = player.y - cy, d2 = dx * dx + dy * dy;
+        if (d2 < player.r * player.r && d2 > 1e-6) { const d = Math.sqrt(d2); player.x = cx + dx / d * player.r; player.y = cy + dy / d * player.r; }
+      }
+    }
+
+    // ---------- desenho ----------
+    function rrect(x, y, w, h, r, color) { ctx.fillStyle = color; ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fill(); }
+    function emoji(ch, x, y, size) { ctx.font = size + 'px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(ch, x, y); }
+    function shadow(x, y, r) { ctx.fillStyle = 'rgba(0,0,0,.14)'; ctx.beginPath(); ctx.ellipse(x, y + 16, r, r * 0.45, 0, 0, 7); ctx.fill(); }
+
+    function draw() {
+      // piso quadriculado
+      for (let x = 16; x < W - 16; x += 38) for (let y = 16; y < H - 16; y += 38) { ctx.fillStyle = ((x + y) / 38 | 0) % 2 ? '#ead7ad' : '#f3e7c7'; ctx.fillRect(x, y, 38, 38); }
+      // rótulos dos cômodos
+      ctx.fillStyle = '#9a7942'; ctx.font = 'bold 14px Arial'; ctx.textAlign = 'center';
+      for (const r of rooms) ctx.fillText(r.name, r.x, r.y);
+      // paredes
+      for (const w of walls) rrect(w.x, w.y, w.w, w.h, 5, '#b3823f');
+
+      // estações
+      for (const s of stations) {
+        rrect(s.x - 34, s.y - 32, 68, 48, 10, '#fff7e6');
+        emoji(s.emoji, s.x, s.y - 8, 32);
+        ctx.fillStyle = '#5b4327'; ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center';
+        ctx.fillText(s.name, s.x, s.y + 24);
+      }
+
+      // idosos
+      for (const e of elders) {
+        shadow(e.x, e.y, 18);
+        rrect(e.x - 20, e.y - 4, 40, 30, 8, '#caa46a');
+        emoji(e.emoji, e.x, e.y, 36);
+        if (e.happy > 0) { ctx.globalAlpha = Math.min(1, e.happy); emoji('😊', e.x + 22, e.y - 22 - (1 - e.happy) * 10, 22); ctx.globalAlpha = 1; }
+        if (e.sad > 0) { ctx.globalAlpha = Math.min(1, e.sad); emoji('💢', e.x + 22, e.y - 22 - (1.4 - e.sad) * 10, 22); ctx.globalAlpha = 1; }
+        if (e.need) {
+          const pulse = 1 + Math.sin(time * 6) * 0.06;
+          rrect(e.x - 24, e.y - 66, 48, 38, 10, '#ffffff');
+          ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(e.x - 6, e.y - 30); ctx.lineTo(e.x + 6, e.y - 30); ctx.lineTo(e.x, e.y - 20); ctx.fill();
+          emoji(NEED_EMOJI[e.need], e.x, e.y - 48, 26 * pulse);
+          const f = clamp(e.patience / PATIENCE, 0, 1);
+          ctx.fillStyle = '#00000022'; ctx.fillRect(e.x - 22, e.y - 74, 44, 6);
+          ctx.fillStyle = f > 0.5 ? '#41c264' : f > 0.25 ? '#e8b13b' : '#e0533b'; ctx.fillRect(e.x - 22, e.y - 74, 44 * f, 6);
+        }
+      }
+
+      // jogador (com balancinho ao andar)
+      const bob = player.moving ? Math.sin(time * 16) * 3 : Math.sin(time * 3) * 1;
+      shadow(player.x, player.y, 16);
+      emoji('🧑‍⚕️', player.x, player.y - 2 + bob, 40);
+      if (player.carry) emoji(NEED_EMOJI[player.carry], player.x, player.y - 34 + bob, 26);
+
+      // floaters
+      for (const f of floaters) { ctx.globalAlpha = Math.min(1, f.life); ctx.fillStyle = f.color; ctx.font = 'bold 22px Arial'; ctx.textAlign = 'center'; ctx.fillText(f.txt, f.x, f.y); ctx.globalAlpha = 1; }
+
+      // toast
+      if (toastT > 0) {
+        ctx.globalAlpha = Math.min(1, toastT);
+        rrect(W / 2 - 140, 24, 280, 34, 10, 'rgba(0,0,0,.65)');
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 16px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(toastMsg, W / 2, 41); ctx.globalAlpha = 1;
+      }
+
+      // fim
+      if (!running) {
+        ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = 'bold 40px Arial'; ctx.fillText('Fim do plantão!', W / 2, H / 2 - 40);
+        ctx.font = 'bold 26px Arial'; ctx.fillText('Pontos: ' + score + '  ·  Atendimentos: ' + served, W / 2, H / 2 + 6);
+        ctx.font = '20px Arial'; ctx.fillText('Recorde: ' + best + ' — aperte Reiniciar', W / 2, H / 2 + 44);
+      }
+    }
+
+    let last = 0;
+    function loop(now) {
+      const dt = last ? Math.min((now - last) / 1000, 0.05) : 0; last = now;
+      if (running) update(dt);
+      draw();
+      requestAnimationFrame(loop);
+    }
+    reset();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>

@@ -244,7 +244,7 @@
     }
 
     // ---------- desenho ----------
-    function emoji(ch, x, y, size) { ctx.font = size + 'px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(ch, x, y); }
+    function emoji(ch, x, y, size) { ctx.fillStyle = '#1a1a1a'; ctx.font = size + 'px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(ch, x, y); }
     function shadow(x, y, r) { ctx.fillStyle = 'rgba(0,0,0,.16)'; ctx.beginPath(); ctx.ellipse(x, y + 15, r, r * 0.45, 0, 0, 7); ctx.fill(); }
 
     function drawTile(t, sx, sy, c, r) {

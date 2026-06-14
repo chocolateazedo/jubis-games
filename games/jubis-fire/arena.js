@@ -86,7 +86,7 @@ export function buildArena(scene) {
   const car = new THREE.Group();
   const matCar = new THREE.MeshStandardMaterial({ map: TX.toTex(cMetal), normalMap: nMetal, normalScale: NS(), roughness: 0.5, metalness: 0.6 });
   const carFloor = new THREE.Mesh(new THREE.BoxGeometry(7, 0.3, 8), matCar);
-  carFloor.position.y = -0.15; car.add(carFloor); TX.tileMaps(carFloor, 4);
+  carFloor.position.y = -0.09; car.add(carFloor); TX.tileMaps(carFloor, 4); // levanta ~6cm p/ não brigar com o carpete
   const carBack = new THREE.Mesh(new THREE.BoxGeometry(0.3, 3.4, 8), matCar.clone());
   carBack.position.set(-3.4, 1.7, 0); car.add(carBack); TX.tileMaps(carBack, 4);
   car.position.set((elevator.x0 + elevator.x1) / 2, elevator.y, (elevator.z0 + elevator.z1) / 2);

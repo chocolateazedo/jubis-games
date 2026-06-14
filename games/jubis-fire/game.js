@@ -8,6 +8,7 @@ import { CONFIG, ZONE_DAMAGE, computeZone, clamp, lerp } from './shared.js?v=3';
 import { CHARACTERS, getCharacter, buildBody, animateBody } from './characters.js?v=3';
 import { buildArena, resolveCollisions } from './arena.js?v=3';
 import { lobby, Net } from './net.js?v=3';
+import * as Sound from './sounds.js?v=3';
 
 const $ = (id) => document.getElementById(id);
 const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
@@ -24,6 +25,9 @@ let elevator = null, onElevator = false;
 let occluders = [], faded = []; // malhas que tapam a câmera / atualmente translúcidas
 const grenades = [], fx = []; // granadas em voo e efeitos de explosão
 let grenadeCd = 0;
+let ammo = CONFIG.AMMO_START;            // balas do jogador local
+let pickups = [];                         // pacotes de bala {id, pos}
+const pickupMeshes = new Map();           // id -> mesh
 const entities = new Map();   // peerId -> entity
 let me = null;
 let status = 'lobby';         // 'lobby' | 'playing' | 'ended'
@@ -182,6 +186,7 @@ function startMatch(room) {
   const built = buildArena(scene);
   colliders = built.colliders; spawns = built.spawns; groundAt = built.groundAt; elevator = built.elevator; occluders = built.occluders; faded = [];
   resetGrenades();
+  resetAmmoPickups();
   buildZoneMesh();
 
   entities.clear();
@@ -189,7 +194,7 @@ function startMatch(room) {
   me = entities.get(myPeerId);
 
   net = new Net(peer, myPeerId, isHost, hostPeerId, roster);
-  net.on('world', onWorld).on('input', onClientInput).on('hit', onClientHit).on('close', onPeerClose);
+  net.on('world', onWorld).on('input', onClientInput).on('hit', onClientHit).on('pickup', onClientPickup).on('close', onPeerClose);
   net.start();
 
   host.startTime = nowS();
@@ -213,6 +218,7 @@ function startTraining() {
   const built = buildArena(scene);
   colliders = built.colliders; spawns = built.spawns; groundAt = built.groundAt; elevator = built.elevator; occluders = built.occluders; faded = [];
   resetGrenades();
+  resetAmmoPickups();
   buildZoneMesh();
 
   const myId = myPeerId || 'me-local';
@@ -288,10 +294,10 @@ const dist2 = (a, b) => { const dx = a.x - b.x, dz = a.z - b.z; return dx * dx +
 function setupThree() {
   if (renderer) return;
   renderer = new THREE.WebGLRenderer({ antialias: !isTouch, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, isTouch ? 1.25 : 2)); // tablet/celular: render mais leve
+  renderer.setPixelRatio(Math.min(devicePixelRatio, isTouch ? 1 : 2)); // tablet/celular: render bem mais leve
   renderer.setSize(innerWidth, innerHeight);
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = isTouch ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+  renderer.shadowMap.enabled = !isTouch; // sombras desligadas no touch (maior ganho de FPS)
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.15;
@@ -373,7 +379,7 @@ function onWorld(d) {           // cliente recebe estado do host
   for (const pid in d.players) {
     const e = entities.get(pid); if (!e) continue;
     const s = d.players[pid];
-    if (s.hp < e.hp) e.hitFlash = 0.18; // levou dano desde o último estado -> pisca
+    if (s.hp < e.hp) { e.hitFlash = 0.18; if (pid === myPeerId) Sound.playPain(); } // tomou dano
     e.hp = s.hp; e.alive = s.alive;
     if (pid === myPeerId) continue;              // minha posição é local
     e.targetPos.set(s.p[0], s.p[1], s.p[2]);
@@ -381,6 +387,7 @@ function onWorld(d) {           // cliente recebe estado do host
     e.aimTimer = s.aim ? 0.3 : 0;
   }
   host.zoneR = d.zone.r; host.zoneDps = d.zone.dps;
+  if (d.pickups) pickups = d.pickups.map((p) => ({ id: p.id, pos: new THREE.Vector3(p.p[0], p.p[1], p.p[2]) }));
   if (d.status === 'ended' && status === 'playing') { status = 'ended'; winner = d.winner; showEnd(); }
 }
 function onClientInput(pid, d) { // host recebe input de um cliente
@@ -416,6 +423,8 @@ function loop() {
     updateElevator(dt);
     grenadeCd -= dt;
     updateGrenades(dt);
+    syncPickups(dt);
+    checkPickups();
   }
   updateFx(dt);
   updateCamera();
@@ -518,6 +527,10 @@ function hostStep(dt) {
   }
 
   // transmissão periódica
+  // pacotes de bala surgem a cada 30s
+  host.pickupTimer -= dt;
+  if (host.pickupTimer <= 0) { host.pickupTimer = CONFIG.PICKUP_EVERY; if (pickups.length < CONFIG.PICKUP_MAX) spawnPickup(); }
+
   host.lastNet += dt;
   if (host.lastNet >= 1 / CONFIG.NET_HZ) { host.lastNet = 0; broadcastWorld(); }
 }
@@ -525,6 +538,7 @@ function hostStep(dt) {
 function damage(e, amount) {
   e.hp = Math.max(0, e.hp - amount);
   e.hitFlash = 0.18; // reação visual ao acerto
+  if (e === me) Sound.playPain();
   if (e.hp <= 0 && e.alive) { e.alive = false; }
 }
 
@@ -534,7 +548,8 @@ function broadcastWorld() {
   for (const e of entities.values()) {
     players[e.peerId] = { p: [e.pos.x, e.pos.y, e.pos.z], ry: e.ry, a: e.anim, hp: e.hp, alive: e.alive, aim: e.aimTimer > 0 };
   }
-  net.broadcast({ players, zone: { r: host.zoneR, dps: host.zoneDps }, status, winner });
+  const pk = pickups.map((p) => ({ id: p.id, p: [p.pos.x, p.pos.y, p.pos.z] }));
+  net.broadcast({ players, zone: { r: host.zoneR, dps: host.zoneDps }, status, winner, pickups: pk });
 }
 
 function sendInput() {
@@ -546,6 +561,7 @@ function sendInput() {
 function handleFire(dt) {
   fireCooldown -= dt;
   if (!input.firing || fireCooldown > 0 || !me || !me.alive) return;
+  if (ammo <= 0) { fireCooldown = 0.3; Sound.playEmpty(); return; } // sem balas
   fireCooldown = CONFIG.FIRE_COOLDOWN;
   fire();
 }
@@ -574,6 +590,7 @@ function fire() {
   const end = origin.clone().add(dir.clone().multiplyScalar(best ? bestT : CONFIG.RANGE));
   tracer(origin, end);
   me.aimTimer = 0.3; // levanta o braço/arma
+  ammo--; Sound.playShoot();
   if (best) {
     if (isHost) damage(best, CONFIG.BULLET_DMG);
     else net.sendHit(best.peerId, CONFIG.BULLET_DMG);
@@ -715,6 +732,61 @@ function updateFx(dt) {
   }
 }
 
+// ---------- munição e pacotes de bala ----------
+function resetAmmoPickups() {
+  ammo = CONFIG.AMMO_START;
+  for (const m of pickupMeshes.values()) if (scene) scene.remove(m);
+  pickupMeshes.clear();
+  pickups = [];
+  host.pickupSeq = 1;
+  if (status === 'playing' && isHost) { for (let i = 0; i < 3; i++) spawnPickup(); host.pickupTimer = CONFIG.PICKUP_EVERY; }
+  else host.pickupTimer = 3;
+}
+function makePickupMesh() {
+  const g = new THREE.Group();
+  const box = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.45, 0.5),
+    new THREE.MeshStandardMaterial({ color: 0xffcc33, emissive: 0xff8400, emissiveIntensity: 0.9, metalness: 0.3, roughness: 0.5 }));
+  box.castShadow = true; g.add(box);
+  return g;
+}
+function blockedSpot(x, z) {
+  for (const c of colliders) if (x > c.min.x - 0.6 && x < c.max.x + 0.6 && z > c.min.z - 0.6 && z < c.max.z + 0.6) return true;
+  return false;
+}
+function spawnPickup() {
+  for (let t = 0; t < 14; t++) {
+    const x = (Math.random() * 2 - 1) * 26, z = (Math.random() * 2 - 1) * 16;
+    if (blockedSpot(x, z)) continue;
+    const fy = CONFIG.FLOORS[Math.floor(Math.random() * CONFIG.FLOORS.length)];
+    pickups.push({ id: host.pickupSeq++, pos: new THREE.Vector3(x, groundAt(x, z, fy + 0.5), z) });
+    return;
+  }
+}
+function syncPickups(dt) {
+  for (const [id, mesh] of pickupMeshes) if (!pickups.some((p) => p.id === id)) { scene.remove(mesh); pickupMeshes.delete(id); }
+  const tt = nowS();
+  for (const p of pickups) {
+    let mesh = pickupMeshes.get(p.id);
+    if (!mesh) { mesh = makePickupMesh(); scene.add(mesh); pickupMeshes.set(p.id, mesh); }
+    mesh.position.set(p.pos.x, p.pos.y + 0.6 + Math.sin(tt * 2 + p.id) * 0.15, p.pos.z);
+    mesh.rotation.y += dt * 2;
+  }
+}
+function checkPickups() {
+  if (!me || !me.alive) return;
+  for (const p of pickups) {
+    const dx = me.pos.x - p.pos.x, dz = me.pos.z - p.pos.z, dy = me.pos.y - p.pos.y;
+    if (dx * dx + dz * dz < CONFIG.PICKUP_R * CONFIG.PICKUP_R && Math.abs(dy) < 2.2) {
+      ammo = Math.min(CONFIG.AMMO_MAX, ammo + CONFIG.AMMO_PACK);
+      Sound.playPickup();
+      pickups = pickups.filter((q) => q.id !== p.id);
+      if (net) net.sendPickup(p.id); // avisa o host (no-op se eu for o host)
+      break;
+    }
+  }
+}
+function onClientPickup(pid, d) { if (isHost) pickups = pickups.filter((p) => p.id !== d.id); }
+
 // ---------- HUD ----------
 function updateHud() {
   if (!me) return;
@@ -723,6 +795,8 @@ function updateHud() {
   const alive = [...entities.values()].filter((e) => e.alive).length;
   $('aliveCount').textContent = `Vivos: ${alive}/${entities.size}`;
   $('zoneInfo').textContent = ZONE_DAMAGE ? (host.zoneDps ? `Zona · dano ${host.zoneDps}/s fora` : 'Zona') : 'Sem zona';
+  $('ammo').textContent = ammo > 0 ? `🔫 ${ammo}/${CONFIG.AMMO_MAX}` : '🔫 Sem balas! (pegue um pacote)';
+  $('ammo').style.color = ammo > 0 ? '#fff' : '#ff6e8e';
   $('deadTag').classList.toggle('hidden', me.alive);
 }
 
@@ -745,6 +819,7 @@ function backToLobby() {
   status = 'lobby'; training = false;
   net?.destroy(); net = null;
   resetGrenades();
+  resetAmmoPickups();
   $('elevatorUI').classList.add('hidden');
   for (const e of entities.values()) scene.remove(e.group);
   entities.clear(); me = null;
@@ -765,6 +840,12 @@ function bindInput() {
     if (e.code === 'Space') input.jump = true;
     if (e.code === 'KeyQ' && !e.repeat) toggleCamMode();
     if (e.code === 'KeyE' && !e.repeat) throwGrenade();
+    // elevador: escolher andar pelo teclado (1/2/3 ou numpad) quando estiver nele
+    if (onElevator && !e.repeat) {
+      if (e.code === 'Digit1' || e.code === 'Numpad1') pickFloor(0);
+      else if (e.code === 'Digit2' || e.code === 'Numpad2') pickFloor(1);
+      else if (e.code === 'Digit3' || e.code === 'Numpad3') pickFloor(2);
+    }
     if (FIRE_KEYS.has(e.code)) { input.firing = true; if (status === 'playing') e.preventDefault(); }
     updateMoveFromKeys();
   });
@@ -792,12 +873,12 @@ function bindInput() {
   if (isTouch) bindTouch();
 
   // botões de UI
-  // os botões de jogar disparam tela cheia (precisa ser no gesto do clique)
-  $('btnQuick').addEventListener('click', () => { goFullscreen(); quickJoin(); });
-  $('btnCreate').addEventListener('click', () => { goFullscreen(); createPrivate(); });
-  $('btnJoin').addEventListener('click', () => { goFullscreen(); joinPrivate(); });
-  $('btnTrain').addEventListener('click', () => { goFullscreen(); startTraining(); });
-  $('btnStart').addEventListener('click', () => { goFullscreen(); startGameAsHost(); });
+  // os botões de jogar disparam tela cheia + liberam o áudio (gesto do clique)
+  $('btnQuick').addEventListener('click', () => { goFullscreen(); Sound.initAudio(); quickJoin(); });
+  $('btnCreate').addEventListener('click', () => { goFullscreen(); Sound.initAudio(); createPrivate(); });
+  $('btnJoin').addEventListener('click', () => { goFullscreen(); Sound.initAudio(); joinPrivate(); });
+  $('btnTrain').addEventListener('click', () => { goFullscreen(); Sound.initAudio(); startTraining(); });
+  $('btnStart').addEventListener('click', () => { goFullscreen(); Sound.initAudio(); startGameAsHost(); });
   $('btnLeaveRoom').addEventListener('click', leaveRoom);
   $('btnBackLobby').addEventListener('click', backToLobby);
   $('btnExit').addEventListener('click', backToLobby);

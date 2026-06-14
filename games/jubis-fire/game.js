@@ -400,7 +400,12 @@ function updateLocal(dt) {
   if (me.pos.y <= 0) { me.pos.y = 0; me.vy = 0; me.grounded = true; }
 
   resolveCollisions(me.pos, CONFIG.PLAYER_R, colliders);
-  me.ry = yaw;
+  // vira o boneco para a direção em que ele se move (frente=0°, trás=180°,
+  // lados=90°/270°, diagonais=45°/135°/...). Parado, mantém a última direção.
+  if (moving) {
+    const targetRy = Math.atan2(mvx, mvz);
+    me.ry = lerpAngle(me.ry, targetRy, Math.min(1, dt * 16));
+  }
   me.anim = !me.grounded ? 'jump' : (moving ? 'run' : 'idle');
   me.group.position.copy(me.pos);
   me.group.rotation.y = me.ry;

@@ -1,0 +1,3 @@
+# estado de runtime do lobby — não versionar
+data/*
+!data/.htaccess

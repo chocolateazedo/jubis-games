@@ -1,0 +1,8 @@
+{
+  "title": "Jubis Fire",
+  "description": "Battle royale 3D para até 4 jogadores: escolha seu personagem, sobreviva à zona e seja o último de pé!",
+  "emoji": "🔥",
+  "tags": ["3d", "multiplayer", "battle royale", "ação", "online"],
+  "entry": "index.html",
+  "order": 1
+}

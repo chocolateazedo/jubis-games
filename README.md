@@ -70,6 +70,7 @@ Pronto! Faz upload e o jogo aparece automaticamente na página inicial. Não pre
 - Jogo de Stop (`games/jogo-de-stop`)
 - Jogo de Inglês (`games/jogo-de-ingles`)
 - Xadrez x1 (`games/xadrez-x1`) — multiplayer online (PHP + polling)
+- Jubis Fire (`games/jubis-fire`) — battle royale 3D até 4 jogadores (Three.js + WebRTC/PeerJS, lobby em PHP)
 
 ## Requisitos do servidor
 

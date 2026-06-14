@@ -1,0 +1,577 @@
+// Jubis Fire — battle royale-lite 3D para até 4 jogadores (terceira pessoa).
+// Host-autoritativo via WebRTC: cada cliente simula seu próprio boneco e manda a
+// posição; o host decide zona, vida e eliminações e transmite o "mundo".
+
+import * as THREE from 'three';
+import { CONFIG, computeZone, clamp, lerp } from './shared.js';
+import { CHARACTERS, getCharacter, buildBody, animateBody } from './characters.js';
+import { buildArena, resolveCollisions } from './arena.js';
+import { lobby, Net } from './net.js';
+
+const $ = (id) => document.getElementById(id);
+const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+
+// ---------- estado ----------
+let peer = null, myPeerId = null, myName = '', selectedChar = 'm1';
+let roomId = null, isHost = false, roomPoll = null;
+let net = null;
+let scene, renderer, camera, clock;
+let colliders = [], spawns = [];
+let zoneMesh = null;
+const entities = new Map();   // peerId -> entity
+let me = null;
+let status = 'lobby';         // 'lobby' | 'playing' | 'ended'
+let winner = null;
+
+// câmera / input
+let yaw = 0, pitch = 0.35;
+const input = { mx: 0, my: 0, jump: false, firing: false };
+const keys = {};
+let fireCooldown = 0;
+
+// host
+const host = { startTime: 0, lastNet: 0, zoneR: CONFIG.ZONE.startR, zoneDps: 0, dmgAccum: new Map(), pendingHits: [] };
+let sendAccum = 0;
+
+const raycaster = new THREE.Raycaster();
+const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
+
+// ============================================================
+// BOOT — cria o Peer (PeerJS) e prepara o lobby
+// ============================================================
+function boot() {
+  buildCharGrid();
+  $('pname').value = localStorage.getItem('jubis-fire-name') || '';
+  lobbyMsg('Conectando…');
+  peer = new window.Peer(undefined, { debug: 1 });
+  peer.on('open', (id) => { myPeerId = id; lobbyMsg(''); enableLobby(true); });
+  peer.on('error', (e) => lobbyMsg('Erro de conexão: ' + e.type + ' — recarregue a página.', true));
+  peer.on('disconnected', () => { try { peer.reconnect(); } catch {} });
+}
+
+function enableLobby(on) {
+  for (const b of ['btnQuick', 'btnCreate', 'btnJoin']) $(b).disabled = !on;
+}
+function lobbyMsg(t, err = false) { const e = $('lobbyMsg'); e.textContent = t || ''; e.classList.toggle('error', !!err); }
+
+// ---------- seleção de personagem (cards CSS) ----------
+function buildCharGrid() {
+  const grid = $('charGrid');
+  grid.innerHTML = '';
+  for (const c of CHARACTERS) {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'char' + (c.id === selectedChar ? ' sel' : '');
+    card.dataset.id = c.id;
+    const hex = (n) => '#' + n.toString(16).padStart(6, '0');
+    card.innerHTML =
+      `<span class="ava" style="background:${hex(c.shirt)}">
+         <span class="hair" style="background:${hex(c.hairColor)}"></span>
+         <span class="face" style="background:${hex(c.skin)}"></span>
+       </span>
+       <span class="cname">${c.name}</span>
+       <span class="cg">${c.gender === 'm' ? '♂' : '♀'}</span>`;
+    card.addEventListener('click', () => {
+      selectedChar = c.id;
+      [...grid.children].forEach((el) => el.classList.toggle('sel', el.dataset.id === c.id));
+    });
+    grid.appendChild(card);
+  }
+}
+
+// ============================================================
+// LOBBY / SALA
+// ============================================================
+function getName() {
+  const n = $('pname').value.trim().slice(0, 16);
+  if (!n) { lobbyMsg('Escreva seu nome.', true); return null; }
+  localStorage.setItem('jubis-fire-name', n);
+  myName = n; return n;
+}
+
+async function quickJoin() {
+  const n = getName(); if (!n || !myPeerId) return;
+  lobbyMsg('');
+  const r = await lobby('quick_join', { name: n, peerId: myPeerId, char: selectedChar });
+  if (r.error) return lobbyMsg(r.error, true);
+  enterRoom(r.roomId, r.isHost, null);
+}
+async function createPrivate() {
+  const n = getName(); if (!n || !myPeerId) return;
+  const r = await lobby('create_room', { name: n, peerId: myPeerId, char: selectedChar });
+  if (r.error) return lobbyMsg(r.error, true);
+  enterRoom(r.roomId, true, r.code);
+}
+async function joinPrivate() {
+  const n = getName(); if (!n || !myPeerId) return;
+  const code = $('joinCode').value.trim();
+  if (code.length !== 6) return lobbyMsg('A senha tem 6 caracteres.', true);
+  const r = await lobby('join_room', { name: n, peerId: myPeerId, char: selectedChar, code });
+  if (r.error) return lobbyMsg(r.error, true);
+  enterRoom(r.roomId, false, code);
+}
+
+function enterRoom(id, host_, code) {
+  roomId = id; isHost = host_;
+  $('joinPanel').classList.add('hidden');
+  $('roomBox').classList.remove('hidden');
+  $('roomCode').textContent = code ? `Senha da sala: ${code}` : 'Sala aleatória';
+  $('btnStart').classList.toggle('hidden', !isHost);
+  pollRoom();
+}
+
+function pollRoom() {
+  clearTimeout(roomPoll);
+  roomPoll = setTimeout(async () => {
+    if (!roomId) return;
+    const r = await lobby('room', { roomId, peerId: myPeerId });
+    if (r.error) { lobbyMsg(r.error, true); return leaveRoom(); }
+    renderRoster(r);
+    if (r.status === 'started') return startMatch(r);
+    pollRoom();
+  }, 1500);
+}
+
+function renderRoster(r) {
+  $('roomPlayers').innerHTML = r.players
+    .map((p, i) => `<li>${i === 0 ? '👑 ' : ''}${escapeHtml(p.name)} <small>(${getCharacter(p.char).name})</small></li>`)
+    .join('');
+  $('roomStatus').textContent = r.players.length < 2
+    ? 'Esperando mais jogadores…'
+    : (isHost ? 'Pode começar quando quiser!' : 'Esperando o host iniciar…');
+  $('btnStart').disabled = r.players.length < 2;
+}
+
+async function leaveRoom() {
+  clearTimeout(roomPoll); roomPoll = null;
+  if (roomId) await lobby('leave', { roomId, peerId: myPeerId });
+  roomId = null;
+  $('roomBox').classList.add('hidden');
+  $('joinPanel').classList.remove('hidden');
+}
+
+async function startGameAsHost() {
+  if (!isHost || !roomId) return;
+  await lobby('start', { roomId, peerId: myPeerId });
+}
+
+const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// ============================================================
+// PARTIDA
+// ============================================================
+function startMatch(room) {
+  clearTimeout(roomPoll); roomPoll = null;
+  status = 'playing'; winner = null;
+  const roster = room.players;
+  const hostPeerId = roster[0].peerId;
+  isHost = (hostPeerId === myPeerId);
+
+  setupThree();
+  const built = buildArena(scene);
+  colliders = built.colliders; spawns = built.spawns;
+  buildZoneMesh();
+
+  entities.clear();
+  roster.forEach((p, i) => createEntity(p, i, p.peerId === myPeerId));
+  me = entities.get(myPeerId);
+
+  net = new Net(peer, myPeerId, isHost, hostPeerId, roster);
+  net.on('world', onWorld).on('input', onClientInput).on('hit', onClientHit).on('close', onPeerClose);
+  net.start();
+
+  host.startTime = nowS();
+  host.dmgAccum = new Map();
+
+  $('screen-lobby').classList.add('hidden');
+  $('screen-game').classList.remove('hidden');
+  $('touchControls').classList.toggle('hidden', !isTouch);
+  $('endBox').classList.add('hidden');
+
+  clock = new THREE.Clock();
+  requestAnimationFrame(loop);
+}
+
+function setupThree() {
+  if (renderer) return;
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.shadowMap.enabled = true;
+  $('glmount').appendChild(renderer.domElement);
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 400);
+  addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+}
+
+function createEntity(p, slot, local) {
+  const preset = getCharacter(p.char);
+  const body = buildBody(preset);
+  const sp = spawns[slot % spawns.length];
+  body.group.position.copy(sp);
+  scene.add(body.group);
+  const e = {
+    peerId: p.peerId, name: p.name, charId: p.char, body, group: body.group,
+    pos: sp.clone(), ry: 0, vy: 0, grounded: true, anim: 'idle',
+    hp: CONFIG.MAX_HP, alive: true, isLocal: local, slot,
+    targetPos: sp.clone(), targetRy: 0,
+  };
+  entities.set(p.peerId, e);
+  // nametag
+  e.tag = makeTag(p.name);
+  e.group.add(e.tag); e.tag.position.y = 2.3;
+  return e;
+}
+
+function makeTag(text) {
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 64;
+  const c = cv.getContext('2d');
+  c.font = 'bold 30px Arial'; c.textAlign = 'center';
+  c.fillStyle = 'rgba(0,0,0,.5)'; c.fillRect(0, 0, 256, 64);
+  c.fillStyle = '#fff'; c.fillText(text, 128, 42);
+  const tex = new THREE.CanvasTexture(cv);
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }));
+  spr.scale.set(2.4, 0.6, 1);
+  return spr;
+}
+
+function buildZoneMesh() {
+  const geo = new THREE.CylinderGeometry(1, 1, CONFIG.WALL_H * 3, 48, 1, true);
+  const mat = new THREE.MeshBasicMaterial({ color: 0x4fc3ff, transparent: true, opacity: 0.16, side: THREE.DoubleSide });
+  zoneMesh = new THREE.Mesh(geo, mat);
+  zoneMesh.position.y = CONFIG.WALL_H;
+  scene.add(zoneMesh);
+}
+
+// ---------- netcode handlers ----------
+function onWorld(d) {           // cliente recebe estado do host
+  if (isHost) return;
+  for (const pid in d.players) {
+    const e = entities.get(pid); if (!e) continue;
+    const s = d.players[pid];
+    e.hp = s.hp; e.alive = s.alive;
+    if (pid === myPeerId) continue;              // minha posição é local
+    e.targetPos.set(s.p[0], s.p[1], s.p[2]);
+    e.targetRy = s.ry; e.anim = s.a;
+  }
+  host.zoneR = d.zone.r; host.zoneDps = d.zone.dps;
+  if (d.status === 'ended' && status === 'playing') { status = 'ended'; winner = d.winner; showEnd(); }
+}
+function onClientInput(pid, d) { // host recebe input de um cliente
+  if (!isHost) return;
+  const e = entities.get(pid); if (!e) return;
+  e.targetPos.set(d.p[0], d.p[1], d.p[2]); e.targetRy = d.ry; e.anim = d.a;
+}
+function onClientHit(pid, d) {   // host recebe alegação de acerto
+  if (!isHost) return;
+  host.pendingHits.push({ tgt: d.tgt, dmg: d.d });
+}
+function onPeerClose(pid) {
+  const e = entities.get(pid);
+  if (e && isHost) { e.alive = false; e.hp = 0; }
+  if (pid === net?.hostPeerId && !isHost && status === 'playing') {
+    status = 'ended'; winner = null; showEnd('O host saiu da partida.');
+  }
+}
+
+// ============================================================
+// LOOP
+// ============================================================
+function loop() {
+  if (status !== 'playing' && status !== 'ended') return;
+  const dt = Math.min(clock.getDelta(), 0.05);
+  if (status === 'playing') {
+    updateLocal(dt);
+    if (isHost) hostStep(dt); else { sendAccum += dt; if (sendAccum >= 1 / CONFIG.NET_HZ) { sendInput(); sendAccum = 0; } }
+    updateRemotes(dt);
+    handleFire(dt);
+  }
+  updateCamera();
+  updateZoneVisual();
+  for (const e of entities.values()) {
+    animateBody(e.body, e.anim, dt, 1);
+    e.group.visible = e.alive || e === me; // eliminados somem; você continua vendo seu boneco
+  }
+  updateHud();
+  renderer.render(scene, camera);
+  requestAnimationFrame(loop);
+}
+
+function updateLocal(dt) {
+  if (!me || !me.alive) { me && (me.anim = 'idle'); return; }
+  // base de movimento a partir do yaw
+  const fwd = tmp.set(Math.sin(yaw), 0, Math.cos(yaw));
+  const right = tmp2.set(Math.cos(yaw), 0, -Math.sin(yaw));
+  let mvx = fwd.x * input.my + right.x * input.mx;
+  let mvz = fwd.z * input.my + right.z * input.mx;
+  const len = Math.hypot(mvx, mvz);
+  const moving = len > 0.05;
+  if (moving) { mvx /= len; mvz /= len; }
+  me.pos.x += mvx * CONFIG.MOVE_SPEED * dt;
+  me.pos.z += mvz * CONFIG.MOVE_SPEED * dt;
+
+  // pulo / gravidade
+  if (input.jump && me.grounded) { me.vy = CONFIG.JUMP_V; me.grounded = false; }
+  input.jump = false;
+  me.vy -= CONFIG.GRAVITY * dt;
+  me.pos.y += me.vy * dt;
+  if (me.pos.y <= 0) { me.pos.y = 0; me.vy = 0; me.grounded = true; }
+
+  resolveCollisions(me.pos, CONFIG.PLAYER_R, colliders);
+  me.ry = yaw;
+  me.anim = !me.grounded ? 'jump' : (moving ? 'run' : 'idle');
+  me.group.position.copy(me.pos);
+  me.group.rotation.y = me.ry;
+}
+
+function updateRemotes(dt) {
+  for (const e of entities.values()) {
+    if (e === me) continue;
+    e.pos.lerp(e.targetPos, Math.min(1, dt * 12));
+    e.ry = lerpAngle(e.ry, e.targetRy, Math.min(1, dt * 12));
+    e.group.position.copy(e.pos);
+    e.group.rotation.y = e.ry;
+  }
+}
+
+function hostStep(dt) {
+  // posição do próprio host já foi atualizada em updateLocal (me.pos)
+  // zona
+  const elapsed = nowS() - host.startTime;
+  const z = computeZone(elapsed);
+  host.zoneR = z.r; host.zoneDps = z.dps;
+  // dano da zona
+  for (const e of entities.values()) {
+    if (!e.alive) continue;
+    const d = Math.hypot(e.pos.x, e.pos.z);
+    if (d > host.zoneR) {
+      const acc = (host.dmgAccum.get(e.peerId) || 0) + z.dps * dt;
+      const whole = Math.floor(acc);
+      host.dmgAccum.set(e.peerId, acc - whole);
+      if (whole > 0) damage(e, whole);
+    }
+  }
+  // acertos de tiro reportados
+  for (const h of host.pendingHits) {
+    const e = entities.get(h.tgt);
+    if (e && e.alive) damage(e, h.dmg);
+  }
+  host.pendingHits.length = 0;
+
+  // vitória
+  const alive = [...entities.values()].filter((e) => e.alive);
+  if (status === 'playing' && entities.size >= 2 && alive.length <= 1) {
+    status = 'ended'; winner = alive[0] ? alive[0].peerId : null;
+    broadcastWorld(); showEnd();
+  }
+
+  // transmissão periódica
+  host.lastNet += dt;
+  if (host.lastNet >= 1 / CONFIG.NET_HZ) { host.lastNet = 0; broadcastWorld(); }
+}
+
+function damage(e, amount) {
+  e.hp = Math.max(0, e.hp - amount);
+  if (e.hp <= 0 && e.alive) { e.alive = false; }
+}
+
+function broadcastWorld() {
+  const players = {};
+  for (const e of entities.values()) {
+    players[e.peerId] = { p: [e.pos.x, e.pos.y, e.pos.z], ry: e.ry, a: e.anim, hp: e.hp, alive: e.alive };
+  }
+  net.broadcast({ players, zone: { r: host.zoneR, dps: host.zoneDps }, status, winner });
+}
+
+function sendInput() {
+  if (!me) return;
+  net.sendInput({ p: [me.pos.x, me.pos.y, me.pos.z], ry: me.ry, a: me.anim });
+}
+
+// ---------- tiro ----------
+function handleFire(dt) {
+  fireCooldown -= dt;
+  if (!input.firing || fireCooldown > 0 || !me || !me.alive) return;
+  fireCooldown = CONFIG.FIRE_COOLDOWN;
+  fire();
+}
+function fire() {
+  const origin = camera.position.clone();
+  const dir = camera.getWorldDirection(new THREE.Vector3());
+  let best = null, bestT = CONFIG.RANGE;
+  for (const e of entities.values()) {
+    if (e === me || !e.alive) continue;
+    const center = tmp.copy(e.pos); center.y += 1.0;
+    const oc = tmp2.copy(center).sub(origin);
+    const tca = oc.dot(dir);
+    if (tca < 0 || tca > bestT) continue;
+    const d2 = oc.lengthSq() - tca * tca;
+    if (d2 > 0.7 * 0.7) continue;
+    best = e; bestT = tca;
+  }
+  const end = origin.clone().add(dir.clone().multiplyScalar(best ? bestT : CONFIG.RANGE));
+  tracer(muzzlePos(), end);
+  if (best) {
+    if (isHost) damage(best, CONFIG.BULLET_DMG);
+    else net.sendHit(best.peerId, CONFIG.BULLET_DMG);
+  }
+}
+function muzzlePos() {
+  const p = me.group.position.clone(); p.y += 1.3;
+  p.x += Math.sin(yaw) * 0.6; p.z += Math.cos(yaw) * 0.6;
+  return p;
+}
+function tracer(a, b) {
+  const geo = new THREE.BufferGeometry().setFromPoints([a, b]);
+  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xfff176 }));
+  scene.add(line);
+  setTimeout(() => { scene.remove(line); geo.dispose(); }, 60);
+}
+
+// ---------- câmera / zona visual ----------
+function updateCamera() {
+  if (!me) return;
+  const head = tmp.copy(me.pos); head.y += CONFIG.EYE;
+  const cp = Math.cos(pitch), sp = Math.sin(pitch);
+  camera.position.set(
+    head.x - Math.sin(yaw) * cp * CONFIG.CAM_DIST,
+    head.y + sp * CONFIG.CAM_DIST + CONFIG.CAM_HEIGHT,
+    head.z - Math.cos(yaw) * cp * CONFIG.CAM_DIST
+  );
+  camera.lookAt(head);
+}
+function updateZoneVisual() {
+  if (!zoneMesh) return;
+  const r = Math.max(0.5, host.zoneR);
+  zoneMesh.scale.set(r, 1, r);
+}
+
+// ---------- HUD ----------
+function updateHud() {
+  if (!me) return;
+  $('hpFill').style.width = clamp(me.hp, 0, 100) + '%';
+  $('hpText').textContent = Math.ceil(me.hp);
+  const alive = [...entities.values()].filter((e) => e.alive).length;
+  $('aliveCount').textContent = `Vivos: ${alive}/${entities.size}`;
+  $('zoneInfo').textContent = host.zoneDps ? `Zona · dano ${host.zoneDps}/s fora` : 'Zona';
+  $('deadTag').classList.toggle('hidden', me.alive);
+}
+
+function showEnd(customMsg) {
+  status = 'ended';
+  $('endBox').classList.remove('hidden');
+  let txt = customMsg;
+  if (!txt) {
+    if (winner === myPeerId) txt = '🏆 Vitória Royale! Você foi o último de pé!';
+    else if (winner) txt = `Fim de jogo! Vencedor: ${entities.get(winner)?.name || '???'}`;
+    else txt = 'Fim de jogo!';
+  }
+  $('endText').textContent = txt;
+  if (isTouch) $('touchControls').classList.add('hidden');
+  document.exitPointerLock?.();
+}
+
+function backToLobby() {
+  status = 'lobby';
+  net?.destroy(); net = null;
+  for (const e of entities.values()) scene.remove(e.group);
+  entities.clear(); me = null;
+  $('screen-game').classList.add('hidden');
+  $('endBox').classList.add('hidden');
+  $('screen-lobby').classList.remove('hidden');
+  leaveRoom();
+}
+
+// ============================================================
+// INPUT
+// ============================================================
+function bindInput() {
+  // teclado
+  addEventListener('keydown', (e) => { keys[e.code] = true; if (e.code === 'Space') input.jump = true; updateMoveFromKeys(); });
+  addEventListener('keyup', (e) => { keys[e.code] = false; updateMoveFromKeys(); });
+
+  // mouse (pointer lock)
+  const cv = () => renderer?.domElement;
+  document.addEventListener('mousedown', (e) => {
+    if (status !== 'playing') return;
+    if (document.pointerLockElement) { if (e.button === 0) input.firing = true; }
+    else cv()?.requestPointerLock?.();
+  });
+  addEventListener('mouseup', (e) => { if (e.button === 0) input.firing = false; });
+  addEventListener('mousemove', (e) => {
+    if (!document.pointerLockElement) return;
+    yaw -= e.movementX * 0.0024;
+    pitch = clamp(pitch + e.movementY * 0.0024, -0.5, 1.0);
+  });
+
+  // touch
+  if (isTouch) bindTouch();
+
+  // botões de UI
+  $('btnQuick').addEventListener('click', quickJoin);
+  $('btnCreate').addEventListener('click', createPrivate);
+  $('btnJoin').addEventListener('click', joinPrivate);
+  $('btnStart').addEventListener('click', startGameAsHost);
+  $('btnLeaveRoom').addEventListener('click', leaveRoom);
+  $('btnBackLobby').addEventListener('click', backToLobby);
+}
+
+function updateMoveFromKeys() {
+  input.my = (keys['KeyW'] || keys['ArrowUp'] ? 1 : 0) - (keys['KeyS'] || keys['ArrowDown'] ? 1 : 0);
+  input.mx = (keys['KeyD'] || keys['ArrowRight'] ? 1 : 0) - (keys['KeyA'] || keys['ArrowLeft'] ? 1 : 0);
+}
+
+function bindTouch() {
+  const stick = $('stick'), base = $('joystick');
+  let jid = null, cx = 0, cy = 0;
+  let lookId = null, lookX = 0, lookY = 0; // arrastar na metade direita = olhar
+  base.addEventListener('touchstart', (e) => {
+    const t = e.changedTouches[0]; jid = t.identifier;
+    const r = base.getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2;
+    e.preventDefault();
+  }, { passive: false });
+  addEventListener('touchmove', (e) => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === jid) {
+        const dx = clamp((t.clientX - cx) / 50, -1, 1), dy = clamp((t.clientY - cy) / 50, -1, 1);
+        input.mx = dx; input.my = -dy;
+        stick.style.transform = `translate(${dx * 30}px,${dy * 30}px)`;
+      } else if (t.identifier === lookId) {
+        yaw -= (t.clientX - lookX) * 0.005; pitch = clamp(pitch + (t.clientY - lookY) * 0.005, -0.5, 1.0);
+        lookX = t.clientX; lookY = t.clientY;
+      }
+    }
+  }, { passive: false });
+  addEventListener('touchend', (e) => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === jid) { jid = null; input.mx = input.my = 0; stick.style.transform = ''; }
+      if (t.identifier === lookId) lookId = null;
+    }
+  });
+  // olhar: arrastar na metade direita
+  addEventListener('touchstart', (e) => {
+    for (const t of e.changedTouches) {
+      if (t.clientX > innerWidth / 2 && lookId === null && t.target.id !== 'btnShoot' && t.target.id !== 'btnJump') {
+        lookId = t.identifier; lookX = t.clientX; lookY = t.clientY;
+      }
+    }
+  }, { passive: true });
+  $('btnJump').addEventListener('touchstart', (e) => { input.jump = true; e.preventDefault(); }, { passive: false });
+  $('btnShoot').addEventListener('touchstart', (e) => { input.firing = true; e.preventDefault(); }, { passive: false });
+  $('btnShoot').addEventListener('touchend', () => { input.firing = false; });
+}
+
+// ---------- util ----------
+const nowS = () => performance.now() / 1000;
+function lerpAngle(a, b, t) {
+  let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI;
+  if (d < -Math.PI) d += Math.PI * 2;
+  return a + d * t;
+}
+
+// start
+bindInput();
+boot();

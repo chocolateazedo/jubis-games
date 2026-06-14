@@ -3,7 +3,7 @@
 // Retorna os colisores (caixas sólidas) para o jogador bater e os spawns.
 
 import * as THREE from 'three';
-import { CONFIG } from './shared.js';
+import { CONFIG } from './shared.js?v=3';
 
 export function buildArena(scene) {
   const H = CONFIG.ARENA / 2;

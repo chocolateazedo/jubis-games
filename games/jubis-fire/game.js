@@ -3,10 +3,10 @@
 // posição; o host decide zona, vida e eliminações e transmite o "mundo".
 
 import * as THREE from 'three';
-import { CONFIG, computeZone, clamp, lerp } from './shared.js';
-import { CHARACTERS, getCharacter, buildBody, animateBody } from './characters.js';
-import { buildArena, resolveCollisions } from './arena.js';
-import { lobby, Net } from './net.js';
+import { CONFIG, computeZone, clamp, lerp } from './shared.js?v=3';
+import { CHARACTERS, getCharacter, buildBody, animateBody } from './characters.js?v=3';
+import { buildArena, resolveCollisions } from './arena.js?v=3';
+import { lobby, Net } from './net.js?v=3';
 
 const $ = (id) => document.getElementById(id);
 const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;

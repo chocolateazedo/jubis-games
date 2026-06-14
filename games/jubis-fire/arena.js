@@ -1,89 +1,85 @@
-// Jubis Fire — prédio de 3 andares. Gerado por código (determinístico).
+// Jubis Fire — prédio de 3 andares no estilo "Backrooms": papel de parede
+// amarelo, carpete amarelo, forro com luminárias e pilares creme.
 //
-// Movimento vertical sem física pesada: o mundo é descrito por "superfícies"
-// caminháveis (lajes planas e rampas) + o elevador. groundAt(x,z,feetY) devolve
-// a altura do chão sob o jogador. Paredes continuam como caixas (colisão XZ).
-//
-// occluders = malhas que podem tapar a câmera (paredes/lajes/caixas). Cada uma
-// recebe material próprio (clone) para poder ficar translúcida individualmente.
+// Movimento vertical via "superfícies" caminháveis + elevador (groundAt).
+// occluders = malhas que podem tapar a câmera (ficam translúcidas).
 
 import * as THREE from 'three';
 import { CONFIG, clamp } from './shared.js?v=3';
 import * as TX from './textures.js?v=3';
 
+const IS_TOUCH = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+
 export function buildArena(scene) {
-  const colliders = [];   // {min:{x,z}, max:{x,z}, top} — paredes (push-out XZ)
-  const surfaces = [];    // chão caminhável
-  const occluders = [];   // malhas que podem tapar a visão
-  const F = CONFIG.FLOORS; // [0,8,16]
-  const BX0 = -30, BX1 = 30, BZ0 = -20, BZ1 = 20, WTOP = 26;
+  const colliders = [];
+  const surfaces = [];
+  const occluders = [];
+  const F = CONFIG.FLOORS;          // [0, 8, 16]
+  const BX0 = -30, BX1 = 30, BZ0 = -20, BZ1 = 20, WTOP = 26, CH = 7.4; // CH = pé-direito
 
-  scene.background = new THREE.Color(0xaad4ff);
-  scene.fog = new THREE.Fog(0xaad4ff, 90, 260);
+  scene.background = new THREE.Color(0xcdbf7e);
+  scene.fog = new THREE.Fog(0xcdbf7e, 80, 240);
 
-  scene.add(new THREE.HemisphereLight(0xeaf2ff, 0x4a4636, 0.55));
-  const sun = new THREE.DirectionalLight(0xfff2e0, 2.6);
+  // luz quente e bem espalhada (clima fluorescente do Backrooms)
+  scene.add(new THREE.HemisphereLight(0xfff3cf, 0x6b6238, 1.1));
+  const sun = new THREE.DirectionalLight(0xffe7b8, 1.35);
   sun.position.set(40, 85, 30); sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
-  sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02; sun.shadow.radius = 4;
+  sun.shadow.mapSize.set(IS_TOUCH ? 1024 : 2048, IS_TOUCH ? 1024 : 2048); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02; sun.shadow.radius = 5;
   const sc = sun.shadow.camera; sc.left = -50; sc.right = 50; sc.top = 50; sc.bottom = -50; sc.near = 1; sc.far = 240;
   scene.add(sun);
-  const fill = new THREE.DirectionalLight(0xbcd0ff, 0.5); fill.position.set(-30, 45, -25); scene.add(fill);
 
-  // texturas geradas por código + relevo (normal map)
-  const cConc = TX.concrete(), cTile = TX.tiles(), cTile2 = TX.tiles('#868fa3'), cWood = TX.wood(), cMetal = TX.metal();
-  const nConc = TX.normalFromCanvas(cConc), nTile = TX.normalFromCanvas(cTile), nWood = TX.normalFromCanvas(cWood), nMetal = TX.normalFromCanvas(cMetal);
-  const NS = () => new THREE.Vector2(0.7, 0.7);
-  const matFloor = new THREE.MeshStandardMaterial({ map: TX.toTex(cTile), normalMap: nTile, normalScale: NS(), roughness: 0.85, metalness: 0.05 });
-  const matFloor2 = new THREE.MeshStandardMaterial({ map: TX.toTex(cTile2), normalMap: nTile, normalScale: NS(), roughness: 0.85, metalness: 0.05 });
-  const matWall = new THREE.MeshStandardMaterial({ map: TX.toTex(cConc), normalMap: nConc, normalScale: NS(), roughness: 0.92, metalness: 0.04 });
-  const matStep = new THREE.MeshStandardMaterial({ map: TX.toTex(cConc), normalMap: nConc, normalScale: NS(), roughness: 0.9 });
+  // texturas + relevo
+  const cWall = TX.wallpaper(), cCarpet = TX.carpet(), cCeil = TX.ceilingTile(), cPlaster = TX.plaster(), cMetal = TX.metal(), cGrass = TX.grass();
+  const nWall = TX.normalFromCanvas(cWall, 1.3), nCarpet = TX.normalFromCanvas(cCarpet, 1.0), nCeil = TX.normalFromCanvas(cCeil, 1.4), nPlaster = TX.normalFromCanvas(cPlaster, 0.7), nMetal = TX.normalFromCanvas(cMetal);
+  const NS = () => new THREE.Vector2(0.5, 0.5);
+  const matFloor = () => new THREE.MeshStandardMaterial({ map: TX.toTex(cCarpet), normalMap: nCarpet, normalScale: NS(), roughness: 1 });
+  const matWall = new THREE.MeshStandardMaterial({ map: TX.toTex(cWall), normalMap: nWall, normalScale: NS(), roughness: 0.95 });
+  const matColumn = new THREE.MeshStandardMaterial({ map: TX.toTex(cPlaster), normalMap: nPlaster, normalScale: NS(), roughness: 0.9 });
+  const matCeil = new THREE.MeshStandardMaterial({ map: TX.toTex(cCeil), normalMap: nCeil, normalScale: NS(), roughness: 0.95 });
+  const matPanel = new THREE.MeshStandardMaterial({ color: 0xfff7e0, emissive: 0xfff0c0, emissiveIntensity: 1.7, roughness: 0.4 });
   const matRamp = new THREE.MeshStandardMaterial({ map: TX.toTex(cMetal), normalMap: nMetal, normalScale: NS(), roughness: 0.55, metalness: 0.55 });
-  const matCrate = new THREE.MeshStandardMaterial({ map: TX.toTex(cWood), normalMap: nWood, normalScale: NS(), roughness: 0.8 });
-  const matGlass = new THREE.MeshStandardMaterial({ color: 0x9fd6ff, roughness: 0.05, metalness: 0.3, transparent: true, opacity: 0.3 });
 
   // terreno externo (grama)
-  const cGrass = TX.grass();
   const terrain = new THREE.Mesh(new THREE.PlaneGeometry(CONFIG.ARENA, CONFIG.ARENA),
-    new THREE.MeshStandardMaterial({ map: TX.toTex(cGrass), normalMap: TX.normalFromCanvas(cGrass, 1.2), normalScale: NS(), roughness: 1 }));
-  terrain.rotation.x = -Math.PI / 2; terrain.receiveShadow = true; scene.add(terrain);
-  TX.tileMaps(terrain, 6);
+    new THREE.MeshStandardMaterial({ map: TX.toTex(cGrass), normalMap: TX.normalFromCanvas(cGrass, 1.0), normalScale: NS(), roughness: 1 }));
+  terrain.rotation.x = -Math.PI / 2; terrain.position.y = -0.6; // abaixo do carpete (evita z-fighting)
+  terrain.receiveShadow = true; scene.add(terrain); TX.tileMaps(terrain, 6);
 
-  // chão do térreo
+  // chão do térreo (carpete)
   surfaces.push({ kind: 'flat', x0: BX0, x1: BX1, z0: BZ0, z1: BZ1, y: F[0] });
-  const slab0 = new THREE.Mesh(new THREE.BoxGeometry(BX1 - BX0, 0.4, BZ1 - BZ0), matFloor);
+  const slab0 = new THREE.Mesh(new THREE.BoxGeometry(BX1 - BX0, 0.4, BZ1 - BZ0), matFloor());
   slab0.position.set(0, -0.2, 0); slab0.receiveShadow = true; scene.add(slab0); pushOcc(slab0, 6);
 
-  // vãos nos andares
+  // vãos
   const SHAFT = { x0: -30, x1: -22, z0: -5, z1: 5 };
-  const STAIR_NE = { x0: 18, x1: 30, z0: 8, z1: 20 };
-  const RAMP_SE = { x0: 18, x1: 30, z0: -20, z1: -8 };
+  // escada/rampa recuadas das paredes (piso em volta)
+  const STAIR_NE = { x0: 20, x1: 28, z0: 8, z1: 18 };
+  const RAMP_SE = { x0: 20, x1: 28, z0: -18, z1: -8 };
 
-  // lajes dos andares superiores (com vãos)
-  tileFloor(scene, surfaces, occluders, BX0, BX1, BZ0, BZ1, F[1], [SHAFT, STAIR_NE], matFloor2);
-  tileFloor(scene, surfaces, occluders, BX0, BX1, BZ0, BZ1, F[2], [SHAFT, RAMP_SE], matFloor);
+  // lajes (carpete) com vãos
+  tileFloor(scene, surfaces, occluders, BX0, BX1, BZ0, BZ1, F[1], [SHAFT, STAIR_NE], matFloor());
+  tileFloor(scene, surfaces, occluders, BX0, BX1, BZ0, BZ1, F[2], [SHAFT, RAMP_SE], matFloor());
 
-  // paredes externas + janelas
+  // forros + luminárias em cada andar
+  for (const y of F) buildCeiling(y + CH);
+
+  // paredes externas (papel de parede) + rodapés claros
   wall(0, BZ1, BX1 - BX0, 1); wall(0, BZ0, BX1 - BX0, 1);
   wallV(BX0, 0, BZ1 - BZ0, 1); wallV(BX1, 0, BZ1 - BZ0, 1);
-  addWindows();
+  for (const y of F) baseboards(y);
 
-  // paredes do poço do elevador (entra-se pelo leste, x=-22)
+  // poço do elevador
   solidBox(SHAFT.x0 + 4, WTOP / 2, SHAFT.z1, 8, WTOP, 0.6, matWall);
   solidBox(SHAFT.x0 + 4, WTOP / 2, SHAFT.z0, 8, WTOP, 0.6, matWall);
 
-  // escada 0->1 (degraus) e rampa 1->2
-  buildStairs(STAIR_NE.x0, STAIR_NE.x1, 20, F[0], 8, F[1], 16, matStep);
-  surfaces.push({ kind: 'ramp', x0: STAIR_NE.x0, x1: STAIR_NE.x1, z0: 8, z1: 20, zA: 20, yA: F[0], zB: 8, yB: F[1] });
-  buildRamp(RAMP_SE.x0, RAMP_SE.x1, -20, F[1], -8, F[2], matRamp);
-  surfaces.push({ kind: 'ramp', x0: RAMP_SE.x0, x1: RAMP_SE.x1, z0: -20, z1: -8, zA: -20, yA: F[1], zB: -8, yB: F[2] });
+  // escada 0->1 e rampa 1->2
+  buildStairs(STAIR_NE.x0, STAIR_NE.x1, 18, F[0], 8, F[1], 14, matColumn);
+  surfaces.push({ kind: 'ramp', x0: STAIR_NE.x0, x1: STAIR_NE.x1, z0: 8, z1: 18, zA: 18, yA: F[0], zB: 8, yB: F[1] });
+  buildRamp(RAMP_SE.x0, RAMP_SE.x1, -18, F[1], -8, F[2], matRamp);
+  surfaces.push({ kind: 'ramp', x0: RAMP_SE.x0, x1: RAMP_SE.x1, z0: -18, z1: -8, zA: -18, yA: F[1], zB: -8, yB: F[2] });
 
-  // caixas de cobertura por andar
-  for (const [x, z, y] of [
-    [-10, 6, F[0]], [8, -6, F[0]], [-16, -12, F[0]],
-    [6, 10, F[1]], [-12, -4, F[1]], [14, 2, F[1]],
-    [-6, 8, F[2]], [10, -10, F[2]], [0, 0, F[2]],
-  ]) crate(x, z, y);
+  // pilares (no lugar dos blocos) — vão do piso ao forro em todos os andares
+  for (const y of F) for (const px of [-14, 14]) for (const pz of [-8, 8]) pillar(px, pz, y, CH);
 
   // elevador
   const elevator = { x0: -29, x1: -22, z0: -4, z1: 4, y: F[0], target: null, floors: F.slice() };
@@ -98,17 +94,15 @@ export function buildArena(scene) {
   scene.add(car); elevator.mesh = car;
 
   const spawns = [
-    new THREE.Vector3(-14, 0, -10), new THREE.Vector3(14, 0, -10),
-    new THREE.Vector3(-14, 0, 10), new THREE.Vector3(14, 0, 10),
+    new THREE.Vector3(-14, 0, 12), new THREE.Vector3(14, 0, 12),
+    new THREE.Vector3(-6, 0, -12), new THREE.Vector3(6, 0, -12),
   ];
 
   function groundAt(x, z, feetY) {
     let best = -Infinity;
     for (const s of surfaces) {
       if (x < s.x0 || x > s.x1 || z < s.z0 || z > s.z1) continue;
-      let sy;
-      if (s.kind === 'flat') sy = s.y;
-      else sy = s.yA + (s.yB - s.yA) * clamp((z - s.zA) / (s.zB - s.zA), 0, 1);
+      const sy = s.kind === 'flat' ? s.y : s.yA + (s.yB - s.yA) * clamp((z - s.zA) / (s.zB - s.zA), 0, 1);
       if (sy <= feetY + CONFIG.STEP_UP && sy > best) best = sy;
     }
     if (x >= elevator.x0 && x <= elevator.x1 && z >= elevator.z0 && z <= elevator.z1) {
@@ -125,17 +119,36 @@ export function buildArena(scene) {
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
     m.position.set(cx, cy, cz); m.castShadow = true; m.receiveShadow = true; scene.add(m);
     colliders.push({ min: { x: cx - w / 2, z: cz - d / 2 }, max: { x: cx + w / 2, z: cz + d / 2 }, top: cy + h / 2 });
-    pushOcc(m, wpt);
-    return m;
+    pushOcc(m, wpt); return m;
   }
   function wall(cx, cz, len, t) { solidBox(cx, WTOP / 2, cz, len, WTOP, t, matWall, 8); }
   function wallV(cx, cz, len, t) { solidBox(cx, WTOP / 2, cz, t, WTOP, len, matWall, 8); }
-  function crate(x, z, y) {
-    const s = 3;
-    const m = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), matCrate);
-    m.position.set(x, y + s / 2, z); m.castShadow = true; m.receiveShadow = true; scene.add(m);
-    colliders.push({ min: { x: x - s / 2, z: z - s / 2 }, max: { x: x + s / 2, z: z + s / 2 }, top: y + s });
-    pushOcc(m, 3);
+  function pillar(x, z, y, h) {
+    const w = 2.4;
+    const shaft = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), matColumn);
+    shaft.position.set(x, y + h / 2, z); shaft.castShadow = true; shaft.receiveShadow = true; scene.add(shaft);
+    colliders.push({ min: { x: x - w / 2, z: z - w / 2 }, max: { x: x + w / 2, z: z + w / 2 }, top: y + h });
+    pushOcc(shaft, 4);
+    for (const [yy, hh] of [[y + 0.25, 0.5], [y + h - 0.2, 0.4]]) { // base e capitel
+      const t = new THREE.Mesh(new THREE.BoxGeometry(w + 0.5, hh, w + 0.5), matColumn);
+      t.position.set(x, yy, z); t.castShadow = true; t.receiveShadow = true; scene.add(t); pushOcc(t, 4);
+    }
+  }
+  function buildCeiling(cy) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(BX1 - BX0, 0.3, BZ1 - BZ0), matCeil);
+    m.position.set(0, cy, 0); m.receiveShadow = true; scene.add(m); pushOcc(m, 2);
+    for (let x = BX0 + 9; x < BX1; x += 14) {
+      for (let z = BZ0 + 8; z < BZ1; z += 13) {
+        const p = new THREE.Mesh(new THREE.BoxGeometry(3, 0.12, 1.4), matPanel);
+        p.position.set(x, cy - 0.22, z); scene.add(p);
+      }
+    }
+  }
+  function baseboards(y) {
+    const h = 0.6, t = 0.3;
+    const strip = (cx, cz, w, d) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), matColumn); m.position.set(cx, y + h / 2, cz); scene.add(m); };
+    strip(0, BZ1 - 0.6, BX1 - BX0, t); strip(0, BZ0 + 0.6, BX1 - BX0, t);
+    strip(BX1 - 0.6, 0, t, BZ1 - BZ0); strip(BX0 + 0.6, 0, t, BZ1 - BZ0);
   }
   function buildStairs(x0, x1, zStart, yStart, zEnd, yEnd, n, mat) {
     const dz = (zEnd - zStart) / n;
@@ -143,27 +156,14 @@ export function buildArena(scene) {
       const top = yStart + (yEnd - yStart) * (k / n);
       const zc = zStart + dz * (k - 0.5);
       const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, top + 0.2, Math.abs(dz)), mat);
-      m.position.set((x0 + x1) / 2, (top - 0.2) / 2, zc); m.castShadow = true; m.receiveShadow = true; scene.add(m);
-      pushOcc(m, 4);
+      m.position.set((x0 + x1) / 2, (top - 0.2) / 2, zc); m.castShadow = true; m.receiveShadow = true; scene.add(m); pushOcc(m, 4);
     }
   }
   function buildRamp(x0, x1, zA, yA, zB, yB, mat) {
     const dz = zB - zA, dy = yB - yA, len = Math.hypot(dz, dy);
     const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, 0.4, len), mat);
     m.position.set((x0 + x1) / 2, (yA + yB) / 2, (zA + zB) / 2);
-    m.rotation.x = -Math.atan2(dy, dz);
-    m.castShadow = true; m.receiveShadow = true; scene.add(m);
-    pushOcc(m, 4);
-  }
-  function addWindows() {
-    for (const y of [F[1], F[2]]) {
-      for (let x = BX0 + 8; x < BX1; x += 12) { pane(x, y + 1.8, BZ1, 4, 2.6, true); pane(x, y + 1.8, BZ0, 4, 2.6, true); }
-      for (let z = BZ0 + 8; z < BZ1; z += 12) pane(BX1, y + 1.8, z, 4, 2.6, false);
-    }
-  }
-  function pane(x, y, z, w, h, alongX) {
-    const geo = alongX ? new THREE.BoxGeometry(w, h, 0.15) : new THREE.BoxGeometry(0.15, h, w);
-    const m = new THREE.Mesh(geo, matGlass); m.position.set(x, y, z); scene.add(m);
+    m.rotation.x = -Math.atan2(dy, dz); m.castShadow = true; m.receiveShadow = true; scene.add(m); pushOcc(m, 4);
   }
 }
 
@@ -184,7 +184,7 @@ function tileFloor(scene, surfaces, occluders, x0, x1, z0, z1, y, holes, mat) {
       const mx = (cx0 + cx1) / 2, mz = (cz0 + cz1) / 2;
       if (holes.some((h) => mx > h.x0 && mx < h.x1 && mz > h.z0 && mz < h.z1)) continue;
       surfaces.push({ kind: 'flat', x0: cx0, x1: cx1, z0: cz0, z1: cz1, y });
-      const m = new THREE.Mesh(new THREE.BoxGeometry(cx1 - cx0, 0.4, cz1 - cz0), mat);
+      const m = new THREE.Mesh(new THREE.BoxGeometry(cx1 - cx0, 0.4, cz1 - cz0), mat.clone());
       m.position.set(mx, y - 0.2, mz); m.receiveShadow = true; m.castShadow = true; scene.add(m);
       TX.tileMaps(m, 6); occluders.push(m);
     }

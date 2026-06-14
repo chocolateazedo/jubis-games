@@ -79,6 +79,49 @@ export function grass(base = '#4f8f46') {
   return c;
 }
 
+// ---- estilo Backrooms ----
+export function wallpaper(base = '#c2c06f', motif = '#a7ac56', light = '#d4d28a') {
+  const c = canvas(), x = c.getContext('2d');
+  x.fillStyle = base; x.fillRect(0, 0, SIZE, SIZE);
+  const cols = 6, cw = SIZE / cols;
+  for (let i = 0; i < cols; i++) {
+    const cx = i * cw + cw / 2;
+    x.globalAlpha = 0.3; x.fillStyle = light; x.fillRect(i * cw + cw * 0.42, 0, cw * 0.16, SIZE); x.globalAlpha = 1;
+    x.strokeStyle = motif; x.lineWidth = 2; x.fillStyle = motif;
+    for (let y = 6; y < SIZE; y += 20) {
+      x.beginPath(); x.moveTo(cx - cw * 0.32, y + 9); x.lineTo(cx, y); x.lineTo(cx + cw * 0.32, y + 9); x.stroke();
+      x.beginPath(); x.arc(cx, y + 13, 2.4, 0, 7); x.fill();
+    }
+  }
+  return c;
+}
+
+export function carpet(base = '#d2b24a') {
+  const c = canvas(), x = c.getContext('2d');
+  x.fillStyle = base; x.fillRect(0, 0, SIZE, SIZE);
+  for (let i = 0; i < 9000; i++) {
+    x.fillStyle = Math.random() < 0.5 ? 'rgba(150,120,40,0.35)' : 'rgba(225,200,120,0.3)';
+    x.fillRect(Math.random() * SIZE, Math.random() * SIZE, 2, 2);
+  }
+  return c;
+}
+
+export function ceilingTile(base = '#dbd492') {
+  const c = canvas(), x = c.getContext('2d');
+  x.fillStyle = base; x.fillRect(0, 0, SIZE, SIZE);
+  for (let i = 0; i < 5000; i++) { x.fillStyle = 'rgba(120,115,70,0.22)'; x.fillRect(Math.random() * SIZE, Math.random() * SIZE, 1.5, 1.5); }
+  x.strokeStyle = 'rgba(95,90,52,0.65)'; x.lineWidth = 5; x.strokeRect(0, 0, SIZE, SIZE);
+  return c;
+}
+
+export function plaster(base = '#ece3c8') {
+  const c = canvas(), x = c.getContext('2d');
+  x.fillStyle = base; x.fillRect(0, 0, SIZE, SIZE);
+  speckle(x, 1400, 0.03);
+  for (let i = 0; i < 10; i++) { x.globalAlpha = 0.03; x.fillStyle = '#000'; x.beginPath(); x.arc(Math.random() * SIZE, Math.random() * SIZE, 20 + Math.random() * 28, 0, 7); x.fill(); }
+  x.globalAlpha = 1; return c;
+}
+
 // gera um normal map a partir do brilho do canvas de cor (relevo)
 export function normalFromCanvas(srcCanvas, strength = 2.2) {
   const s = SIZE;

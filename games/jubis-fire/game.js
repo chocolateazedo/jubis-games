@@ -287,11 +287,11 @@ const dist2 = (a, b) => { const dx = a.x - b.x, dz = a.z - b.z; return dx * dx +
 
 function setupThree() {
   if (renderer) return;
-  renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer = new THREE.WebGLRenderer({ antialias: !isTouch, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, isTouch ? 1.25 : 2)); // tablet/celular: render mais leve
   renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = isTouch ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.15;
@@ -610,7 +610,7 @@ function toggleCamMode() {
 
 // deixa translúcido o que estiver entre a câmera e o jogador (só 3ª pessoa)
 function updateOcclusion() {
-  for (const m of faded) { m.material.opacity = 1; m.material.transparent = false; }
+  for (const m of faded) { m.material.opacity = 1; m.material.transparent = false; m.material.depthWrite = true; }
   faded.length = 0;
   if (camMode !== 'third' || !me) return;
   const head = tmp.set(me.pos.x, me.pos.y + CONFIG.EYE, me.pos.z);
@@ -618,10 +618,10 @@ function updateOcclusion() {
   const dist = dir.length(); if (dist < 0.1) return;
   dir.divideScalar(dist);
   raycaster.set(camera.position, dir);
-  raycaster.near = 0.1; raycaster.far = dist - 0.6;
+  raycaster.near = 0.05; raycaster.far = dist - 0.1; // pega até paredes coladas no jogador
   for (const h of raycaster.intersectObjects(occluders, false)) {
-    h.object.material.transparent = true;
-    h.object.material.opacity = 0.18;
+    const mat = h.object.material;
+    mat.transparent = true; mat.opacity = 0.16; mat.depthWrite = false; // não tapa o personagem
     faded.push(h.object);
   }
 }

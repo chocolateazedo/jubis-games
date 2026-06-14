@@ -270,14 +270,14 @@ function updateBots(dt) {
     const ai = e.ai;
     const cx = e.pos.x, cz = e.pos.z;
 
-    // coletar pacote de bala se estiver perto (só bots com arma de fogo)
-    if (e.hasGun) for (const p of pickups) {
+    // coletar pacotes perto (bala precisa de arma; vida só se machucado)
+    for (const p of pickups) {
       const pdx = cx - p.pos.x, pdz = cz - p.pos.z;
-      if (pdx * pdx + pdz * pdz < CONFIG.PICKUP_R * CONFIG.PICKUP_R && Math.abs(e.pos.y - p.pos.y) < 2.2) {
-        ai.ammo = Math.min(CONFIG.AMMO_MAX, ai.ammo + CONFIG.AMMO_PACK);
-        pickups = pickups.filter((q) => q.id !== p.id);
-        break;
-      }
+      if (pdx * pdx + pdz * pdz >= CONFIG.PICKUP_R * CONFIG.PICKUP_R || Math.abs(e.pos.y - p.pos.y) >= 2.2) continue;
+      if (p.kind === 'health') { if (e.hp >= e.maxHp) continue; heal(e, CONFIG.HEAL); }
+      else { if (!e.hasGun) continue; ai.ammo = Math.min(CONFIG.AMMO_MAX, ai.ammo + CONFIG.AMMO_PACK); }
+      pickups = pickups.filter((q) => q.id !== p.id);
+      break;
     }
     // sem balas? procura o pacote mais próximo
     let seek = null;
@@ -878,11 +878,22 @@ function resetAmmoPickups() {
   if (status === 'playing' && isHost) { for (let i = 0; i < 5; i++) spawnPickup(); host.pickupTimer = CONFIG.PICKUP_EVERY; }
   else host.pickupTimer = 3;
 }
-function makePickupMesh() {
+function heal(e, amt) { e.hp = Math.min(e.maxHp, e.hp + amt); }
+function makePickupMesh(kind) {
   const g = new THREE.Group();
-  const box = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.45, 0.5),
-    new THREE.MeshStandardMaterial({ color: 0xffcc33, emissive: 0xff8400, emissiveIntensity: 0.9, metalness: 0.3, roughness: 0.5 }));
-  box.castShadow = true; g.add(box);
+  if (kind === 'health') {
+    const box = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6),
+      new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x33dd55, emissiveIntensity: 0.7, roughness: 0.4 }));
+    box.castShadow = true; g.add(box);
+    const m = new THREE.MeshStandardMaterial({ color: 0x2ecc4b, emissive: 0x1faa3a, emissiveIntensity: 0.8 });
+    const a = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.2, 0.2), m);
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.66, 0.2), m);
+    g.add(a, b); // cruz de vida
+  } else {
+    const box = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.45, 0.5),
+      new THREE.MeshStandardMaterial({ color: 0xffcc33, emissive: 0xff8400, emissiveIntensity: 0.9, metalness: 0.3, roughness: 0.5 }));
+    box.castShadow = true; g.add(box);
+  }
   return g;
 }
 function blockedSpot(x, z) {
@@ -894,7 +905,8 @@ function spawnPickup() {
     const x = (Math.random() * 2 - 1) * 26, z = (Math.random() * 2 - 1) * 16;
     if (blockedSpot(x, z)) continue;
     const fy = CONFIG.FLOORS[Math.floor(Math.random() * CONFIG.FLOORS.length)];
-    pickups.push({ id: host.pickupSeq++, pos: new THREE.Vector3(x, groundAt(x, z, fy + 0.5), z) });
+    const kind = Math.random() < 0.35 ? 'health' : 'ammo';
+    pickups.push({ id: host.pickupSeq++, pos: new THREE.Vector3(x, groundAt(x, z, fy + 0.5), z), kind });
     return;
   }
 }
@@ -903,30 +915,40 @@ function syncPickups(dt) {
   const tt = nowS();
   for (const p of pickups) {
     let mesh = pickupMeshes.get(p.id);
-    if (!mesh) { mesh = makePickupMesh(); scene.add(mesh); pickupMeshes.set(p.id, mesh); }
+    if (!mesh) { mesh = makePickupMesh(p.kind); scene.add(mesh); pickupMeshes.set(p.id, mesh); }
     mesh.position.set(p.pos.x, p.pos.y + 0.6 + Math.sin(tt * 2 + p.id) * 0.15, p.pos.z);
     mesh.rotation.y += dt * 2;
   }
 }
+function collectPickup(p) {
+  if (p.kind === 'health') {
+    if (isHost) heal(me, CONFIG.HEAL); // host cura direto; cliente é curado pelo host
+    Sound.playHeal();
+  } else {
+    if (me.dualGun) { ammoR = Math.min(maxR, ammoR + Math.ceil(packTotal / 2)); ammoL = Math.min(maxL, ammoL + Math.floor(packTotal / 2)); }
+    else ammoR = Math.min(maxR, ammoR + packTotal);
+    Sound.playPickup();
+  }
+  pickups = pickups.filter((q) => q.id !== p.id);
+  if (net) net.sendPickup(p.id);
+}
 function checkPickups() {
-  if (!me || !me.alive || !me.hasGun) return; // quem não tem arma de fogo não pega balas
+  if (!me || !me.alive) return;
   for (const p of pickups) {
     const dx = me.pos.x - p.pos.x, dz = me.pos.z - p.pos.z, dy = me.pos.y - p.pos.y;
     if (dx * dx + dz * dz < CONFIG.PICKUP_R * CONFIG.PICKUP_R && Math.abs(dy) < 2.2) {
-      if (me.dualGun) { // distribui o pacote entre as duas armas
-        ammoR = Math.min(maxR, ammoR + Math.ceil(packTotal / 2));
-        ammoL = Math.min(maxL, ammoL + Math.floor(packTotal / 2));
-      } else {
-        ammoR = Math.min(maxR, ammoR + packTotal);
-      }
-      Sound.playPickup();
-      pickups = pickups.filter((q) => q.id !== p.id);
-      if (net) net.sendPickup(p.id); // avisa o host (no-op se eu for o host)
-      break;
+      if (p.kind === 'health') { if (me.hp >= me.maxHp) continue; } // já com vida cheia: deixa pra outro
+      else if (!me.hasGun) continue;                                // sem arma de fogo não pega bala
+      collectPickup(p); break;
     }
   }
 }
-function onClientPickup(pid, d) { if (isHost) pickups = pickups.filter((p) => p.id !== d.id); }
+function onClientPickup(pid, d) {
+  if (!isHost) return;
+  const p = pickups.find((q) => q.id === d.id);
+  if (p && p.kind === 'health') { const e = entities.get(pid); if (e && e.alive) heal(e, CONFIG.HEAL); }
+  pickups = pickups.filter((q) => q.id !== d.id);
+}
 
 // ---------- golpe corpo-a-corpo (marreta / espada) ----------
 function meleeStrike(dmg) {

@@ -25,6 +25,7 @@ export const CONFIG = {
   ELEV_SPEED: 5,       // velocidade do elevador (u/s)
   GRENADE: { speed: 16, up: 7.5, gravity: 20, fuse: 3, radius: 7, dmg: 90, cooldown: 1.0, bounce: 0.4 },
   AMMO_START: 5, AMMO_MAX: 15, AMMO_PACK: 5, // munição e pacotes
+  HEAL: 40, // caixinha de vida (+HP)
   PICKUP_EVERY: 30, PICKUP_MAX: 8, PICKUP_R: 1.8, // pacotes de bala surgem a cada 30s
   BIG_SCALE: 1.4, BIG_HP: 180, // personagem grandão (Bombadão)
   MELEE: { range: 5.5, dmg: 70, cooldown: 1.2, dur: 0.5 }, // golpe de marreta (X)

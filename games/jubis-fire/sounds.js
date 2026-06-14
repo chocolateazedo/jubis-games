@@ -172,6 +172,17 @@ export function playSpray() {
   src.start(t); src.stop(t + 0.44);
 }
 
+export function playHeal() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  [523, 659, 880].forEach((f, i) => {
+    const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f;
+    const g = ctx.createGain(); const s = t + i * 0.08;
+    g.gain.setValueAtTime(0.0001, s); g.gain.exponentialRampToValueAtTime(0.18, s + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, s + 0.2);
+    o.connect(g); g.connect(ctx.destination); o.start(s); o.stop(s + 0.22);
+  });
+}
+
 export function playEmpty() {
   if (!ctx) return;
   const t = ctx.currentTime;

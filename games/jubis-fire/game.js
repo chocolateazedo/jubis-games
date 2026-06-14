@@ -398,6 +398,7 @@ function onWorld(d) {           // cliente recebe estado do host
     const e = entities.get(pid); if (!e) continue;
     const s = d.players[pid];
     if (s.hp < e.hp) { e.hitFlash = 0.18; if (pid === myPeerId) Sound.playPain(); } // tomou dano
+    if (e.alive && !s.alive) Sound.playDeath(); // morreu
     e.hp = s.hp; e.alive = s.alive;
     if (pid === myPeerId) continue;              // minha posição é local
     e.targetPos.set(s.p[0], s.p[1], s.p[2]);
@@ -557,7 +558,7 @@ function damage(e, amount) {
   e.hp = Math.max(0, e.hp - amount);
   e.hitFlash = 0.18; // reação visual ao acerto
   if (e === me) Sound.playPain();
-  if (e.hp <= 0 && e.alive) { e.alive = false; }
+  if (e.hp <= 0 && e.alive) { e.alive = false; Sound.playDeath(); }
 }
 
 function broadcastWorld() {
@@ -587,13 +588,22 @@ function handleFire(dt) {
 const MUZZLE_LOCAL = new THREE.Vector3(0, -0.98, 0.08);
 
 function fire() {
-  // tiro reto, na horizontal, na direção para onde o boneco está virado
-  const dir = new THREE.Vector3(Math.sin(me.ry), 0, Math.cos(me.ry));
-  // levanta o braço já agora e lê a posição real da ponta do revólver
+  // levanta o braço e lê a ponta real do revólver (de onde sai o traçado)
   const armR = me.body.parts.armR;
   armR.rotation.x = -Math.PI / 2; armR.rotation.z = 0;
   armR.updateWorldMatrix(true, false);
-  const origin = MUZZLE_LOCAL.clone().applyMatrix4(armR.matrixWorld);
+  const muzzle = MUZZLE_LOCAL.clone().applyMatrix4(armR.matrixWorld);
+
+  // 1ª pessoa: mira pela câmera (crosshair preciso). 3ª pessoa: reto na frente do boneco.
+  let origin, dir;
+  if (camMode === 'first') {
+    origin = camera.position.clone();
+    dir = camera.getWorldDirection(new THREE.Vector3());
+  } else {
+    origin = muzzle.clone();
+    dir = new THREE.Vector3(Math.sin(me.ry), 0, Math.cos(me.ry));
+  }
+
   let best = null, bestT = CONFIG.RANGE;
   for (const e of entities.values()) {
     if (e === me || !e.alive) continue;
@@ -606,8 +616,8 @@ function fire() {
     best = e; bestT = tca;
   }
   const end = origin.clone().add(dir.clone().multiplyScalar(best ? bestT : CONFIG.RANGE));
-  tracer(origin, end);
-  me.aimTimer = 0.3; // levanta o braço/arma
+  tracer(muzzle, end); // o traçado sempre sai da arma e vai até o alvo
+  me.aimTimer = 0.3;
   ammo--; Sound.playShoot();
   if (best) {
     if (isHost) damage(best, CONFIG.BULLET_DMG);

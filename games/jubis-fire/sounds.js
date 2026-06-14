@@ -99,6 +99,24 @@ export function playExplosion() {
   o.start(t); o.stop(t + 0.46);
 }
 
+export function playDeath() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  const o = ctx.createOscillator(); o.type = 'sawtooth';
+  o.frequency.setValueAtTime(520, t);
+  o.frequency.exponentialRampToValueAtTime(150, t + 0.65);
+  // vibrato (grito trêmulo)
+  const lfo = ctx.createOscillator(); lfo.frequency.value = 14;
+  const lg = ctx.createGain(); lg.gain.value = 28; lfo.connect(lg); lg.connect(o.frequency);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.35, t + 0.05);
+  g.gain.setValueAtTime(0.3, t + 0.45);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.72);
+  o.connect(g); g.connect(ctx.destination);
+  o.start(t); o.stop(t + 0.74); lfo.start(t); lfo.stop(t + 0.74);
+}
+
 export function playEmpty() {
   if (!ctx) return;
   const t = ctx.currentTime;

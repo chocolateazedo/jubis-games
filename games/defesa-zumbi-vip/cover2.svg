@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" width="640" height="400">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#243a6b"/>
+      <stop offset=".5" stop-color="#1a2c2a"/>
+      <stop offset="1" stop-color="#0c1410"/>
+    </linearGradient>
+    <radialGradient id="moon" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#fff7d6"/>
+      <stop offset="1" stop-color="#cfe0b0"/>
+    </radialGradient>
+    <linearGradient id="tw" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9af3ff"/>
+      <stop offset="1" stop-color="#3aa0d6"/>
+    </linearGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+
+  <rect width="640" height="400" fill="url(#sky)"/>
+  <circle cx="540" cy="78" r="46" fill="url(#moon)"/>
+  <circle cx="555" cy="66" r="9" fill="#c3d6a6" opacity=".6"/>
+  <g fill="#fff" opacity=".7">
+    <circle cx="80" cy="60" r="2"/><circle cx="160" cy="40" r="1.6"/><circle cx="300" cy="70" r="2"/><circle cx="430" cy="44" r="1.6"/><circle cx="120" cy="110" r="1.4"/>
+  </g>
+
+  <!-- caminho -->
+  <path d="M-20 250 C 120 250 120 150 260 150 S 420 300 600 300 L 700 300" fill="none" stroke="#b89f76" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M-20 250 C 120 250 120 150 260 150 S 420 300 600 300 L 700 300" fill="none" stroke="#ffe8bf" stroke-width="4" stroke-dasharray="8 12" opacity=".7"/>
+
+  <!-- slot brilhando -->
+  <circle cx="330" cy="245" r="22" fill="#6bffa8" opacity=".35"/>
+  <circle cx="330" cy="245" r="22" fill="none" stroke="#eaffff" stroke-width="3" stroke-dasharray="6 7"/>
+  <text x="330" y="253" font-family="Arial" font-size="26" font-weight="bold" fill="#fff" text-anchor="middle">+</text>
+
+  <!-- torre -->
+  <ellipse cx="200" cy="262" rx="26" ry="10" fill="#000" opacity=".4"/>
+  <rect x="184" y="214" width="32" height="44" rx="8" fill="#2a3566"/>
+  <circle cx="200" cy="206" r="24" fill="url(#tw)" stroke="#fff" stroke-width="3"/>
+  <circle cx="200" cy="206" r="9" fill="#eaffff"/>
+
+  <!-- zumbis -->
+  <g>
+    <ellipse cx="430" cy="296" rx="22" ry="8" fill="#000" opacity=".4"/>
+    <circle cx="430" cy="276" r="20" fill="#62c56b"/>
+    <circle cx="423" cy="272" r="3.4" fill="#1d3a22"/><circle cx="437" cy="272" r="3.4" fill="#1d3a22"/>
+  </g>
+  <g>
+    <ellipse cx="500" cy="306" rx="18" ry="7" fill="#000" opacity=".4"/>
+    <circle cx="500" cy="290" r="16" fill="#7bd47f"/>
+    <circle cx="494" cy="287" r="2.8" fill="#1d3a22"/><circle cx="506" cy="287" r="2.8" fill="#1d3a22"/>
+  </g>
+
+  <!-- título -->
+  <text x="320" y="64" font-family="Arial Black, Arial" font-size="46" font-weight="900" fill="#ffd978" text-anchor="middle" filter="url(#glow)">DEFESA ZUMBI</text>
+  <text x="320" y="104" font-family="Arial Black, Arial" font-size="30" font-weight="900" fill="#65e8ff" text-anchor="middle">★ VIP ★</text>
+</svg>

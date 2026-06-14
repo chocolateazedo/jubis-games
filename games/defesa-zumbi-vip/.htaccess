@@ -1,0 +1,13 @@
+# Defesa Zumbi VIP em desenvolvimento: não cachear, pra as mudanças aparecerem na hora.
+<IfModule mod_headers.c>
+  <FilesMatch "\.(html|svg|png|js)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+  </FilesMatch>
+</IfModule>
+<IfModule mod_expires.c>
+  <FilesMatch "\.(html|svg|png|js)$">
+    ExpiresActive On
+    ExpiresDefault "access plus 0 seconds"
+  </FilesMatch>
+</IfModule>

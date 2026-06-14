@@ -3,7 +3,7 @@
 // posição; o host decide zona, vida e eliminações e transmite o "mundo".
 
 import * as THREE from 'three';
-import { CONFIG, computeZone, clamp, lerp } from './shared.js?v=3';
+import { CONFIG, ZONE_DAMAGE, computeZone, clamp, lerp } from './shared.js?v=3';
 import { CHARACTERS, getCharacter, buildBody, animateBody } from './characters.js?v=3';
 import { buildArena, resolveCollisions } from './arena.js?v=3';
 import { lobby, Net } from './net.js?v=3';
@@ -317,6 +317,7 @@ function makeTag(text) {
 }
 
 function buildZoneMesh() {
+  if (!ZONE_DAMAGE) { zoneMesh = null; return; } // zona desativada: sem círculo
   const geo = new THREE.CylinderGeometry(1, 1, CONFIG.WALL_H * 3, 48, 1, true);
   const mat = new THREE.MeshBasicMaterial({ color: 0x4fc3ff, transparent: true, opacity: 0.16, side: THREE.DoubleSide });
   zoneMesh = new THREE.Mesh(geo, mat);
@@ -424,19 +425,22 @@ function updateRemotes(dt) {
 function hostStep(dt) {
   // posição do próprio host já foi atualizada em updateLocal (me.pos)
   // zona
-  const elapsed = nowS() - host.startTime;
-  const z = computeZone(elapsed);
-  host.zoneR = z.r; host.zoneDps = z.dps;
-  // dano da zona
-  for (const e of entities.values()) {
-    if (!e.alive) continue;
-    const d = Math.hypot(e.pos.x, e.pos.z);
-    if (d > host.zoneR) {
-      const acc = (host.dmgAccum.get(e.peerId) || 0) + z.dps * dt;
-      const whole = Math.floor(acc);
-      host.dmgAccum.set(e.peerId, acc - whole);
-      if (whole > 0) damage(e, whole);
+  if (ZONE_DAMAGE) {
+    const elapsed = nowS() - host.startTime;
+    const z = computeZone(elapsed);
+    host.zoneR = z.r; host.zoneDps = z.dps;
+    for (const e of entities.values()) {
+      if (!e.alive) continue;
+      const d = Math.hypot(e.pos.x, e.pos.z);
+      if (d > host.zoneR) {
+        const acc = (host.dmgAccum.get(e.peerId) || 0) + z.dps * dt;
+        const whole = Math.floor(acc);
+        host.dmgAccum.set(e.peerId, acc - whole);
+        if (whole > 0) damage(e, whole);
+      }
     }
+  } else {
+    host.zoneR = 9999; host.zoneDps = 0; // sem zona: ninguém fica "fora"
   }
   // acertos de tiro reportados
   for (const h of host.pendingHits) {
@@ -541,7 +545,7 @@ function updateHud() {
   $('hpText').textContent = Math.ceil(me.hp);
   const alive = [...entities.values()].filter((e) => e.alive).length;
   $('aliveCount').textContent = `Vivos: ${alive}/${entities.size}`;
-  $('zoneInfo').textContent = host.zoneDps ? `Zona · dano ${host.zoneDps}/s fora` : 'Zona';
+  $('zoneInfo').textContent = ZONE_DAMAGE ? (host.zoneDps ? `Zona · dano ${host.zoneDps}/s fora` : 'Zona') : 'Sem zona';
   $('deadTag').classList.toggle('hidden', me.alive);
 }
 

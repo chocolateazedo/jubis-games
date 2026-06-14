@@ -3,6 +3,9 @@
 // os spawns e as fases da zona ficam idênticos em todos os jogadores (P2P sem
 // precisar sincronizar o mundo inteiro — só a zona e os jogadores).
 
+// Liga/desliga a zona que encolhe e dá dano. false = sem zona de dano.
+export const ZONE_DAMAGE = false;
+
 export const CONFIG = {
   ARENA: 120,          // largura total do mapa (x,z variam de -60 a 60)
   WALL_H: 7,

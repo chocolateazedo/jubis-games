@@ -117,6 +117,20 @@ export function playDeath() {
   o.start(t); o.stop(t + 0.74); lfo.start(t); lfo.stop(t + 0.74);
 }
 
+export function playSmash() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  // baque grave + estalo
+  const o = ctx.createOscillator(); o.type = 'sine';
+  o.frequency.setValueAtTime(160, t); o.frequency.exponentialRampToValueAtTime(45, t + 0.25);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+  o.connect(g); g.connect(ctx.destination); o.start(t); o.stop(t + 0.32);
+  const src = noise(); const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 700;
+  const g2 = ctx.createGain(); g2.gain.setValueAtTime(0.4, t); g2.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+  src.connect(lp); lp.connect(g2); g2.connect(ctx.destination); src.start(t); src.stop(t + 0.14);
+}
+
 export function playEmpty() {
   if (!ctx) return;
   const t = ctx.currentTime;

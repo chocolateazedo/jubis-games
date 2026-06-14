@@ -50,12 +50,13 @@ function quick_join(string $dir, array $in): array
     $name = clean_name($in['name'] ?? '');
     $peer = clean_peer($in['peerId'] ?? '');
     $char = clean_char($in['char'] ?? '');
+    $map = clean_map($in['map'] ?? '');
     if ($name === '' || $peer === null) return err('dados inválidos');
 
-    return with_lock($dir, function (array $rooms) use ($name, $peer, $char) {
-        // procura sala pública aberta com vaga
+    return with_lock($dir, function (array $rooms) use ($name, $peer, $char, $map) {
+        // procura sala pública aberta, com vaga e mesmo mapa
         foreach ($rooms as &$r) {
-            if (($r['code'] ?? null) === null && $r['status'] === 'waiting' && count($r['players']) < MAX_PLAYERS) {
+            if (($r['code'] ?? null) === null && $r['status'] === 'waiting' && ($r['map'] ?? 'backrooms') === $map && count($r['players']) < MAX_PLAYERS) {
                 $r['players'][] = mkplayer($name, $peer, $char);
                 $r['updatedAt'] = time();
                 return [$rooms, ['roomId' => $r['id'], 'isHost' => false]];
@@ -63,7 +64,7 @@ function quick_join(string $dir, array $in): array
         }
         unset($r);
         // nenhuma: cria nova como host
-        $room = mkroom(null, $name, $peer, $char);
+        $room = mkroom(null, $name, $peer, $char, $map);
         $rooms[$room['id']] = $room;
         return [$rooms, ['roomId' => $room['id'], 'isHost' => true]];
     });
@@ -74,11 +75,12 @@ function create_room(string $dir, array $in): array
     $name = clean_name($in['name'] ?? '');
     $peer = clean_peer($in['peerId'] ?? '');
     $char = clean_char($in['char'] ?? '');
+    $map = clean_map($in['map'] ?? '');
     if ($name === '' || $peer === null) return err('dados inválidos');
 
-    return with_lock($dir, function (array $rooms) use ($name, $peer, $char) {
+    return with_lock($dir, function (array $rooms) use ($name, $peer, $char, $map) {
         do { $code = random_code(6); } while (room_by_code($rooms, $code) !== null);
-        $room = mkroom($code, $name, $peer, $char);
+        $room = mkroom($code, $name, $peer, $char, $map);
         $rooms[$room['id']] = $room;
         return [$rooms, ['roomId' => $room['id'], 'code' => $code, 'isHost' => true]];
     });
@@ -122,6 +124,7 @@ function room_state(string $dir, array $in): array
         return [$rooms, [
             'status'  => $r['status'],
             'code'    => $r['code'],
+            'map'     => $r['map'] ?? 'backrooms',
             'players' => array_map(fn($p) => ['name' => $p['name'], 'peerId' => $p['peerId'], 'char' => $p['char']], $r['players']),
         ]];
     });
@@ -166,11 +169,12 @@ function leave_room(string $dir, array $in): array
 // Helpers
 // ----------------------------------------------------------------------------
 
-function mkroom(?string $code, string $name, string $peer, string $char): array
+function mkroom(?string $code, string $name, string $peer, string $char, string $map = 'backrooms'): array
 {
     return [
         'id'        => bin2hex(random_bytes(6)),
         'code'      => $code,
+        'map'       => $map,
         'status'    => 'waiting',
         'players'   => [mkplayer($name, $peer, $char)],
         'createdAt' => time(),
@@ -257,6 +261,7 @@ function random_code(int $len): string
 function clean_id($v): ?string { $v = (string)$v; return preg_match('/^[a-f0-9]{6,32}$/', $v) ? $v : null; }
 function clean_peer($v): ?string { $v = (string)$v; return preg_match('/^[A-Za-z0-9_-]{1,64}$/', $v) ? $v : null; }
 function clean_char($v): string { $v = (string)$v; return preg_match('/^[a-z][0-9]$/', $v) ? $v : 'm1'; }
+function clean_map($v): string { return in_array($v, ['backrooms', 'bosque'], true) ? $v : 'backrooms'; }
 function clean_name($v): string { $v = trim((string)$v); $v = preg_replace('/\s+/u', ' ', $v); return mb_substr($v, 0, 16); }
 
 function err(string $msg, int $code = 200): array

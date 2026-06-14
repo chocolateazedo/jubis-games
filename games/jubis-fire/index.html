@@ -37,6 +37,7 @@
     .btn { border: none; border-radius: 9px; padding: 12px 16px; font-weight: 700; cursor: pointer; background: #e8513b; color: #fff; font-size: 15px; }
     .btn.alt { background: #2a335c; }
     .btn.ghost { background: transparent; border: 1px solid rgba(255,255,255,.3); }
+    .btn.sel { outline: 3px solid #65e8ff; }
     .btn:disabled { opacity: .5; cursor: default; }
     .divider { margin: 16px 0; border-top: 1px dashed rgba(255,255,255,.2); }
     .msg { min-height: 20px; margin-top: 10px; font-weight: 700; }
@@ -79,7 +80,7 @@
     <div class="panel">
       <h1>🔥 Jubis Fire</h1>
       <p class="sub">Battle royale 3D — até 4 jogadores. Último de pé vence!</p>
-      <p id="buildTag" style="opacity:.55;font-size:11px;margin:0 0 6px">build: death-sound-1</p>
+      <p id="buildTag" style="opacity:.55;font-size:11px;margin:0 0 6px">build: bombadao-1</p>
 
       <div class="row"><input id="pname" type="text" placeholder="Seu nome" maxlength="16" style="width:240px" /></div>
 
@@ -87,6 +88,11 @@
       <div id="charGrid" class="char-grid"></div>
 
       <div id="joinPanel">
+        <p class="lbl" style="text-align:center;margin-top:14px">Mapa</p>
+        <div class="row">
+          <button id="mapBackrooms" type="button" class="btn alt sel">🏢 Backrooms</button>
+          <button id="mapBosque" type="button" class="btn alt">🌲 Bosque</button>
+        </div>
         <div class="divider"></div>
         <div class="row">
           <button id="btnQuick" class="btn" disabled>🎮 Procurar partida</button>
@@ -132,7 +138,7 @@
         <div id="hpbar"><div id="hpFill"></div></div>
       </div>
       <div id="deadTag" class="hidden">☠ Você foi eliminado</div>
-      <div id="pcHint" style="position:fixed; bottom:max(10px,env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); opacity:.6; font-size:12px">Q: visão · E: granada</div>
+      <div id="pcHint" style="position:fixed; bottom:max(10px,env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); opacity:.6; font-size:12px">Q: visão · E: granada · X: marreta (Bombadão)</div>
       <div id="elevatorUI" class="hidden" style="position:fixed; left:50%; top:42%; transform:translate(-50%,-50%); z-index:18; pointer-events:auto; background:rgba(10,15,35,.92); border:1px solid rgba(255,255,255,.25); border-radius:14px; padding:14px 16px; text-align:center;">
         <div style="font-weight:800; margin-bottom:8px">Elevador — escolha o andar <small style="opacity:.7">(teclas 1/2/3)</small></div>
         <div style="display:flex; gap:8px; justify-content:center;">
@@ -148,6 +154,7 @@
       <button id="btnJump" class="tbtn">PULAR</button>
       <button id="btnShoot" class="tbtn">ATIRAR</button>
       <button id="btnGrenade" class="tbtn" style="right:130px; bottom:120px; width:70px; height:70px; background:rgba(46,125,50,.7); font-size:22px;">💣</button>
+      <button id="btnMelee" class="tbtn hidden" style="right:36px; bottom:210px; width:66px; height:66px; background:rgba(120,80,40,.75); font-size:24px;">🔨</button>
       <button id="btnView" class="tbtn" style="left:50%; transform:translateX(-50%); top:max(56px,calc(env(safe-area-inset-top) + 46px)); width:auto; height:auto; padding:8px 14px; border-radius:14px; background:rgba(0,0,0,.5); font-size:13px;">👁 Visão</button>
     </div>
 

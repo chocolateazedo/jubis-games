@@ -14,7 +14,7 @@ const $ = (id) => document.getElementById(id);
 const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
 // ---------- estado ----------
-let peer = null, myPeerId = null, myName = '', selectedChar = 'm1';
+let peer = null, myPeerId = null, myName = '', selectedChar = 'm1', selectedMap = 'backrooms';
 let roomId = null, isHost = false, roomPoll = null;
 let net = null;
 let scene, renderer, camera, clock;
@@ -25,6 +25,7 @@ let elevator = null, onElevator = false;
 let occluders = [], faded = []; // malhas que tapam a câmera / atualmente translúcidas
 const grenades = [], fx = []; // granadas em voo e efeitos de explosão
 let grenadeCd = 0;
+let meleeCd = 0;                          // cooldown do golpe de marreta
 let ammo = CONFIG.AMMO_START;            // balas do jogador local
 let pickups = [];                         // pacotes de bala {id, pos}
 const pickupMeshes = new Map();           // id -> mesh
@@ -97,6 +98,12 @@ function buildCharGrid() {
 // ============================================================
 // LOBBY / SALA
 // ============================================================
+function selectMap(m) {
+  selectedMap = m;
+  $('mapBackrooms').classList.toggle('sel', m === 'backrooms');
+  $('mapBosque').classList.toggle('sel', m === 'bosque');
+}
+
 function getName() {
   const n = $('pname').value.trim().slice(0, 16);
   if (!n) { lobbyMsg('Escreva seu nome.', true); return null; }
@@ -107,13 +114,13 @@ function getName() {
 async function quickJoin() {
   const n = getName(); if (!n || !myPeerId) return;
   lobbyMsg('');
-  const r = await lobby('quick_join', { name: n, peerId: myPeerId, char: selectedChar });
+  const r = await lobby('quick_join', { name: n, peerId: myPeerId, char: selectedChar, map: selectedMap });
   if (r.error) return lobbyMsg(r.error, true);
   enterRoom(r.roomId, r.isHost, null);
 }
 async function createPrivate() {
   const n = getName(); if (!n || !myPeerId) return;
-  const r = await lobby('create_room', { name: n, peerId: myPeerId, char: selectedChar });
+  const r = await lobby('create_room', { name: n, peerId: myPeerId, char: selectedChar, map: selectedMap });
   if (r.error) return lobbyMsg(r.error, true);
   enterRoom(r.roomId, true, r.code);
 }
@@ -183,7 +190,7 @@ function startMatch(room) {
   isHost = (hostPeerId === myPeerId);
 
   setupThree();
-  const built = buildArena(scene);
+  const built = buildArena(scene, room.map || 'backrooms');
   colliders = built.colliders; spawns = built.spawns; groundAt = built.groundAt; elevator = built.elevator; occluders = built.occluders; faded = [];
   resetGrenades();
   resetAmmoPickups();
@@ -192,6 +199,7 @@ function startMatch(room) {
   entities.clear();
   roster.forEach((p, i) => createEntity(p, i, p.peerId === myPeerId));
   me = entities.get(myPeerId);
+  $('btnMelee').classList.toggle('hidden', !(isTouch && me && me.big));
 
   net = new Net(peer, myPeerId, isHost, hostPeerId, roster);
   net.on('world', onWorld).on('input', onClientInput).on('hit', onClientHit).on('pickup', onClientPickup).on('close', onPeerClose);
@@ -215,7 +223,7 @@ function startTraining() {
   status = 'playing'; winner = null;
 
   setupThree();
-  const built = buildArena(scene);
+  const built = buildArena(scene, selectedMap);
   colliders = built.colliders; spawns = built.spawns; groundAt = built.groundAt; elevator = built.elevator; occluders = built.occluders; faded = [];
   resetGrenades();
   resetAmmoPickups();
@@ -232,6 +240,7 @@ function startTraining() {
     if (p.bot) { e.isBot = true; e.ai = { fireCd: 1 + Math.random() * 2, dir: Math.random() * Math.PI * 2, dirCd: 0, ammo: CONFIG.AMMO_START }; }
   });
   me = entities.get(myId);
+  $('btnMelee').classList.toggle('hidden', !(isTouch && me && me.big));
 
   host.startTime = nowS(); host.dmgAccum = new Map(); host.lastNet = 0;
 
@@ -337,10 +346,14 @@ function createEntity(p, slot, local) {
   const sp = spawns[slot % spawns.length];
   body.group.position.copy(sp);
   scene.add(body.group);
+  const big = !!preset.big;
+  const scale = big ? CONFIG.BIG_SCALE : 1;
+  const maxHp = big ? CONFIG.BIG_HP : CONFIG.MAX_HP;
   const e = {
     peerId: p.peerId, name: p.name, charId: p.char, body, group: body.group,
     pos: sp.clone(), ry: 0, vy: 0, grounded: true, anim: 'idle',
-    hp: CONFIG.MAX_HP, alive: true, isLocal: local, slot, aimTimer: 0, hitFlash: 0,
+    hp: maxHp, maxHp, alive: true, isLocal: local, slot, aimTimer: 0, hitFlash: 0,
+    big, scale, eye: CONFIG.EYE * scale, meleeTimer: 0,
     targetPos: sp.clone(), targetRy: 0,
   };
   entities.set(p.peerId, e);
@@ -353,7 +366,8 @@ function createNameplate(e) {
   const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 96;
   const tex = new THREE.CanvasTexture(canvas);
   const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
-  spr.scale.set(2.6, 1.0, 1);
+  const s = e.scale || 1; // compensa a escala do corpo (placa fica do mesmo tamanho)
+  spr.scale.set(2.6 / s, 1.0 / s, 1);
   spr.position.y = 2.55;
   e.group.add(spr);
   e.tag = spr; e.tagCanvas = canvas; e.tagCtx = canvas.getContext('2d'); e.tagTex = tex; e.lastDrawnHp = -1;
@@ -369,7 +383,7 @@ function drawNameplate(e) {
   c.fillStyle = '#fff'; c.fillText(e.name, 128, 28);
   // barra de vida
   const bx = 28, by = 46, bw = 200, bh = 20;
-  const frac = Math.max(0, Math.min(1, e.hp / CONFIG.MAX_HP));
+  const frac = Math.max(0, Math.min(1, e.hp / (e.maxHp || CONFIG.MAX_HP)));
   c.fillStyle = 'rgba(0,0,0,.65)'; c.fillRect(bx - 3, by - 3, bw + 6, bh + 6);
   c.fillStyle = frac > 0.5 ? '#69f0ae' : frac > 0.25 ? '#ffd54f' : '#ff5252';
   c.fillRect(bx, by, bw * frac, bh);
@@ -404,6 +418,7 @@ function onWorld(d) {           // cliente recebe estado do host
     e.targetPos.set(s.p[0], s.p[1], s.p[2]);
     e.targetRy = s.ry; e.anim = s.a;
     e.aimTimer = s.aim ? 0.3 : 0;
+    if (s.ml && e.meleeTimer <= 0) e.meleeTimer = CONFIG.MELEE.dur;
   }
   host.zoneR = d.zone.r; host.zoneDps = d.zone.dps;
   if (d.pickups) pickups = d.pickups.map((p) => ({ id: p.id, pos: new THREE.Vector3(p.p[0], p.p[1], p.p[2]) }));
@@ -414,6 +429,7 @@ function onClientInput(pid, d) { // host recebe input de um cliente
   const e = entities.get(pid); if (!e) return;
   e.targetPos.set(d.p[0], d.p[1], d.p[2]); e.targetRy = d.ry; e.anim = d.a;
   e.aimTimer = d.aim ? 0.3 : 0;
+  if (d.ml && e.meleeTimer <= 0) e.meleeTimer = CONFIG.MELEE.dur;
 }
 function onClientHit(pid, d) {   // host recebe alegação de acerto
   if (!isHost) return;
@@ -440,7 +456,7 @@ function loop() {
     updateRemotes(dt);
     handleFire(dt);
     updateElevator(dt);
-    grenadeCd -= dt;
+    grenadeCd -= dt; meleeCd -= dt;
     updateGrenades(dt);
     syncPickups(dt);
     checkPickups();
@@ -451,7 +467,9 @@ function loop() {
   updateZoneVisual();
   for (const e of entities.values()) {
     if (e.aimTimer > 0) e.aimTimer -= dt;
-    animateBody(e.body, e.anim, dt, 1, e.aimTimer > 0);
+    if (e.meleeTimer > 0) e.meleeTimer -= dt;
+    const meleeP = e.meleeTimer > 0 ? 1 - e.meleeTimer / CONFIG.MELEE.dur : -1;
+    animateBody(e.body, e.anim, dt, 1, e.aimTimer > 0, meleeP);
     if (e.hitFlash > 0) e.hitFlash -= dt;
     setEntityFlash(e, e.hitFlash > 0);
     if (e.hp !== e.lastDrawnHp) { drawNameplate(e); e.lastDrawnHp = e.hp; }
@@ -476,7 +494,7 @@ function updateLocal(dt) {
   if (moving) { mvx /= len; mvz /= len; }
   me.pos.x += mvx * CONFIG.MOVE_SPEED * dt;
   me.pos.z += mvz * CONFIG.MOVE_SPEED * dt;
-  resolveCollisions(me.pos, CONFIG.PLAYER_R, colliders);
+  resolveCollisions(me.pos, CONFIG.PLAYER_R * (me.scale || 1), colliders);
 
   // chão sob o jogador (andares / escadas / rampa / elevador)
   const gy = groundAt(me.pos.x, me.pos.z, me.pos.y);
@@ -565,7 +583,7 @@ function broadcastWorld() {
   if (!net) return; // modo treino: não há rede
   const players = {};
   for (const e of entities.values()) {
-    players[e.peerId] = { p: [e.pos.x, e.pos.y, e.pos.z], ry: e.ry, a: e.anim, hp: e.hp, alive: e.alive, aim: e.aimTimer > 0 };
+    players[e.peerId] = { p: [e.pos.x, e.pos.y, e.pos.z], ry: e.ry, a: e.anim, hp: e.hp, alive: e.alive, aim: e.aimTimer > 0, ml: e.meleeTimer > 0 };
   }
   const pk = pickups.map((p) => ({ id: p.id, p: [p.pos.x, p.pos.y, p.pos.z] }));
   net.broadcast({ players, zone: { r: host.zoneR, dps: host.zoneDps }, status, winner, pickups: pk });
@@ -573,7 +591,7 @@ function broadcastWorld() {
 
 function sendInput() {
   if (!me || !net) return;
-  net.sendInput({ p: [me.pos.x, me.pos.y, me.pos.z], ry: me.ry, a: me.anim, aim: me.aimTimer > 0 });
+  net.sendInput({ p: [me.pos.x, me.pos.y, me.pos.z], ry: me.ry, a: me.anim, aim: me.aimTimer > 0, ml: me.meleeTimer > 0 });
 }
 
 // ---------- tiro ----------
@@ -607,12 +625,14 @@ function fire() {
   let best = null, bestT = CONFIG.RANGE;
   for (const e of entities.values()) {
     if (e === me || !e.alive) continue;
-    const center = tmp.copy(e.pos); center.y += 1.3;
+    const sc = e.scale || 1;
+    const center = tmp.copy(e.pos); center.y += 1.3 * sc;
     const oc = tmp2.copy(center).sub(origin);
     const tca = oc.dot(dir);
     if (tca < 0 || tca > bestT) continue;
     const d2 = oc.lengthSq() - tca * tca;
-    if (d2 > 0.9 * 0.9) continue; // raio de acerto
+    const hr = 0.9 * sc;
+    if (d2 > hr * hr) continue; // raio de acerto (maior pra alvo grande)
     best = e; bestT = tca;
   }
   const end = origin.clone().add(dir.clone().multiplyScalar(best ? bestT : CONFIG.RANGE));
@@ -634,16 +654,18 @@ function tracer(a, b) {
 // ---------- câmera / zona visual ----------
 function updateCamera() {
   if (!me) return;
-  const head = tmp.copy(me.pos); head.y += CONFIG.EYE;
+  const sc = me.scale || 1;
+  const head = tmp.copy(me.pos); head.y += me.eye || CONFIG.EYE;
   const cp = Math.cos(pitch), sp = Math.sin(pitch);
+  const dist = CONFIG.CAM_DIST * sc, camH = CONFIG.CAM_HEIGHT * sc;
   if (camMode === 'first') {
     camera.position.copy(head);
     camera.lookAt(head.x + Math.sin(yaw) * cp, head.y - sp, head.z + Math.cos(yaw) * cp);
   } else {
     camera.position.set(
-      head.x - Math.sin(yaw) * cp * CONFIG.CAM_DIST,
-      head.y + sp * CONFIG.CAM_DIST + CONFIG.CAM_HEIGHT,
-      head.z - Math.cos(yaw) * cp * CONFIG.CAM_DIST
+      head.x - Math.sin(yaw) * cp * dist,
+      head.y + sp * dist + camH,
+      head.z - Math.cos(yaw) * cp * dist
     );
     camera.lookAt(head);
   }
@@ -658,7 +680,7 @@ function updateOcclusion() {
   for (const m of faded) { m.material.opacity = 1; m.material.transparent = false; m.material.depthWrite = true; }
   faded.length = 0;
   if (camMode !== 'third' || !me) return;
-  const head = tmp.set(me.pos.x, me.pos.y + CONFIG.EYE, me.pos.z);
+  const head = tmp.set(me.pos.x, me.pos.y + (me.eye || CONFIG.EYE), me.pos.z);
   const dir = tmp2.copy(head).sub(camera.position);
   const dist = dir.length(); if (dist < 0.1) return;
   dir.divideScalar(dist);
@@ -686,7 +708,7 @@ function updateZoneVisual() {
 
 // ---------- elevador ----------
 function updateElevator(dt) {
-  if (!elevator) return;
+  if (!elevator) { $('elevatorUI').classList.add('hidden'); return; }
   if (elevator.target !== null) {
     const dir = Math.sign(elevator.target - elevator.y);
     elevator.y += dir * CONFIG.ELEV_SPEED * dt;
@@ -817,10 +839,29 @@ function checkPickups() {
 }
 function onClientPickup(pid, d) { if (isHost) pickups = pickups.filter((p) => p.id !== d.id); }
 
+// ---------- golpe de marreta (só o grandão) ----------
+function doMelee() {
+  if (!me || !me.alive || !me.big || meleeCd > 0 || status !== 'playing') return;
+  meleeCd = CONFIG.MELEE.cooldown;
+  me.meleeTimer = CONFIG.MELEE.dur;
+  Sound.playSmash();
+  const fwd = new THREE.Vector3(Math.sin(me.ry), 0, Math.cos(me.ry));
+  const reach = CONFIG.MELEE.range * (me.scale || 1);
+  for (const e of entities.values()) {
+    if (e === me || !e.alive) continue;
+    const v = new THREE.Vector3().subVectors(e.pos, me.pos);
+    const d = v.length();
+    if (d > reach || d < 0.01) continue;
+    if (v.normalize().dot(fwd) < 0.2) continue; // só acerta quem está na frente
+    if (isHost) damage(e, CONFIG.MELEE.dmg);
+    else net.sendHit(e.peerId, CONFIG.MELEE.dmg);
+  }
+}
+
 // ---------- HUD ----------
 function updateHud() {
   if (!me) return;
-  $('hpFill').style.width = clamp(me.hp, 0, 100) + '%';
+  $('hpFill').style.width = clamp((me.hp / (me.maxHp || 100)) * 100, 0, 100) + '%';
   $('hpText').textContent = Math.ceil(me.hp);
   const alive = [...entities.values()].filter((e) => e.alive).length;
   $('aliveCount').textContent = `Vivos: ${alive}/${entities.size}`;
@@ -871,6 +912,7 @@ function bindInput() {
     if (e.code === 'Space') input.jump = true;
     if (e.code === 'KeyQ' && !e.repeat) toggleCamMode();
     if (e.code === 'KeyE' && !e.repeat) throwGrenade();
+    if (e.code === 'KeyX' && !e.repeat) doMelee();
     // elevador: escolher andar pelo teclado (1/2/3 ou numpad) quando estiver nele
     if (onElevator && !e.repeat) {
       if (e.code === 'Digit1' || e.code === 'Numpad1') pickFloor(0);
@@ -914,7 +956,10 @@ function bindInput() {
   $('btnBackLobby').addEventListener('click', backToLobby);
   $('btnExit').addEventListener('click', backToLobby);
   $('btnView').addEventListener('click', toggleCamMode);
+  $('mapBackrooms').addEventListener('click', () => selectMap('backrooms'));
+  $('mapBosque').addEventListener('click', () => selectMap('bosque'));
   $('btnGrenade').addEventListener('click', throwGrenade);
+  $('btnMelee').addEventListener('click', doMelee);
   $('elv0').addEventListener('click', () => pickFloor(0));
   $('elv1').addEventListener('click', () => pickFloor(1));
   $('elv2').addEventListener('click', () => pickFloor(2));

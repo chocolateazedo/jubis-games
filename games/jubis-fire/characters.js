@@ -10,7 +10,7 @@ import * as THREE from 'three';
 
 // id, nome, gênero, e cores. hair: 'short' | 'long' | 'bun' | 'cap' | 'spiky'
 export const CHARACTERS = [
-  { id: 'm1', name: 'Léo',   gender: 'm', skin: 0xf1c27d, shirt: 0xe53935, pants: 0x263238, hairColor: 0x3b2417, hair: 'short' },
+  { id: 'm1', name: 'Bombadão', gender: 'm', skin: 0xf1c27d, shirt: 0xe53935, pants: 0x263238, hairColor: 0x3b2417, hair: 'short', big: true },
   { id: 'm2', name: 'Caio',  gender: 'm', skin: 0xffdbac, shirt: 0x1e88e5, pants: 0x37474f, hairColor: 0x111111, hair: 'spiky' },
   { id: 'm3', name: 'Theo',  gender: 'm', skin: 0x8d5524, shirt: 0x43a047, pants: 0x212121, hairColor: 0x000000, hair: 'short' },
   { id: 'm4', name: 'Davi',  gender: 'm', skin: 0xe0ac69, shirt: 0xfb8c00, pants: 0x3e2723, hairColor: 0x5d4037, hair: 'cap' },
@@ -37,30 +37,32 @@ function limb(w, h, d, color) {
   return pivot;
 }
 
-// Monta o boneco. Pés no y=0; altura total ~1.8.
+// Monta o boneco. Pés no y=0; altura total ~1.8 (×2.2 se for "grandão").
 export function buildBody(preset) {
   const g = new THREE.Group();
   const female = preset.gender === 'f';
-  const torsoW = female ? 0.62 : 0.72;
+  const big = !!preset.big;                 // Bombadão: maior e musculoso
+  const torsoW = big ? 0.98 : (female ? 0.62 : 0.72);
+  const torsoD = big ? 0.5 : 0.36;
+  const armW = big ? 0.32 : 0.2, armH = 0.66, armD = big ? 0.32 : 0.22;
+  const legW = big ? 0.36 : 0.26, legH = 0.8, legD = big ? 0.36 : 0.28;
   const legColor = preset.pants;
 
   // pernas (pivô no quadril, y ~0.8)
-  const legL = limb(0.26, 0.8, 0.28, legColor); legL.position.set(-0.18, 0.8, 0);
-  const legR = limb(0.26, 0.8, 0.28, legColor); legR.position.set(0.18, 0.8, 0);
+  const legL = limb(legW, legH, legD, legColor); legL.position.set(-0.18, 0.8, 0);
+  const legR = limb(legW, legH, legD, legColor); legR.position.set(0.18, 0.8, 0);
 
   // torso
-  const torso = box(torsoW, 0.7, 0.36, preset.shirt);
+  const torso = box(torsoW, 0.72, torsoD, preset.shirt);
   torso.position.y = 1.15; torso.castShadow = true;
 
   // braços (pivô no ombro, y ~1.45)
-  const armL = limb(0.2, 0.66, 0.22, preset.shirt); armL.position.set(-(torsoW / 2 + 0.12), 1.45, 0);
-  const armR = limb(0.2, 0.66, 0.22, preset.shirt); armR.position.set(torsoW / 2 + 0.12, 1.45, 0);
-  // mãos (cor de pele na ponta)
-  armL.add(box(0.2, 0.18, 0.22, preset.skin).translateY(-0.66 + 0.09));
-  armR.add(box(0.2, 0.18, 0.22, preset.skin).translateY(-0.66 + 0.09));
+  const armL = limb(armW, armH, armD, preset.shirt); armL.position.set(-(torsoW / 2 + 0.12), 1.45, 0);
+  const armR = limb(armW, armH, armD, preset.shirt); armR.position.set(torsoW / 2 + 0.12, 1.45, 0);
+  armL.add(box(armW, 0.18, armD, preset.skin).translateY(-armH + 0.09));
+  armR.add(box(armW, 0.18, armD, preset.skin).translateY(-armH + 0.09));
 
-  // revólver na mão direita (o cano aponta no -Y do braço, igual à direção
-  // do braço quando ele está estendido para a frente)
+  // revólver na mão direita (cano no -Y do braço)
   const gun = buildGun();
   gun.position.set(0, -0.62, 0.08);
   armR.add(gun);
@@ -68,15 +70,30 @@ export function buildBody(preset) {
   // cabeça
   const head = box(0.42, 0.42, 0.42, preset.skin);
   head.position.y = 1.75; head.castShadow = true;
-
-  // cabelo / acessório
   const hair = buildHair(preset);
   if (hair) head.add(hair);
 
+  const parts = { legL, legR, armL, armR, torso, head, gun };
+
+  // marreta na mão esquerda (só o grandão)
+  if (big) { const hammer = buildHammer(); armL.add(hammer); parts.hammer = hammer; }
+
   g.add(legL, legR, torso, armL, armR, head);
   g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  if (big) g.scale.setScalar(2.2);
 
-  return { group: g, parts: { legL, legR, armL, armR, torso, head, gun }, t: 0 };
+  return { group: g, parts, t: 0 };
+}
+
+function buildHammer() {
+  const g = new THREE.Group();
+  const wood = new THREE.MeshStandardMaterial({ color: 0x7a4a22, roughness: 0.9 });
+  const metal = new THREE.MeshStandardMaterial({ color: 0x4a4f57, roughness: 0.45, metalness: 0.65 });
+  const handle = new THREE.Mesh(new THREE.BoxGeometry(0.11, 1.1, 0.11), wood); handle.position.y = -0.55; g.add(handle);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.36, 0.36), metal); head.position.y = -1.05; g.add(head);
+  g.position.set(0, -0.5, 0.06); // junto da mão esquerda, apontando pra baixo
+  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  return g;
 }
 
 function buildGun() {
@@ -107,7 +124,7 @@ function buildHair(preset) {
 }
 
 // Anima o boneco. anim: 'idle' | 'run' | 'jump'. speed01 = 0..1 intensidade do passo.
-export function animateBody(entity, anim, dt, speed01 = 1, aiming = false) {
+export function animateBody(entity, anim, dt, speed01 = 1, aiming = false, meleeP = -1) {
   const p = entity.parts;
   entity.t += dt;
   const t = entity.t;
@@ -128,4 +145,6 @@ export function animateBody(entity, anim, dt, speed01 = 1, aiming = false) {
   }
   // mira: braço direito (com o revólver) apontando reto pra frente
   if (aiming) { p.armR.rotation.x = -Math.PI / 2; p.armR.rotation.z = 0; }
+  // golpe de marreta: braço esquerdo sobe e desce (meleeP = 0..1 do swing)
+  if (meleeP >= 0) p.armL.rotation.x = -2.3 + meleeP * 3.1;
 }

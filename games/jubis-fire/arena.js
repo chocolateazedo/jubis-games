@@ -10,7 +10,81 @@ import * as TX from './textures.js?v=3';
 
 const IS_TOUCH = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
-export function buildArena(scene) {
+// RNG com semente fixa: o bosque fica idêntico em todos os jogadores (P2P)
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export function buildArena(scene, map) {
+  return map === 'bosque' ? buildForest(scene) : buildBackrooms(scene);
+}
+
+// ============================================================
+// MAPA: BOSQUE — plano único e grande, com árvores
+// ============================================================
+function buildForest(scene) {
+  const colliders = [], surfaces = [], occluders = [];
+  const S = 220, H = S / 2;
+
+  scene.background = new THREE.Color(0x9fd0ff);
+  scene.fog = new THREE.Fog(0x9fd0ff, 130, 340);
+  scene.add(new THREE.HemisphereLight(0xdcecff, 0x4a6b38, 0.95));
+  const sun = new THREE.DirectionalLight(0xfff4e0, 2.3);
+  sun.position.set(90, 150, 70); sun.castShadow = true;
+  sun.shadow.mapSize.set(IS_TOUCH ? 1024 : 2048, IS_TOUCH ? 1024 : 2048);
+  sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03; sun.shadow.radius = 5;
+  const sc = sun.shadow.camera; sc.left = -90; sc.right = 90; sc.top = 90; sc.bottom = -90; sc.near = 1; sc.far = 360;
+  scene.add(sun);
+
+  // chão (grama)
+  const cGrass = TX.grass();
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(S, S),
+    new THREE.MeshStandardMaterial({ map: TX.toTex(cGrass), normalMap: TX.normalFromCanvas(cGrass, 1.0), normalScale: new THREE.Vector2(0.5, 0.5), roughness: 1 }));
+  ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground); TX.tileMaps(ground, 8);
+  surfaces.push({ kind: 'flat', x0: -H, x1: H, z0: -H, z1: H, y: 0 });
+
+  // cerca-viva na borda (mantém os jogadores dentro)
+  const hedgeMat = new THREE.MeshStandardMaterial({ color: 0x2f5a2a, roughness: 1 });
+  const edge = (cx, cz, w, d) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, 6, d), hedgeMat);
+    m.position.set(cx, 3, cz); m.castShadow = true; m.receiveShadow = true; scene.add(m);
+    colliders.push({ min: { x: cx - w / 2, z: cz - d / 2 }, max: { x: cx + w / 2, z: cz + d / 2 }, top: 6 });
+  };
+  edge(0, H, S, 2); edge(0, -H, S, 2); edge(H, 0, 2, S); edge(-H, 0, 2, S);
+
+  // árvores (posições determinísticas)
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2a, roughness: 0.95 });
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x3f7d3a, roughness: 0.9 });
+  const rng = mulberry32(20260614);
+  const N = IS_TOUCH ? 60 : 120;
+  for (let i = 0; i < N; i++) {
+    const x = (rng() * 2 - 1) * (H - 8), z = (rng() * 2 - 1) * (H - 8);
+    if (Math.hypot(x, z) < 14) continue; // deixa o centro livre (spawns)
+    const h = 5 + rng() * 5;
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.8, h, 7), trunkMat);
+    trunk.position.set(x, h / 2, z); trunk.castShadow = true; trunk.receiveShadow = true; scene.add(trunk);
+    colliders.push({ min: { x: x - 0.8, z: z - 0.8 }, max: { x: x + 0.8, z: z + 0.8 }, top: h });
+    occluders.push(trunk);
+    const r = h * 0.55 + rng() * 1.5;
+    const leaves = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 0), leafMat);
+    leaves.position.set(x, h + r * 0.5, z); leaves.castShadow = true; scene.add(leaves);
+    occluders.push(leaves);
+  }
+
+  const spawns = [
+    new THREE.Vector3(-9, 0, -9), new THREE.Vector3(9, 0, -9),
+    new THREE.Vector3(-9, 0, 9), new THREE.Vector3(9, 0, 9),
+  ];
+  const groundAt = () => 0; // plano
+  return { colliders, surfaces, occluders, spawns, elevator: null, groundAt };
+}
+
+function buildBackrooms(scene) {
   const colliders = [];
   const surfaces = [];
   const occluders = [];

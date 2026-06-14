@@ -381,9 +381,9 @@ function loop() {
 
 function updateLocal(dt) {
   if (!me || !me.alive) { me && (me.anim = 'idle'); return; }
-  // base de movimento a partir do yaw
+  // base de movimento a partir do yaw (right = forward × up, senão A/D invertem)
   const fwd = tmp.set(Math.sin(yaw), 0, Math.cos(yaw));
-  const right = tmp2.set(Math.cos(yaw), 0, -Math.sin(yaw));
+  const right = tmp2.set(-Math.cos(yaw), 0, Math.sin(yaw));
   let mvx = fwd.x * input.my + right.x * input.mx;
   let mvz = fwd.z * input.my + right.z * input.mx;
   const len = Math.hypot(mvx, mvz);

@@ -1,0 +1,16 @@
+# Jubis Fire está em desenvolvimento ativo: não deixar o navegador cachear o
+# código do jogo (o .htaccess da raiz cacheia JS por 7 dias). Assim cada
+# correção aparece no próximo reload. Quando o jogo estabilizar, dá para
+# remover este arquivo e voltar ao cache padrão do site.
+<IfModule mod_headers.c>
+  <FilesMatch "\.(js|html)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+  </FilesMatch>
+</IfModule>
+<IfModule mod_expires.c>
+  <FilesMatch "\.(js|html)$">
+    ExpiresActive On
+    ExpiresDefault "access plus 0 seconds"
+  </FilesMatch>
+</IfModule>

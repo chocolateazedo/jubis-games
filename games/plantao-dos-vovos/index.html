@@ -96,6 +96,29 @@
     }
     gen();
 
+    // ---------- móveis / detalhes ----------
+    const props = [], solidRects = [];
+    function P(kind, tc, tr, w, h, solid, flat) {
+      const x = tc * TS, y = tr * TS, pw = w * TS, ph = h * TS;
+      props.push({ kind, x, y, w: pw, h: ph, flat: !!flat });
+      if (solid) solidRects.push({ x: x + 4, y: y + 4, w: pw - 8, h: ph - 8 });
+    }
+    // Farmácia (cima-esq)
+    P('rug', bx + 2, by + 5, 5, 3, false, true); P('cabinet', bx + 1, by + 8, 2, 3, true); P('plant', bx + 10, by + 8, 1, 2, true);
+    P('painting', bx + 4, by + 1, 2, 1, false, true);
+    // Cozinha (cima-dir)
+    P('fridge', bx + 22, by + 7, 2, 3, true); P('table', bx + 16, by + 8, 3, 2, true); P('plant', bx + 14, by + 8, 1, 2, true);
+    P('painting', bx + 18, by + 1, 2, 1, false, true);
+    // Quarto (baixo-esq) com 2 camas
+    P('bed', bx + 2, by + 15, 3, 4, true); P('bed', bx + 8, by + 15, 3, 4, true);
+    P('nightstand', bx + 5, by + 15, 1, 1, true); P('rug', bx + 2, by + 20, 5, 2, false, true); P('plant', bx + 11, by + 20, 1, 2, true);
+    P('painting', bx + 3, by + 12, 2, 1, false, true);
+    // Quarto/Banho (baixo-dir)
+    P('bed', bx + 15, by + 15, 3, 4, true); P('bathtub', bx + 21, by + 19, 3, 2, true);
+    P('toilet', bx + 24, by + 20, 1, 1, true); P('sink', bx + 24, by + 14, 1, 1, true); P('plant', bx + 19, by + 20, 1, 2, true);
+    // Jardim
+    P('bench', 35, 12, 2, 1, true); P('bench', 39, 18, 2, 1, true); P('fountain', 30, 26, 3, 3, true);
+
     // ---------- estações / idosos ----------
     const px = (c) => (c + 0.5) * TS, py = (r) => (r + 0.5) * TS;
     const stations = [
@@ -105,21 +128,28 @@
       { type: 'water', emoji: '🚰', x: px(bx + 22), y: py(by + 3), name: 'Bebedouro' },
       { type: 'bath', emoji: '🚿', x: px(bx + 22), y: py(midR + 3), name: 'Rouparia' },
     ];
-    const elderEmojis = ['🧓', '👵', '👴', '👵', '🧓'];
+    const PLAYER_PAL = { skin: '#f1c27d', hair: '#5a3a1a', shirt: '#eef4ff', pants: '#3a4a66' };
+    const ELDER_PALS = [
+      { skin: '#f1c27d', hair: '#dddddd', shirt: '#b85c5c', pants: '#5a5a5a' },
+      { skin: '#e0ac69', hair: '#cfcfcf', shirt: '#5c8db8', pants: '#4a4a4a' },
+      { skin: '#c68642', hair: '#e8e8e8', shirt: '#6a9a5a', pants: '#403a30' },
+      { skin: '#ffdbac', hair: '#cccccc', shirt: '#9a6ab8', pants: '#444444' },
+      { skin: '#8d5524', hair: '#eeeeee', shirt: '#c2a23a', pants: '#3a3a3a' },
+    ];
     let elders = [];
     function makeElders() {
-      const spots = [[bx + 4, by + 17], [bx + 10, by + 17], [bx + 24, by + 18], [36, 12], [40, 18]];
-      elders = spots.map((s, i) => ({ x: px(s[0]), y: py(s[1]), emoji: elderEmojis[i], need: null, patience: 0, cooldown: 2 + i * 0.6, happy: 0, sad: 0 }));
+      const spots = [[bx + 3, by + 16], [bx + 9, by + 16], [bx + 16, by + 16], [36, 12], [40, 18]];
+      elders = spots.map((s, i) => ({ x: px(s[0]), y: py(s[1]), pal: ELDER_PALS[i % ELDER_PALS.length], dir: 0, idle: Math.random() * 6, need: null, patience: 0, cooldown: 2 + i * 0.6, happy: 0, sad: 0 }));
     }
 
-    const player = { x: px(bx + 13), y: py(by + 18), r: 16, carry: null, moving: false };
+    const player = { x: px(bx + 6), y: py(by + 19), r: 16, carry: null, moving: false, dir: 0, walkPhase: 0, pal: PLAYER_PAL };
     const cam = { x: 0, y: 0 };
     let score, timeLeft, running, spawnTimer, served, toastMsg, toastT, time, floaters;
 
     function reset() {
       score = 0; timeLeft = SHIFT; running = true; spawnTimer = 3; served = 0;
       toastMsg = ''; toastT = 0; time = 0; floaters = [];
-      player.x = px(bx + 13); player.y = py(by + 18); player.carry = null;
+      player.x = px(bx + 6); player.y = py(by + 19); player.carry = null; player.dir = 0; player.walkPhase = 0;
       makeElders(); document.getElementById('restart').style.display = 'none'; updateHud();
     }
 
@@ -209,6 +239,12 @@
         const dx = player.x - nx, dy = player.y - ny, d2 = dx * dx + dy * dy;
         if (d2 < r * r && d2 > 1e-6) { const d = Math.sqrt(d2); player.x = nx + dx / d * r; player.y = ny + dy / d * r; }
       }
+      // móveis sólidos
+      for (const w of solidRects) {
+        const nx = clamp(player.x, w.x, w.x + w.w), ny = clamp(player.y, w.y, w.y + w.h);
+        const dx = player.x - nx, dy = player.y - ny, d2 = dx * dx + dy * dy;
+        if (d2 < r * r && d2 > 1e-6) { const d = Math.sqrt(d2); player.x = nx + dx / d * r; player.y = ny + dy / d * r; }
+      }
     }
 
     function update(dt) {
@@ -217,6 +253,10 @@
       let my = (keys['KeyS'] || keys['ArrowDown'] ? 1 : 0) - (keys['KeyW'] || keys['ArrowUp'] ? 1 : 0) + joy.y;
       const len = Math.hypot(mx, my); player.moving = len > 0.1;
       if (len > 1) { mx /= len; my /= len; }
+      if (player.moving) {
+        player.dir = Math.abs(mx) > Math.abs(my) ? (mx > 0 ? 3 : 2) : (my > 0 ? 0 : 1); // 0=baixo 1=cima 2=esq 3=dir
+        player.walkPhase += dt * 11;
+      }
       const SPEED = 190;
       player.x = clamp(player.x + mx * SPEED * dt, 8, WORLD_W - 8); collide();
       player.y = clamp(player.y + my * SPEED * dt, 8, WORLD_H - 8); collide();
@@ -226,6 +266,10 @@
       cam.y = clamp(player.y - cv.height / 2, 0, Math.max(0, WORLD_H - cv.height));
 
       for (const e of elders) {
+        e.idle += dt;
+        // olham pro cuidador quando ele chega perto
+        const dx = player.x - e.x, dy = player.y - e.y;
+        if (dx * dx + dy * dy < 150 * 150) e.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 3 : 2) : (dy > 0 ? 0 : 1);
         if (e.need) { e.patience -= dt; if (e.patience <= 0) { e.need = null; e.cooldown = 3; e.sad = 1.4; score = Math.max(0, score - 5); floater(e.x, e.y - 42, '-5', '#e03b3b'); sndFail(); updateHud(); } }
         else if (e.cooldown > 0) e.cooldown -= dt;
         if (e.happy > 0) e.happy -= dt; if (e.sad > 0) e.sad -= dt;
@@ -246,6 +290,43 @@
     // ---------- desenho ----------
     function emoji(ch, x, y, size) { ctx.fillStyle = '#1a1a1a'; ctx.font = size + 'px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(ch, x, y); }
     function shadow(x, y, r) { ctx.fillStyle = 'rgba(0,0,0,.16)'; ctx.beginPath(); ctx.ellipse(x, y + 15, r, r * 0.45, 0, 0, 7); ctx.fill(); }
+    function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fill(); }
+
+    // boneco desenhado, 4 direções + caminhada (dir: 0=baixo 1=cima 2=esq 3=dir)
+    function drawChar(x, y, dir, phase, pal, moving) {
+      const sw = moving ? Math.sin(phase) * 4 : 0;
+      const sway = moving ? sw * 0.5 : Math.sin(phase) * 1.3; // braço respira parado
+      ctx.fillStyle = pal.pants; rr(x - 7, y + 8 - sw, 6, 11, 3); rr(x + 1, y + 8 + sw, 6, 11, 3);
+      ctx.fillStyle = pal.shirt; rr(x - 12, y - 4 + sway, 5, 13, 3); rr(x + 7, y - 4 - sway, 5, 13, 3);
+      ctx.fillStyle = pal.shirt; rr(x - 9, y - 6, 18, 17, 6);
+      ctx.fillStyle = pal.skin; ctx.beginPath(); ctx.arc(x, y - 13, 9, 0, 7); ctx.fill();
+      ctx.fillStyle = pal.hair;
+      if (dir === 1) { ctx.beginPath(); ctx.arc(x, y - 13, 9, 0, 7); ctx.fill(); }
+      else { ctx.beginPath(); ctx.arc(x, y - 15, 9, Math.PI, 2 * Math.PI); ctx.fill(); ctx.fillRect(x - 9, y - 15, 18, 3); }
+      if (dir !== 1) {
+        ctx.fillStyle = '#222'; const off = dir === 2 ? -3 : dir === 3 ? 3 : 0;
+        ctx.beginPath(); ctx.arc(x - 3 + off, y - 11, 1.7, 0, 7); ctx.arc(x + 3 + off, y - 11, 1.7, 0, 7); ctx.fill();
+      }
+    }
+
+    function drawProp(p) {
+      const x = p.x - cam.x, y = p.y - cam.y, w = p.w, h = p.h;
+      switch (p.kind) {
+        case 'rug': ctx.fillStyle = '#b65b5b'; rr(x, y, w, h, 10); ctx.fillStyle = '#d98a8a'; rr(x + 8, y + 8, w - 16, h - 16, 8); break;
+        case 'bed': ctx.fillStyle = '#7a5230'; rr(x, y, w, h, 6); ctx.fillStyle = '#f4ece0'; rr(x + 4, y + 4, w - 8, h - 8, 6); ctx.fillStyle = '#cfe3ff'; rr(x + 6, y + 6, w - 12, h * 0.34, 6); ctx.fillStyle = '#9fc0ec'; rr(x + 6, y + h * 0.44, w - 12, h * 0.5, 6); break;
+        case 'nightstand': ctx.fillStyle = '#8a5a2b'; rr(x, y, w, h, 4); emoji('💡', x + w / 2, y + h / 2, 18); break;
+        case 'plant': ctx.fillStyle = '#7a4a22'; rr(x + w * 0.25, y + h * 0.55, w * 0.5, h * 0.4, 4); ctx.fillStyle = '#2e8b3a'; ctx.beginPath(); ctx.arc(x + w / 2, y + h * 0.38, w * 0.42, 0, 7); ctx.fill(); break;
+        case 'painting': ctx.fillStyle = '#caa46a'; rr(x, y, w, h, 3); ctx.fillStyle = '#7ec0ee'; rr(x + 3, y + 3, w - 6, h - 6, 2); emoji('🖼️', x + w / 2, y + h / 2, 18); break;
+        case 'table': ctx.fillStyle = '#9c6b3f'; rr(x, y, w, h, 6); ctx.fillStyle = '#b5824f'; rr(x + 5, y + 5, w - 10, h - 10, 4); emoji('🍽️', x + w / 2, y + h / 2, 18); break;
+        case 'fridge': ctx.fillStyle = '#eef3f7'; rr(x, y, w, h, 6); ctx.strokeStyle = '#b9c2cc'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x + 4, y + h * 0.42); ctx.lineTo(x + w - 4, y + h * 0.42); ctx.stroke(); break;
+        case 'cabinet': ctx.fillStyle = '#a9763f'; rr(x, y, w, h, 5); ctx.fillStyle = '#8a5a2b'; rr(x + 5, y + 5, w - 10, h / 2 - 8, 3); rr(x + 5, y + h / 2 + 3, w - 10, h / 2 - 8, 3); break;
+        case 'bathtub': ctx.fillStyle = '#dfe9f0'; rr(x, y, w, h, 14); ctx.fillStyle = '#bfe0f5'; rr(x + 6, y + 6, w - 12, h - 12, 12); break;
+        case 'toilet': ctx.fillStyle = '#ffffff'; rr(x, y, w, h, 8); ctx.fillStyle = '#dde6ec'; rr(x + 4, y + 4, w - 8, h * 0.5, 8); break;
+        case 'sink': ctx.fillStyle = '#eef3f7'; rr(x, y, w, h, 8); emoji('🚰', x + w / 2, y + h / 2, 18); break;
+        case 'bench': ctx.fillStyle = '#9c6b3f'; rr(x, y, w, h, 5); ctx.fillStyle = '#7a5230'; ctx.fillRect(x, y + h * 0.4, w, 3); break;
+        case 'fountain': ctx.fillStyle = '#9aa0a6'; rr(x, y, w, h, 14); ctx.fillStyle = '#4aa3d6'; ctx.beginPath(); ctx.arc(x + w / 2, y + h / 2, w * 0.32, 0, 7); ctx.fill(); emoji('⛲', x + w / 2, y + h / 2, 24); break;
+      }
+    }
 
     function drawTile(t, sx, sy, c, r) {
       const alt = (c + r) % 2;
@@ -268,6 +349,10 @@
         drawTile(map[r][c], c * TS - cam.x, r * TS - cam.y, c, r);
       }
 
+      // móveis (planos primeiro, depois os com volume)
+      for (const p of props) if (p.flat) drawProp(p);
+      for (const p of props) if (!p.flat) drawProp(p);
+
       for (const s of stations) {
         const x = s.x - cam.x, y = s.y - cam.y;
         ctx.fillStyle = '#fff7e6'; ctx.beginPath(); ctx.roundRect(x - 32, y - 30, 64, 46, 10); ctx.fill();
@@ -280,9 +365,8 @@
         const e = it.o, x = e.x - cam.x;
         if (it.t === 'e') {
           const y = e.y - cam.y;
-          shadow(x, y, 17);
-          ctx.fillStyle = '#caa46a'; ctx.beginPath(); ctx.roundRect(x - 20, y - 4, 40, 30, 8); ctx.fill();
-          emoji(e.emoji, x, y, 36);
+          shadow(x, y, 15);
+          drawChar(x, y, e.dir, e.idle * 3, e.pal, false);
           if (e.happy > 0) { ctx.globalAlpha = Math.min(1, e.happy); emoji('😊', x + 22, y - 24 - (1 - e.happy) * 10, 22); ctx.globalAlpha = 1; }
           if (e.sad > 0) { ctx.globalAlpha = Math.min(1, e.sad); emoji('💢', x + 22, y - 24 - (1.4 - e.sad) * 10, 22); ctx.globalAlpha = 1; }
           if (e.need) {
@@ -295,11 +379,10 @@
             ctx.fillStyle = f > 0.5 ? '#41c264' : f > 0.25 ? '#e8b13b' : '#e0533b'; ctx.fillRect(x - 22, y - 74, 44 * f, 6);
           }
         } else {
-          const bob = player.moving ? Math.sin(time * 16) * 3 : Math.sin(time * 3) * 1;
           const y = e.y - cam.y;
           shadow(x, y, 15);
-          emoji('🧑‍⚕️', x, y - 2 + bob, 40);
-          if (player.carry) emoji(NEED_EMOJI[player.carry], x, y - 34 + bob, 26);
+          drawChar(x, y, player.dir, player.walkPhase, player.pal, player.moving);
+          if (player.carry) emoji(NEED_EMOJI[player.carry], x, y - 34, 26);
         }
       }
 

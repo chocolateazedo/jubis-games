@@ -229,7 +229,7 @@ function startTraining() {
   entities.clear();
   roster.forEach((p, i) => {
     const e = createEntity(p, i, p.peerId === myId);
-    if (p.bot) { e.isBot = true; e.ai = { fireCd: 1 + Math.random() * 2, dir: Math.random() * Math.PI * 2, dirCd: 0 }; }
+    if (p.bot) { e.isBot = true; e.ai = { fireCd: 1 + Math.random() * 2, dir: Math.random() * Math.PI * 2, dirCd: 0, ammo: CONFIG.AMMO_START }; }
   });
   me = entities.get(myId);
 
@@ -249,14 +249,31 @@ function updateBots(dt) {
   for (const e of entities.values()) {
     if (!e.isBot || !e.alive) continue;
     const ai = e.ai;
+    const cx = e.pos.x, cz = e.pos.z;
+
+    // coletar pacote de bala se estiver perto
+    for (const p of pickups) {
+      const pdx = cx - p.pos.x, pdz = cz - p.pos.z;
+      if (pdx * pdx + pdz * pdz < CONFIG.PICKUP_R * CONFIG.PICKUP_R && Math.abs(e.pos.y - p.pos.y) < 2.2) {
+        ai.ammo = Math.min(CONFIG.AMMO_MAX, ai.ammo + CONFIG.AMMO_PACK);
+        pickups = pickups.filter((q) => q.id !== p.id);
+        break;
+      }
+    }
+    // sem balas? procura o pacote mais próximo
+    let seek = null;
+    if (ai.ammo <= 0 && pickups.length) { let pd = Infinity; for (const p of pickups) { const d = dist2(e.pos, p.pos); if (d < pd) { pd = d; seek = p; } } }
+
     // alvo vivo mais próximo
     let target = null, td = Infinity;
     for (const o of entities.values()) { if (o === e || !o.alive) continue; const d = dist2(e.pos, o.pos); if (d < td) { td = d; target = o; } }
-    const cx = e.pos.x, cz = e.pos.z;
     const distC = Math.hypot(cx, cz);
     let dx, dz;
     if (distC > safeR - 3) { dx = -cx; dz = -cz; }            // volta pra dentro da zona
-    else {
+    else if (seek) {                                          // vai buscar munição
+      const ax = seek.pos.x - cx, az = seek.pos.z - cz, al = Math.hypot(ax, az) || 1;
+      dx = ax / al; dz = az / al;
+    } else {
       ai.dirCd -= dt;
       if (ai.dirCd <= 0) { ai.dir += (Math.random() - 0.5) * 1.5; ai.dirCd = 0.6 + Math.random() * 1.2; }
       dx = Math.sin(ai.dir); dz = Math.cos(ai.dir);
@@ -270,14 +287,15 @@ function updateBots(dt) {
     e.pos.x += dx * BOT_SPEED * dt; e.pos.z += dz * BOT_SPEED * dt;
     resolveCollisions(e.pos, CONFIG.PLAYER_R, colliders);
     e.pos.y = groundAt(e.pos.x, e.pos.z, e.pos.y); // acompanha o piso/rampa
-    const aimT = target && Math.sqrt(td) < 45;
+    const aimT = ai.ammo > 0 && target && Math.sqrt(td) < 45;
     e.ry = aimT ? Math.atan2(target.pos.x - cx, target.pos.z - cz) : Math.atan2(dx, dz);
     e.anim = 'run';
     e.group.position.copy(e.pos); e.group.rotation.y = e.ry;
-    // tiro com imprecisão
+    // tiro com imprecisão (gasta bala)
     ai.fireCd -= dt;
     if (aimT && ai.fireCd <= 0) {
       ai.fireCd = 0.8 + Math.random() * 1.4;
+      ai.ammo--;
       e.aimTimer = 0.3; // levanta a arma
       const armR = e.body.parts.armR;
       armR.rotation.x = -Math.PI / 2; armR.rotation.z = 0;
@@ -689,6 +707,7 @@ function throwGrenade() {
   const vel = dir.multiplyScalar(CONFIG.GRENADE.speed); vel.y = CONFIG.GRENADE.up; // arco
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), new THREE.MeshStandardMaterial({ color: 0x2f7d32, roughness: 0.6 }));
   mesh.position.copy(pos); mesh.castShadow = true; scene.add(mesh);
+  Sound.playGrenade();
   grenades.push({ mesh, pos, vel, fuse: CONFIG.GRENADE.fuse, landed: false });
 }
 function updateGrenades(dt) {
@@ -709,6 +728,7 @@ function updateGrenades(dt) {
   }
 }
 function explode(at) {
+  Sound.playExplosion();
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 12), new THREE.MeshBasicMaterial({ color: 0xff8a1e, transparent: true, opacity: 0.85 }));
   mesh.position.copy(at); scene.add(mesh);
   fx.push({ mesh, life: 0.45, max: 0.45 });
@@ -739,7 +759,7 @@ function resetAmmoPickups() {
   pickupMeshes.clear();
   pickups = [];
   host.pickupSeq = 1;
-  if (status === 'playing' && isHost) { for (let i = 0; i < 3; i++) spawnPickup(); host.pickupTimer = CONFIG.PICKUP_EVERY; }
+  if (status === 'playing' && isHost) { for (let i = 0; i < 5; i++) spawnPickup(); host.pickupTimer = CONFIG.PICKUP_EVERY; }
   else host.pickupTimer = 3;
 }
 function makePickupMesh() {
@@ -797,6 +817,7 @@ function updateHud() {
   $('zoneInfo').textContent = ZONE_DAMAGE ? (host.zoneDps ? `Zona · dano ${host.zoneDps}/s fora` : 'Zona') : 'Sem zona';
   $('ammo').textContent = ammo > 0 ? `🔫 ${ammo}/${CONFIG.AMMO_MAX}` : '🔫 Sem balas! (pegue um pacote)';
   $('ammo').style.color = ammo > 0 ? '#fff' : '#ff6e8e';
+  $('crosshair').classList.toggle('hidden', camMode !== 'first'); // mira só na 1ª pessoa
   $('deadTag').classList.toggle('hidden', me.alive);
 }
 

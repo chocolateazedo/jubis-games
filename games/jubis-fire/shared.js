@@ -25,7 +25,7 @@ export const CONFIG = {
   ELEV_SPEED: 5,       // velocidade do elevador (u/s)
   GRENADE: { speed: 16, up: 7.5, gravity: 20, fuse: 3, radius: 7, dmg: 90, cooldown: 1.0, bounce: 0.4 },
   AMMO_START: 5, AMMO_MAX: 15, AMMO_PACK: 5, // munição e pacotes
-  PICKUP_EVERY: 30, PICKUP_MAX: 6, PICKUP_R: 1.8, // pacotes de bala surgem a cada 30s
+  PICKUP_EVERY: 30, PICKUP_MAX: 8, PICKUP_R: 1.8, // pacotes de bala surgem a cada 30s
   CAM_DIST: 6.2,
   CAM_HEIGHT: 1.2,
   ZONE: {

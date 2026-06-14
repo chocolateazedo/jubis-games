@@ -15,7 +15,7 @@ export function initAudio() {
 
 function noise(dur) {
   if (!noiseBuf) {
-    const n = ctx.sampleRate * 0.3;
+    const n = ctx.sampleRate * 1.0;
     noiseBuf = ctx.createBuffer(1, n, ctx.sampleRate);
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
@@ -63,6 +63,40 @@ export function playPickup() {
     o.connect(g); g.connect(ctx.destination);
     o.start(s); o.stop(s + 0.1);
   });
+}
+
+export function playGrenade() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  const src = noise();
+  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.4;
+  bp.frequency.setValueAtTime(350, t); bp.frequency.exponentialRampToValueAtTime(1200, t + 0.2);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.22, t + 0.03);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.24);
+  src.connect(bp); bp.connect(g); g.connect(ctx.destination);
+  src.start(t); src.stop(t + 0.26);
+}
+
+export function playExplosion() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  // estouro: ruído grave decaindo
+  const src = noise();
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass';
+  lp.frequency.setValueAtTime(1000, t); lp.frequency.exponentialRampToValueAtTime(120, t + 0.5);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.7, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+  src.connect(lp); lp.connect(g); g.connect(ctx.destination);
+  src.start(t); src.stop(t + 0.62);
+  // baque grave (sine descendo)
+  const o = ctx.createOscillator(); o.type = 'sine';
+  o.frequency.setValueAtTime(130, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.4);
+  const g2 = ctx.createGain();
+  g2.gain.setValueAtTime(0.55, t); g2.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+  o.connect(g2); g2.connect(ctx.destination);
+  o.start(t); o.stop(t + 0.46);
 }
 
 export function playEmpty() {

@@ -66,7 +66,10 @@ const UNLOCK_KEY='dzv-unlocked',getUnlocked=()=>Math.max(1,+(localStorage.getIte
 function resize(){dpr=Math.max(1,Math.min(2,devicePixelRatio||1));cv.width=cv.clientWidth*dpr;cv.height=cv.clientHeight*dpr;ctx.setTransform(dpr,0,0,dpr,0,0)}addEventListener('resize',resize);
 function pathPts(){const w=cv.clientWidth,h=cv.clientHeight,m=36;return [[m,h*.15],[w*.33,h*.15],[w*.33,h*.36],[w*.74,h*.36],[w*.74,h*.2],[w-m,h*.2],[w-m,h*.57],[w*.18,h*.57],[w*.18,h*.84],[w*.92,h*.84]]}
 function ptSeg(px,py,a,b){const vx=b[0]-a[0],vy=b[1]-a[1],wx=px-a[0],wy=py-a[1],t=Math.max(0,Math.min(1,(wx*vx+wy*vy)/(vx*vx+vy*vy||1))),cx=a[0]+vx*t,cy=a[1]+vy*t;return Math.hypot(px-cx,py-cy)}
-function buildSlots(){const w=cv.clientWidth,h=cv.clientHeight,pts=[],segDist=(x,y)=>{let mn=1e9;for(let i=0;i<S.path.length-1;i++)mn=Math.min(mn,ptSeg(x,y,S.path[i],S.path[i+1]));return mn};for(let gx=1;gx<=8;gx++)for(let gy=1;gy<=6;gy++){const x=w*gx/9,y=h*gy/7;if(segDist(x,y)>=58)pts.push({x,y,tower:null})}S.slots=pts}
+function buildSlots(){const w=cv.clientWidth,h=cv.clientHeight,cand=[],pts=[],segDist=(x,y)=>{let mn=1e9;for(let i=0;i<S.path.length-1;i++)mn=Math.min(mn,ptSeg(x,y,S.path[i],S.path[i+1]));return mn};
+for(let gx=1;gx<=9;gx++)for(let gy=1;gy<=6;gy++){const x=w*gx/10,y=h*gy/7;if(segDist(x,y)>=56)cand.push({x,y})}
+for(const c of cand)if(pts.every(p=>Math.hypot(p.x-c.x,p.y-c.y)>=92))pts.push({x:c.x,y:c.y,tower:null});
+S.slots=pts}
 function start(world,index){$('menu').classList.add('hidden');$('game').classList.remove('hidden');resize();S={world,index,baseMax:100,life:100,money:360,w:1,maxW:10,shownW:1,bannerT:0,towers:[],shots:[],z:[],fx:[],spawn:0,tick:0,over:false,won:false,sel:null,speed:1};S.path=pathPts();buildSlots();S.toSpawn=S.maxW*6;$('endModal').classList.remove('open');loop()}
 function spawn(type){const w=S.w,z={x:S.path[0][0],y:S.path[0][1],i:1,slow:0,po:0,burn:0,regen:0,type};
 if(type==='boss'){z.hp=z.max=900+w*120;z.spd=.34;z.size=46;z.col='#8a1b1b';z.reward=180;z.dmg=30;z.boss=1;z.regenMax=Math.floor(z.max*.16)}

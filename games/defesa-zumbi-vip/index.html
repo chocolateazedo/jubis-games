@@ -67,8 +67,9 @@ function resize(){dpr=Math.max(1,Math.min(2,devicePixelRatio||1));cv.width=cv.cl
 function pathPts(){const w=cv.clientWidth,h=cv.clientHeight,m=36;return [[m,h*.15],[w*.33,h*.15],[w*.33,h*.36],[w*.74,h*.36],[w*.74,h*.2],[w-m,h*.2],[w-m,h*.57],[w*.18,h*.57],[w*.18,h*.84],[w*.92,h*.84]]}
 function ptSeg(px,py,a,b){const vx=b[0]-a[0],vy=b[1]-a[1],wx=px-a[0],wy=py-a[1],t=Math.max(0,Math.min(1,(wx*vx+wy*vy)/(vx*vx+vy*vy||1))),cx=a[0]+vx*t,cy=a[1]+vy*t;return Math.hypot(px-cx,py-cy)}
 function buildSlots(){const w=cv.clientWidth,h=cv.clientHeight,cand=[],pts=[],segDist=(x,y)=>{let mn=1e9;for(let i=0;i<S.path.length-1;i++)mn=Math.min(mn,ptSeg(x,y,S.path[i],S.path[i+1]));return mn};
-for(let gx=1;gx<=9;gx++)for(let gy=1;gy<=6;gy++){const x=w*gx/10,y=h*gy/7;if(segDist(x,y)>=56)cand.push({x,y})}
-for(const c of cand)if(pts.every(p=>Math.hypot(p.x-c.x,p.y-c.y)>=92))pts.push({x:c.x,y:c.y,tower:null});
+for(let gx=1;gx<=15;gx++)for(let gy=1;gy<=11;gy++){const x=w*gx/16,y=h*gy/12;if(x<14||x>w-14||y<14||y>h-14)continue;if(segDist(x,y)>=46)cand.push({x,y,d:segDist(x,y)})}
+cand.sort((a,b)=>a.d-b.d);
+for(const c of cand)if(pts.every(p=>Math.hypot(p.x-c.x,p.y-c.y)>=64))pts.push({x:c.x,y:c.y,tower:null});
 S.slots=pts}
 function start(world,index){$('menu').classList.add('hidden');$('game').classList.remove('hidden');resize();S={world,index,baseMax:100,life:100,money:360,w:1,maxW:10,shownW:1,bannerT:0,towers:[],shots:[],z:[],fx:[],spawn:0,tick:0,over:false,won:false,sel:null,speed:1};S.path=pathPts();buildSlots();S.toSpawn=S.maxW*6;$('endModal').classList.remove('open');loop()}
 function spawn(type){const w=S.w,z={x:S.path[0][0],y:S.path[0][1],i:1,slow:0,po:0,burn:0,regen:0,type};

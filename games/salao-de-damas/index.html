@@ -134,8 +134,29 @@ button.primary:active { transform: translateY(1px); }
   border-radius: 50%;
   box-shadow: 0 4px 14px rgba(0,0,0,.5);
 }
-@media (pointer: coarse) { #joystick { display: block; } }
-@media (max-width: 760px) { #joystick { display: block; } }
+@media (pointer: coarse) { #joystick, #btn-jump { display: flex; } }
+@media (max-width: 760px) { #joystick, #btn-jump { display: flex; } }
+body.in-match #joystick, body.in-match #btn-jump, body.in-match #btn-interact { display: none !important; }
+
+#btn-jump {
+  position: fixed; bottom: 50px; right: 24px; z-index: 60;
+  width: 88px; height: 88px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ffd23f, #ff8c00);
+  border: 3px solid rgba(255,255,255,.45);
+  font-size: 30px;
+  font-weight: 900;
+  color: #2a1500;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  box-shadow: 0 8px 22px rgba(0,0,0,.45);
+}
+#btn-jump:active { transform: scale(0.92); }
 
 /* ----- Botão de interagir ----- */
 #btn-interact {
@@ -340,6 +361,9 @@ button.primary:active { transform: translateY(1px); }
 <!-- ---------- Joystick mobile ---------- -->
 <div id="joystick" style="display:none;"><div class="stick" id="stick"></div></div>
 
+<!-- ---------- Botão Pular (mobile) ---------- -->
+<button id="btn-jump" type="button" aria-label="Pular">🦘</button>
+
 <!-- ---------- Botão Interagir ---------- -->
 <button id="btn-interact" type="button"></button>
 
@@ -428,6 +452,7 @@ let lastMatchSeen = null;   // pra detectar transição de "em jogo" -> "acabou"
 let winStreak = Number(localStorage.getItem('salao-damas-streak') || 0);
 let winBest = Number(localStorage.getItem('salao-damas-streak-best') || 0);
 let moveBusy = false;
+let spectatingTable = null; // tableId quando o jogador está só assistindo (não joga)
 
 // ============================================================================
 // REDE
@@ -905,73 +930,103 @@ function syncPlayers(serverPlayers) {
 
 // ----- Damas: sincronia da partida ------------------------------------------
 function syncMatches(matches) {
-  // qual partida envolve este jogador?
-  let myMatch = null, myTid = null;
+  LAST_MATCHES_CACHE = matches;
+
+  // 1) jogando: qual partida envolve este jogador?
+  let myMatch = null;
   for (const [tid, m] of Object.entries(matches)) {
-    if (m.white === me.id || m.black === me.id) { myMatch = m; myTid = tid; break; }
+    if (m.white === me.id || m.black === me.id) { myMatch = m; break; }
   }
 
-  // se não tô em partida nenhuma...
-  if (!myMatch) {
-    // se o histórico anterior dizia que terminou agora (ainda não mostrei tela): mostra
-    if (lastMatchSeen && lastMatchSeen.winner !== null && currentMatch && !currentMatch.endHandled) {
-      currentMatch.endHandled = true;
-      handleMatchEnd(lastMatchSeen);
-    } else {
-      currentMatch = null;
-      myColor = null;
-      document.getElementById('damas').classList.remove('show');
+  if (myMatch) {
+    // sou JOGADOR — assistir não se aplica
+    if (spectatingTable) spectatingTable = null;
+    myColor = (myMatch.white === me.id) ? 'white' : 'black';
+    const oppId = (myColor === 'white') ? myMatch.black : myMatch.white;
+    const oppPlayer = [...players.values()].find(p => p.mesh.userData.id === oppId);
+    if (oppPlayer && oppPlayer.mesh.userData.name) opponentName = oppPlayer.mesh.userData.name;
+
+    lastMatchSeen = myMatch;
+
+    if (myMatch.winner !== null && (!currentMatch || !currentMatch.endHandled)) {
+      currentMatch = { ...myMatch, endHandled: true };
+      handleMatchEnd(myMatch);
+      return;
     }
+    const wasActive = currentMatch !== null;
+    currentMatch = myMatch;
+    showDamasOverlay(false);
+    renderBoard(false);
+    updateTurnHud(false);
+    if (!wasActive) { selectedCell = null; validDests = []; }
     return;
   }
 
-  // estou na partida
-  myColor = (myMatch.white === me.id) ? 'white' : 'black';
-  const oppId = (myColor === 'white') ? myMatch.black : myMatch.white;
-  // pega nome do oponente
-  const oppPlayer = [...players.values()].find(p => p.mesh.userData.id === oppId);
-  if (oppPlayer && oppPlayer.mesh.userData.name) opponentName = oppPlayer.mesh.userData.name;
-
-  // primeira vez (acabou de começar) ou board mudou: re-renderiza
-  const wasActive = currentMatch !== null;
-  lastMatchSeen = myMatch;
-
-  // se acabou agora
-  if (myMatch.winner !== null && (!currentMatch || !currentMatch.endHandled)) {
-    currentMatch = { ...myMatch, endHandled: true };
-    handleMatchEnd(myMatch);
+  // 2) não sou jogador. Mas posso ter terminado uma partida agora
+  if (lastMatchSeen && lastMatchSeen.winner !== null && currentMatch && !currentMatch.endHandled) {
+    currentMatch.endHandled = true;
+    handleMatchEnd(lastMatchSeen);
     return;
   }
 
-  currentMatch = myMatch;
-  showDamasOverlay();
-  renderBoard();
-  updateTurnHud();
+  // limpa estado da minha partida (caso houvesse)
+  if (currentMatch && currentMatch.endHandled === undefined) currentMatch = null;
+  myColor = null;
 
-  // se acabou de sentar (era apenas hub), centra a câmera na mesa
-  if (!wasActive) {
-    selectedCell = null; validDests = [];
+  // 3) modo espectador?
+  if (spectatingTable) {
+    const m = matches[spectatingTable];
+    if (!m || m.winner !== null) {
+      // partida acabou ou sumiu: para de assistir
+      spectatingTable = null;
+      hideDamasOverlay();
+      return;
+    }
+    currentMatch = m;
+    const whitePlayer = [...players.values()].find(p => p.mesh.userData.id === m.white);
+    const blackPlayer = [...players.values()].find(p => p.mesh.userData.id === m.black);
+    showDamasOverlay(true, whitePlayer?.mesh.userData.name || '?', blackPlayer?.mesh.userData.name || '?');
+    renderBoard(true);
+    updateTurnHud(true);
+    return;
   }
+
+  // 4) nada de partida: esconde overlay
+  hideDamasOverlay();
 }
 
-function showDamasOverlay() {
+function showDamasOverlay(isSpectator, whiteName, blackName) {
   const el = document.getElementById('damas');
+  const leaveBtn = document.getElementById('damas-leave');
+  const myColEl = document.getElementById('damas-mycolor');
+  const myNameEl = document.getElementById('damas-myname');
+  const oppNameEl = document.getElementById('damas-oppname');
   if (!el.classList.contains('show')) {
     el.classList.add('show');
-    document.getElementById('damas-mycolor').className = 'you-color ' + myColor;
-    document.getElementById('damas-myname').textContent = me.name;
-    document.getElementById('damas-oppname').textContent = opponentName || '...';
-    // tira shift lock se estiver, pra deixar mouse livre
+    document.body.classList.add('in-match');
     if (shiftLock) document.exitPointerLock();
+  }
+  if (isSpectator) {
+    leaveBtn.textContent = 'Parar de assistir';
+    myColEl.className = 'you-color white';
+    myNameEl.textContent = whiteName;
+    oppNameEl.textContent = blackName;
   } else {
-    document.getElementById('damas-oppname').textContent = opponentName || '...';
+    leaveBtn.textContent = 'Desistir e levantar';
+    myColEl.className = 'you-color ' + myColor;
+    myNameEl.textContent = me.name;
+    oppNameEl.textContent = opponentName || '...';
   }
 }
 
-function updateTurnHud() {
+function updateTurnHud(isSpectator) {
   const turn = currentMatch.turn;
-  const isMyTurn = (turn === myColor);
   const badge = document.getElementById('damas-turn');
+  if (isSpectator) {
+    badge.textContent = (turn === 'white') ? '⏳ Vez das brancas' : '⏳ Vez das pretas';
+    return;
+  }
+  const isMyTurn = (turn === myColor);
   if (currentMatch.continueWith && isMyTurn) {
     badge.textContent = '⚡ Continue capturando!';
   } else if (isMyTurn) {
@@ -981,11 +1036,11 @@ function updateTurnHud() {
   }
 }
 
-function renderBoard() {
+function renderBoard(isSpectator) {
   const boardEl = document.getElementById('damas-board');
   const board = currentMatch.board;
-  // se a tela do jogador é "preto", inverte visualmente pra ele jogar com a vista igual ao branco
-  const flip = (myColor === 'black');
+  // espectador olha do lado das brancas; jogador das pretas vê espelhado
+  const flip = (!isSpectator && myColor === 'black');
   boardEl.innerHTML = '';
   for (let dispR = 0; dispR < BOARD_N; dispR++) {
     for (let dispC = 0; dispC < BOARD_N; dispC++) {
@@ -1003,14 +1058,18 @@ function renderBoard() {
         if (p.king) piece.textContent = '♛';
         cell.appendChild(piece);
       }
-      // estado de seleção/destino
-      if (selectedCell && selectedCell.r === r && selectedCell.c === c) cell.classList.add('sel');
-      const dest = validDests.find(d => d.r === r && d.c === c);
-      if (dest) {
-        cell.classList.add('dest');
-        if (dest.capture) cell.classList.add('capture');
+      // estado de seleção/destino (só pra jogador)
+      if (!isSpectator) {
+        if (selectedCell && selectedCell.r === r && selectedCell.c === c) cell.classList.add('sel');
+        const dest = validDests.find(d => d.r === r && d.c === c);
+        if (dest) {
+          cell.classList.add('dest');
+          if (dest.capture) cell.classList.add('capture');
+        }
+        cell.addEventListener('click', () => onCellClick(r, c));
+      } else {
+        cell.style.cursor = 'default';
       }
-      cell.addEventListener('click', () => onCellClick(r, c));
       boardEl.appendChild(cell);
     }
   }
@@ -1112,6 +1171,7 @@ function handleMatchEnd(match) {
   localStorage.setItem('salao-damas-streak-best', String(winBest));
 
   document.getElementById('damas').classList.remove('show');
+  document.body.classList.remove('in-match');
   const endEl = document.getElementById('damas-end');
   document.getElementById('end-title').textContent = won ? '🏆 Vitória!' : '💀 Derrota';
   document.getElementById('end-subtitle').textContent = won
@@ -1182,18 +1242,29 @@ addEventListener('keyup', (e) => {
   if (k === 'd' || k === 'arrowright') keys.d = false;
 });
 
-// mouse drag pra girar câmera
-let dragging = false, lastDragX = 0;
+// mouse drag pra girar câmera (multi-touch: rastreia o pointer específico pra não conflitar com joystick)
+let dragging = false, lastDragX = 0, dragPointerId = null;
+function isUiTarget(el) {
+  if (!el) return false;
+  return el.closest('#joystick') || el.closest('a.back') || el.closest('#btn-interact')
+    || el.closest('#btn-jump') || el.closest('.card') || el.closest('#damas') || el.closest('#damas-end');
+}
 addEventListener('pointerdown', (e) => {
-  if (e.target.closest('#joystick') || e.target.closest('a.back') || e.target.closest('#btn-interact') || e.target.closest('.card')) return;
+  if (isUiTarget(e.target)) return;
+  if (dragPointerId !== null) return;
+  dragPointerId = e.pointerId;
   dragging = true; lastDragX = e.clientX;
 });
 addEventListener('pointermove', (e) => {
-  if (!dragging) return;
+  if (!dragging || e.pointerId !== dragPointerId) return;
   camYaw -= (e.clientX - lastDragX) * 0.005;
   lastDragX = e.clientX;
 });
-addEventListener('pointerup', () => dragging = false);
+function endDrag(e) {
+  if (e.pointerId === dragPointerId) { dragging = false; dragPointerId = null; }
+}
+addEventListener('pointerup', endDrag);
+addEventListener('pointercancel', endDrag);
 
 // joystick virtual
 function setupJoystick() {
@@ -1318,11 +1389,16 @@ function updateCamera() {
 
 function updateInteract() {
   const btn = document.getElementById('btn-interact');
-  // se o tabuleiro de damas está aberto, nada de botão Interagir (overlay tem o seu próprio)
-  if (document.getElementById('damas').classList.contains('show') ||
-      document.getElementById('damas-end').classList.contains('show')) {
-    btn.classList.remove('show');
-    interactTarget = null;
+  // se o overlay está aberto E tô jogando, esconde (o overlay tem o seu próprio botão)
+  // se tô só assistindo, mantém um botão "Parar de assistir"
+  const damasOpen = document.getElementById('damas').classList.contains('show');
+  const endOpen = document.getElementById('damas-end').classList.contains('show');
+  if (endOpen) { btn.classList.remove('show'); interactTarget = null; return; }
+  if (damasOpen && !spectatingTable) { btn.classList.remove('show'); interactTarget = null; return; }
+  if (spectatingTable) {
+    interactTarget = { type: 'stop-spectate' };
+    btn.innerHTML = 'Parar de assistir <span class="interact-key">E</span>';
+    btn.classList.add('show');
     return;
   }
   // sentado: oferece "Levantar"
@@ -1332,23 +1408,38 @@ function updateInteract() {
     btn.classList.add('show');
     return;
   }
-  // andando: procura cadeira vazia próxima
-  let best = null, bestDist = INTERACT_DIST;
+  // andando: procura cadeira vazia próxima OU mesa cheia pra assistir
+  let bestSit = null, bestSitDist = INTERACT_DIST;
+  let bestSpec = null, bestSpecDist = INTERACT_DIST + 0.6;
   for (const t of TABLES) {
+    const dx = me.mesh.position.x - t.x;
+    const dz = me.mesh.position.z - t.z;
+    const dTable = Math.hypot(dx, dz);
+    const seat0Used = SEAT_USAGE.get(t.id + ':0');
+    const seat1Used = SEAT_USAGE.get(t.id + ':1');
+    // procura cadeira vazia
     for (let s = 0; s < 2; s++) {
       const seatKey = t.id + ':' + s;
       if (SEAT_USAGE.get(seatKey)) continue;
       const sx = t.x;
       const sz = t.z + (s === 0 ? -SEAT_OFFSET : SEAT_OFFSET);
-      const dx = me.mesh.position.x - sx;
-      const dz = me.mesh.position.z - sz;
-      const d = Math.hypot(dx, dz);
-      if (d < bestDist) { bestDist = d; best = { type: 'sit', tableId: t.id, seat: s }; }
+      const d = Math.hypot(me.mesh.position.x - sx, me.mesh.position.z - sz);
+      if (d < bestSitDist) { bestSitDist = d; bestSit = { type: 'sit', tableId: t.id, seat: s }; }
+    }
+    // se mesa cheia, oferece assistir
+    if (seat0Used && seat1Used && dTable < bestSpecDist) {
+      bestSpecDist = dTable; bestSpec = { type: 'spectate', tableId: t.id };
     }
   }
+  // sentar tem prioridade sobre assistir
+  const best = bestSit || bestSpec;
   interactTarget = best;
   if (best) {
-    btn.innerHTML = `Sentar na mesa ${best.tableId.toUpperCase()} <span class="interact-key">E</span>`;
+    if (best.type === 'sit') {
+      btn.innerHTML = `Sentar na mesa ${best.tableId.toUpperCase()} <span class="interact-key">E</span>`;
+    } else {
+      btn.innerHTML = `👁️ Assistir mesa ${best.tableId.toUpperCase()} <span class="interact-key">E</span>`;
+    }
     btn.classList.add('show');
   } else {
     btn.classList.remove('show');
@@ -1366,17 +1457,33 @@ async function tryInteract() {
       } else {
         showMsg('Esperando outro jogador... 🪑');
       }
+      await netUpdate();
     } else if (interactTarget.type === 'stand') {
       const r = await netStand();
       if (r.error) showMsg(r.error);
+      await netUpdate();
+    } else if (interactTarget.type === 'spectate') {
+      spectatingTable = interactTarget.tableId;
+      // força um re-sync pra abrir o overlay já
+      syncMatchesFromCache();
+    } else if (interactTarget.type === 'stop-spectate') {
+      spectatingTable = null;
+      hideDamasOverlay();
     }
-    // pede uma atualização imediata pra estado refletir já
-    await netUpdate();
   } catch (e) {
     showMsg('Falha ao interagir');
   } finally {
     sitBusy = false;
   }
+}
+
+// usa o último match conhecido (pra abrir overlay sem precisar esperar próximo poll)
+let LAST_MATCHES_CACHE = {};
+function syncMatchesFromCache() { syncMatches(LAST_MATCHES_CACHE); }
+
+function hideDamasOverlay() {
+  document.getElementById('damas').classList.remove('show');
+  document.body.classList.remove('in-match');
 }
 
 function animate() {
@@ -1457,10 +1564,21 @@ document.getElementById('btn-interact').addEventListener('click', (e) => {
   if (me) tryInteract();
 });
 
+// botão de pular (mobile)
+const btnJumpEl = document.getElementById('btn-jump');
+btnJumpEl.addEventListener('touchstart', (e) => { e.preventDefault(); if (me) tryJump(); }, { passive: false });
+btnJumpEl.addEventListener('click', (e) => { e.preventDefault(); if (me) tryJump(); });
+
 // botões da partida de damas
 document.getElementById('damas-leave').addEventListener('click', async (e) => {
   e.preventDefault();
   if (!me || moveBusy) return;
+  // espectador: só sai do modo, não chama servidor
+  if (spectatingTable && !me.seat) {
+    spectatingTable = null;
+    hideDamasOverlay();
+    return;
+  }
   moveBusy = true;
   try {
     await netStand();

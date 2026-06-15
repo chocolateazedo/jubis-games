@@ -72,6 +72,7 @@ Pronto! Faz upload e o jogo aparece automaticamente na página inicial. Não pre
 - Xadrez x1 (`games/xadrez-x1`) — multiplayer online (PHP + polling)
 - Jubis Fire (`games/jubis-fire`) — battle royale 3D até 4 jogadores (Three.js + WebRTC/PeerJS, lobby em PHP)
 - Plantão dos Vovôs (`games/plantao-dos-vovos`) — aventura top-down 2D de cuidado a idosos
+- Salão de Damas (`games/salao-de-damas`) — salão 3D multiplayer online onde os jogadores andam de cartola (Fase 1: hub social, mesas e partida de damas vêm nas próximas fases)
 
 ## Requisitos do servidor
 

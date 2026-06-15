@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<meta name="theme-color" content="#1a0d2e">
+<title>Salão de Damas — Jubis Games</title>
+<style>
+:root { color-scheme: dark; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  margin: 0; padding: 0; height: 100%; overflow: hidden;
+  background: #0a0612;
+  font-family: 'Trebuchet MS', Arial, sans-serif;
+  color: #fff;
+  touch-action: none;
+}
+a.back {
+  position: fixed; top: 12px; left: 12px; z-index: 200;
+  color: #ffd23f; text-decoration: none; font-weight: 700;
+  background: rgba(0,0,0,.45); padding: 8px 12px; border-radius: 10px;
+  border: 1px solid rgba(255,210,63,.35);
+}
+canvas { display: block; }
+
+/* ----- Telas (menu / carregando / sala) ----- */
+#screen-menu, #screen-loading {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  background:
+    radial-gradient(ellipse at top, #3a1d5e 0%, #1a0d2e 45%, #0a0612 100%);
+  padding: 20px;
+}
+.card {
+  background: linear-gradient(160deg, rgba(60,30,100,.6), rgba(20,10,40,.85));
+  border: 2px solid rgba(255,210,63,.4);
+  border-radius: 22px;
+  padding: 28px 24px;
+  width: min(94vw, 420px);
+  text-align: center;
+  box-shadow: 0 18px 50px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.08);
+  backdrop-filter: blur(6px);
+}
+h1.brand {
+  margin: 0 0 6px;
+  font-size: clamp(28px, 6vw, 40px);
+  color: #ffd23f;
+  text-shadow: 0 0 12px rgba(255,210,63,.45), 3px 3px 0 #7a3dff;
+  letter-spacing: 1px;
+}
+.subtitle { opacity: .85; margin: 0 0 20px; font-size: 14px; }
+.pieces { font-size: 28px; letter-spacing: 4px; margin: 8px 0 16px; }
+label { display: block; text-align: left; margin: 12px 0 6px; font-weight: 700; font-size: 14px; opacity: .9; }
+input[type="text"] {
+  width: 100%; padding: 12px 14px;
+  border: 2px solid rgba(255,255,255,.2);
+  border-radius: 12px;
+  background: rgba(0,0,0,.35);
+  color: #fff; font-size: 16px; font-weight: 600;
+  outline: none;
+}
+input[type="text"]:focus { border-color: #ffd23f; }
+button.primary {
+  margin-top: 18px;
+  width: 100%; padding: 14px;
+  border: 0; border-radius: 14px;
+  background: linear-gradient(135deg, #ffd23f, #ff8c00);
+  color: #2a1500; font-size: 17px; font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgba(255,140,0,.35);
+}
+button.primary:active { transform: translateY(1px); }
+.error { color: #ff8a8a; margin-top: 10px; font-size: 14px; min-height: 20px; }
+.hint { opacity: .6; font-size: 12px; margin-top: 14px; }
+
+/* ----- HUD em jogo ----- */
+#hud-top {
+  position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+  z-index: 50; display: flex; gap: 10px;
+  background: rgba(0,0,0,.5); padding: 8px 14px; border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.15);
+  font-size: 13px; font-weight: 700;
+}
+#hud-top span.dot { color: #4cff7a; }
+
+#hud-msg {
+  position: fixed; bottom: 22%; left: 50%; transform: translateX(-50%);
+  z-index: 50; pointer-events: none;
+  background: rgba(0,0,0,.55); padding: 10px 16px; border-radius: 12px;
+  border: 1px solid rgba(255,210,63,.5);
+  font-weight: 800; color: #ffd23f;
+  opacity: 0; transition: opacity .25s;
+}
+#hud-msg.show { opacity: 1; }
+
+/* ----- Controles mobile ----- */
+#joystick {
+  position: fixed; bottom: 24px; left: 24px; z-index: 60;
+  width: 130px; height: 130px;
+  background: rgba(0,0,0,.35);
+  border: 2px solid rgba(255,255,255,.25);
+  border-radius: 50%;
+  display: none;
+  touch-action: none;
+}
+#joystick .stick {
+  position: absolute; left: 50%; top: 50%;
+  width: 56px; height: 56px;
+  margin-left: -28px; margin-top: -28px;
+  background: radial-gradient(circle at 30% 30%, #ffd23f, #d28800);
+  border-radius: 50%;
+  box-shadow: 0 4px 14px rgba(0,0,0,.5);
+}
+@media (pointer: coarse) { #joystick { display: block; } }
+@media (max-width: 760px) { #joystick { display: block; } }
+</style>
+</head>
+<body>
+
+<a class="back" href="../../">← Voltar</a>
+
+<!-- ---------- Menu (digitar nome) ---------- -->
+<div id="screen-menu">
+  <div class="card">
+    <div class="pieces">⚫ ⚪ ⚫ ⚪ ⚫</div>
+    <h1 class="brand">Salão de Damas</h1>
+    <p class="subtitle">Entre no salão 3D, sente em uma mesa e jogue damas com quem chegar!</p>
+    <label for="nameInput">Teu nome</label>
+    <input id="nameInput" type="text" maxlength="14" placeholder="Ex: João" autocomplete="off" />
+    <button class="primary" id="btnJoin">Entrar no Salão</button>
+    <div class="error" id="errorMsg"></div>
+    <p class="hint">💡 Use WASD ou o joystick pra andar. Mouse / arrastar olha em volta.</p>
+  </div>
+</div>
+
+<!-- ---------- Carregando ---------- -->
+<div id="screen-loading" style="display:none;">
+  <div class="card">
+    <h1 class="brand">Entrando...</h1>
+    <p class="subtitle">Acendendo as luzes do salão. 🪔</p>
+  </div>
+</div>
+
+<!-- ---------- HUD em jogo ---------- -->
+<div id="hud-top" style="display:none;">
+  <span><span class="dot">●</span> No salão</span>
+  <span id="playerCount">1 pessoa</span>
+</div>
+<div id="hud-msg"></div>
+
+<!-- ---------- Joystick mobile ---------- -->
+<div id="joystick" style="display:none;"><div class="stick" id="stick"></div></div>
+
+<!-- ---------- Three.js (módulos via importmap) ---------- -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+// ============================================================================
+// CONFIG
+// ============================================================================
+const API = 'api.php';
+const POLL_MS = 160;        // 6,25 atualizações por segundo
+const ROOM_SIZE = 22;       // metade da largura/profundidade do salão
+const MOVE_SPEED = 4.2;     // unidades por segundo
+const SKIN_COLORS = [
+  0xffd23f, 0x00f0ff, 0xff2bd6, 0x4cff7a,
+  0xff8c42, 0xb78bff, 0xffffff, 0x66f0ff
+];
+
+// ============================================================================
+// ESTADO GLOBAL
+// ============================================================================
+let renderer, scene, camera, clock;
+let me = null;             // { id, name, skin, mesh, nameTag }
+let players = new Map();   // id -> { mesh, nameTag, target:{x,z,rot} }
+let keys = { w:false, a:false, s:false, d:false };
+let joy = { active:false, x:0, y:0 };
+let camYaw = 0;
+let lastPoll = 0;
+let pollInflight = false;
+
+// ============================================================================
+// REDE
+// ============================================================================
+async function api(payload) {
+  const r = await fetch(API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) throw new Error('http ' + r.status);
+  return r.json();
+}
+
+async function netJoin(name) {
+  const r = await api({ action: 'join', name });
+  if (r.error) throw new Error(r.error);
+  return r; // { id, skin }
+}
+
+async function netUpdate() {
+  if (!me || pollInflight) return;
+  pollInflight = true;
+  try {
+    const r = await api({
+      action: 'update',
+      id: me.id,
+      x: me.mesh.position.x,
+      y: me.mesh.position.y,
+      z: me.mesh.position.z,
+      rot: me.mesh.rotation.y,
+    });
+    if (r.expired) { showMsg('Você caiu do salão, recarregue a página'); return; }
+    if (r.players) syncPlayers(r.players);
+  } catch (e) {
+    // erros temporários não derrubam o jogo
+  } finally {
+    pollInflight = false;
+  }
+}
+
+function netLeave() {
+  if (!me) return;
+  // sendBeacon pra garantir que sai mesmo fechando a aba
+  try {
+    const body = JSON.stringify({ action: 'leave', id: me.id });
+    navigator.sendBeacon(API, new Blob([body], { type: 'application/json' }));
+  } catch (e) { /* shrug */ }
+}
+addEventListener('beforeunload', netLeave);
+addEventListener('pagehide', netLeave);
+
+// ============================================================================
+// CENA 3D
+// ============================================================================
+function buildScene() {
+  scene = new THREE.Scene();
+  scene.fog = new THREE.Fog(0x1a0d2e, 18, 60);
+
+  // luzes
+  const amb = new THREE.AmbientLight(0xffd9a3, 0.55);
+  scene.add(amb);
+
+  const lustre = new THREE.PointLight(0xffd23f, 1.8, 36, 1.4);
+  lustre.position.set(0, 6, 0);
+  lustre.castShadow = true;
+  lustre.shadow.mapSize.set(1024, 1024);
+  scene.add(lustre);
+
+  const lustre2 = new THREE.PointLight(0xffb070, 1.0, 24, 1.6);
+  lustre2.position.set(-10, 5, -8);
+  scene.add(lustre2);
+  const lustre3 = new THREE.PointLight(0xffb070, 1.0, 24, 1.6);
+  lustre3.position.set(10, 5, 8);
+  scene.add(lustre3);
+
+  // chão (tábuas)
+  const floorTex = makeBoardTexture(1024, 0x553311, 0x331a08);
+  floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping;
+  floorTex.repeat.set(6, 6);
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(ROOM_SIZE * 2, ROOM_SIZE * 2),
+    new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.85 })
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.receiveShadow = true;
+  scene.add(floor);
+
+  // paredes
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0x3a1d5e, roughness: 0.9 });
+  const wallH = 5;
+  const walls = [
+    [ ROOM_SIZE, wallH/2,  0, 0.2, wallH, ROOM_SIZE*2],
+    [-ROOM_SIZE, wallH/2,  0, 0.2, wallH, ROOM_SIZE*2],
+    [ 0, wallH/2,  ROOM_SIZE, ROOM_SIZE*2, wallH, 0.2],
+    [ 0, wallH/2, -ROOM_SIZE, ROOM_SIZE*2, wallH, 0.2],
+  ];
+  for (const [x, y, z, w, h, d] of walls) {
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
+    wall.position.set(x, y, z);
+    wall.receiveShadow = true;
+    scene.add(wall);
+  }
+
+  // rodapés dourados
+  const rodMat = new THREE.MeshStandardMaterial({ color: 0xffd23f, roughness: 0.4, metalness: 0.4 });
+  for (const [x, , z, w, , d] of walls) {
+    const rod = new THREE.Mesh(new THREE.BoxGeometry(w * 1.02, 0.18, d * 1.02), rodMat);
+    rod.position.set(x, 0.09, z);
+    scene.add(rod);
+  }
+
+  // teto
+  const ceilTex = makeBoardTexture(512, 0x2d1450, 0x1a0a2e);
+  ceilTex.wrapS = ceilTex.wrapT = THREE.RepeatWrapping;
+  ceilTex.repeat.set(4, 4);
+  const ceil = new THREE.Mesh(
+    new THREE.PlaneGeometry(ROOM_SIZE * 2, ROOM_SIZE * 2),
+    new THREE.MeshStandardMaterial({ map: ceilTex, roughness: 1 })
+  );
+  ceil.position.y = wallH;
+  ceil.rotation.x = Math.PI / 2;
+  scene.add(ceil);
+
+  // lustre (decorativo)
+  const chand = new THREE.Group();
+  const chandRod = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.04, 0.04, 1.4, 8),
+    new THREE.MeshStandardMaterial({ color: 0x222 })
+  );
+  chandRod.position.y = 4.3;
+  chand.add(chandRod);
+  const chandBall = new THREE.Mesh(
+    new THREE.SphereGeometry(0.35, 16, 12),
+    new THREE.MeshStandardMaterial({ color: 0xffd23f, emissive: 0xffaa00, emissiveIntensity: 0.6 })
+  );
+  chandBall.position.y = 3.6;
+  chand.add(chandBall);
+  scene.add(chand);
+
+  // decoração: 4 colunas
+  const colMat = new THREE.MeshStandardMaterial({ color: 0x5a2d8c, roughness: 0.7 });
+  const colPositions = [[-15, 0,-15],[15, 0,-15],[-15, 0,15],[15, 0,15]];
+  for (const [x, y, z] of colPositions) {
+    const col = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.55, wallH, 16), colMat);
+    col.position.set(x, wallH/2, z);
+    col.castShadow = true;
+    scene.add(col);
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.55, 0.3, 16), rodMat);
+    cap.position.set(x, wallH - 0.15, z);
+    scene.add(cap);
+  }
+
+  // tapete central (placeholder - mesas vão aqui na fase 2)
+  const rug = new THREE.Mesh(
+    new THREE.CircleGeometry(7, 32),
+    new THREE.MeshStandardMaterial({ color: 0x6a1530, roughness: 0.9 })
+  );
+  rug.rotation.x = -Math.PI / 2;
+  rug.position.y = 0.01;
+  scene.add(rug);
+  const rugInner = new THREE.Mesh(
+    new THREE.CircleGeometry(5, 32),
+    new THREE.MeshStandardMaterial({ color: 0x8a2545, roughness: 0.9 })
+  );
+  rugInner.rotation.x = -Math.PI / 2;
+  rugInner.position.y = 0.02;
+  scene.add(rugInner);
+
+  // pequena placa "Em construção" (provisória, removida na fase 2)
+  const sign = new THREE.Mesh(
+    new THREE.PlaneGeometry(4, 1.2),
+    new THREE.MeshBasicMaterial({ map: makeTextTexture('🪑 Mesas chegam na Fase 2 🪑', 512, 128, '#ffd23f', '#1a0d2e'), transparent: true })
+  );
+  sign.position.set(0, 2.5, -ROOM_SIZE + 0.3);
+  scene.add(sign);
+}
+
+// textura tipo tábuas de madeira / quadriculado escuro
+function makeBoardTexture(size, c1, c2) {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  const g = cv.getContext('2d');
+  g.fillStyle = '#' + c1.toString(16).padStart(6, '0');
+  g.fillRect(0, 0, size, size);
+  // tábuas
+  const rows = 8;
+  const rowH = size / rows;
+  g.fillStyle = '#' + c2.toString(16).padStart(6, '0');
+  for (let r = 0; r < rows; r++) {
+    g.fillRect(0, r * rowH, size, 2);
+    if (r % 2 === 0) {
+      for (let n = 0; n < 3; n++) {
+        const x = (n + Math.random() * 0.5) * (size / 3);
+        g.fillRect(x, r * rowH, 2, rowH);
+      }
+    }
+  }
+  // veios
+  g.globalAlpha = 0.12;
+  g.fillStyle = '#000';
+  for (let i = 0; i < 30; i++) {
+    g.fillRect(0, Math.random() * size, size, 1);
+  }
+  return new THREE.CanvasTexture(cv);
+}
+
+function makeTextTexture(text, w, h, fg, bg) {
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const g = cv.getContext('2d');
+  g.fillStyle = bg; g.fillRect(0, 0, w, h);
+  g.strokeStyle = fg; g.lineWidth = 4;
+  g.strokeRect(4, 4, w - 8, h - 8);
+  g.fillStyle = fg;
+  g.font = '700 ' + Math.floor(h * 0.5) + 'px Arial';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(text, w / 2, h / 2);
+  return new THREE.CanvasTexture(cv);
+}
+
+// ============================================================================
+// PERSONAGEM
+// ============================================================================
+function buildPlayerMesh(skinIdx, name, isMe) {
+  const group = new THREE.Group();
+  const color = SKIN_COLORS[skinIdx % SKIN_COLORS.length];
+
+  // corpo (cápsula)
+  const body = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.32, 0.7, 8, 16),
+    new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.1 })
+  );
+  body.position.y = 0.85;
+  body.castShadow = true;
+  group.add(body);
+
+  // cabeça
+  const head = new THREE.Mesh(
+    new THREE.SphereGeometry(0.28, 20, 16),
+    new THREE.MeshStandardMaterial({ color: 0xf6c27a, roughness: 0.6 })
+  );
+  head.position.y = 1.55;
+  head.castShadow = true;
+  group.add(head);
+
+  // chapéu (top hat) — combina com vibe damas/cassino
+  const hat = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.18, 0.18, 0.32, 14),
+    new THREE.MeshStandardMaterial({ color: 0x1a0a2e, roughness: 0.7 })
+  );
+  hat.position.y = 1.86;
+  group.add(hat);
+  const hatBrim = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.32, 0.32, 0.04, 16),
+    new THREE.MeshStandardMaterial({ color: 0x1a0a2e, roughness: 0.7 })
+  );
+  hatBrim.position.y = 1.71;
+  group.add(hatBrim);
+  const hatBand = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.185, 0.185, 0.06, 14),
+    new THREE.MeshStandardMaterial({ color, roughness: 0.4 })
+  );
+  hatBand.position.y = 1.72;
+  group.add(hatBand);
+
+  // olhinhos (pra não ficar zumbi sem rosto)
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x111 });
+  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 8), eyeMat);
+  const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 8), eyeMat);
+  eyeL.position.set(-0.09, 1.6, 0.24);
+  eyeR.position.set( 0.09, 1.6, 0.24);
+  group.add(eyeL); group.add(eyeR);
+
+  // tag com o nome
+  const tag = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: makeNameTagTexture(name, isMe),
+    depthTest: false,
+  }));
+  tag.scale.set(1.6, 0.4, 1);
+  tag.position.y = 2.4;
+  group.add(tag);
+
+  return { group, nameTag: tag };
+}
+
+function makeNameTagTexture(name, isMe) {
+  const cv = document.createElement('canvas');
+  cv.width = 256; cv.height = 64;
+  const g = cv.getContext('2d');
+  g.fillStyle = isMe ? 'rgba(255,210,63,0.92)' : 'rgba(0,0,0,0.72)';
+  roundRect(g, 4, 8, 248, 48, 16); g.fill();
+  g.font = '700 28px Arial';
+  g.fillStyle = isMe ? '#1a0d2e' : '#fff';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(name, 128, 32);
+  return new THREE.CanvasTexture(cv);
+}
+function roundRect(g, x, y, w, h, r) {
+  g.beginPath();
+  g.moveTo(x+r, y);
+  g.lineTo(x+w-r, y); g.quadraticCurveTo(x+w, y, x+w, y+r);
+  g.lineTo(x+w, y+h-r); g.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+  g.lineTo(x+r, y+h); g.quadraticCurveTo(x, y+h, x, y+h-r);
+  g.lineTo(x, y+r); g.quadraticCurveTo(x, y, x+r, y);
+  g.closePath();
+}
+
+function syncPlayers(serverPlayers) {
+  const seen = new Set();
+  for (const p of serverPlayers) {
+    seen.add(p.id);
+    if (p.id === me.id) continue;
+    let other = players.get(p.id);
+    if (!other) {
+      const { group, nameTag } = buildPlayerMesh(p.skin, p.name, false);
+      group.position.set(p.x, p.y, p.z);
+      group.rotation.y = p.rot;
+      scene.add(group);
+      other = { mesh: group, nameTag, target: { x: p.x, y: p.y, z: p.z, rot: p.rot } };
+      players.set(p.id, other);
+    } else {
+      other.target.x = p.x; other.target.y = p.y; other.target.z = p.z; other.target.rot = p.rot;
+    }
+  }
+  // remove quem saiu
+  for (const [id, other] of players) {
+    if (!seen.has(id)) {
+      scene.remove(other.mesh);
+      players.delete(id);
+    }
+  }
+  document.getElementById('playerCount').textContent =
+    serverPlayers.length === 1 ? 'só você por aqui' : `${serverPlayers.length} pessoas`;
+}
+
+// ============================================================================
+// INPUT
+// ============================================================================
+addEventListener('keydown', (e) => {
+  const k = e.key.toLowerCase();
+  if (k === 'w' || k === 'arrowup')    keys.w = true;
+  if (k === 'a' || k === 'arrowleft')  keys.a = true;
+  if (k === 's' || k === 'arrowdown')  keys.s = true;
+  if (k === 'd' || k === 'arrowright') keys.d = true;
+});
+addEventListener('keyup', (e) => {
+  const k = e.key.toLowerCase();
+  if (k === 'w' || k === 'arrowup')    keys.w = false;
+  if (k === 'a' || k === 'arrowleft')  keys.a = false;
+  if (k === 's' || k === 'arrowdown')  keys.s = false;
+  if (k === 'd' || k === 'arrowright') keys.d = false;
+});
+
+// mouse drag pra girar câmera
+let dragging = false, lastDragX = 0;
+addEventListener('pointerdown', (e) => {
+  if (e.target.closest('#joystick') || e.target.closest('a.back')) return;
+  dragging = true; lastDragX = e.clientX;
+});
+addEventListener('pointermove', (e) => {
+  if (!dragging) return;
+  camYaw -= (e.clientX - lastDragX) * 0.005;
+  lastDragX = e.clientX;
+});
+addEventListener('pointerup', () => dragging = false);
+
+// joystick virtual
+function setupJoystick() {
+  const j = document.getElementById('joystick');
+  const stick = document.getElementById('stick');
+  let cx = 0, cy = 0, touchId = null;
+  function start(e) {
+    const t = e.changedTouches ? e.changedTouches[0] : e;
+    if (touchId !== null) return;
+    touchId = t.identifier ?? 'mouse';
+    const r = j.getBoundingClientRect();
+    cx = r.left + r.width/2; cy = r.top + r.height/2;
+    joy.active = true;
+    move(t);
+    e.preventDefault();
+  }
+  function move(t) {
+    const dx = t.clientX - cx, dy = t.clientY - cy;
+    const max = 50;
+    const d = Math.hypot(dx, dy);
+    const sx = d > max ? dx * max / d : dx;
+    const sy = d > max ? dy * max / d : dy;
+    stick.style.transform = `translate(${sx}px, ${sy}px)`;
+    joy.x = sx / max; joy.y = sy / max;
+  }
+  function moveEvt(e) {
+    if (!joy.active) return;
+    const t = e.changedTouches ? [...e.changedTouches].find(x => x.identifier === touchId) : e;
+    if (!t) return;
+    move(t);
+    e.preventDefault();
+  }
+  function end(e) {
+    const t = e.changedTouches ? [...e.changedTouches].find(x => x.identifier === touchId) : { identifier: 'mouse' };
+    if (!t) return;
+    touchId = null;
+    joy.active = false;
+    joy.x = joy.y = 0;
+    stick.style.transform = 'translate(0,0)';
+  }
+  j.addEventListener('touchstart', start, { passive: false });
+  j.addEventListener('touchmove', moveEvt, { passive: false });
+  j.addEventListener('touchend', end);
+  j.addEventListener('touchcancel', end);
+}
+
+// ============================================================================
+// LOOP
+// ============================================================================
+function updateMe(dt) {
+  // input → vetor de movimento no espaço da câmera
+  let mx = 0, mz = 0;
+  if (keys.w) mz -= 1; if (keys.s) mz += 1;
+  if (keys.a) mx -= 1; if (keys.d) mx += 1;
+  if (joy.active) { mx += joy.x; mz += joy.y; }
+  const len = Math.hypot(mx, mz);
+  if (len > 0) {
+    mx /= len; mz /= len;
+    // converte pro mundo girando pelo yaw da câmera
+    const cosY = Math.cos(camYaw), sinY = Math.sin(camYaw);
+    const wx = mx * cosY - mz * sinY;
+    const wz = mx * sinY + mz * cosY;
+    me.mesh.position.x += wx * MOVE_SPEED * dt;
+    me.mesh.position.z += wz * MOVE_SPEED * dt;
+    // limita ao salão
+    const lim = ROOM_SIZE - 0.6;
+    me.mesh.position.x = Math.max(-lim, Math.min(lim, me.mesh.position.x));
+    me.mesh.position.z = Math.max(-lim, Math.min(lim, me.mesh.position.z));
+    // rotação suave pro lado do movimento
+    const targetRot = Math.atan2(wx, wz);
+    let diff = targetRot - me.mesh.rotation.y;
+    while (diff >  Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    me.mesh.rotation.y += diff * Math.min(1, dt * 10);
+  }
+}
+
+function lerpOthers(dt) {
+  for (const other of players.values()) {
+    other.mesh.position.x += (other.target.x - other.mesh.position.x) * Math.min(1, dt * 12);
+    other.mesh.position.y += (other.target.y - other.mesh.position.y) * Math.min(1, dt * 12);
+    other.mesh.position.z += (other.target.z - other.mesh.position.z) * Math.min(1, dt * 12);
+    let diff = other.target.rot - other.mesh.rotation.y;
+    while (diff >  Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    other.mesh.rotation.y += diff * Math.min(1, dt * 12);
+  }
+}
+
+function updateCamera() {
+  const dist = 5.2, height = 3.0;
+  const cx = me.mesh.position.x - Math.sin(camYaw) * dist;
+  const cz = me.mesh.position.z - Math.cos(camYaw) * dist;
+  camera.position.set(cx, height, cz);
+  camera.lookAt(me.mesh.position.x, me.mesh.position.y + 1.2, me.mesh.position.z);
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(0.05, clock.getDelta());
+  if (me) {
+    updateMe(dt);
+    lerpOthers(dt);
+    updateCamera();
+    // polling
+    const now = performance.now();
+    if (now - lastPoll > POLL_MS) { lastPoll = now; netUpdate(); }
+  }
+  renderer.render(scene, camera);
+}
+
+// ============================================================================
+// INICIALIZAÇÃO
+// ============================================================================
+function initThree() {
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.setClearColor(0x0a0612);
+  document.body.appendChild(renderer.domElement);
+
+  camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 200);
+  clock = new THREE.Clock();
+  buildScene();
+  addEventListener('resize', () => {
+    renderer.setSize(innerWidth, innerHeight);
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+  });
+  setupJoystick();
+  animate();
+}
+
+async function startGame(name) {
+  document.getElementById('errorMsg').textContent = '';
+  document.getElementById('screen-menu').style.display = 'none';
+  document.getElementById('screen-loading').style.display = 'flex';
+  try {
+    const join = await netJoin(name);
+    if (!renderer) initThree();
+    const { group, nameTag } = buildPlayerMesh(join.skin, name, true);
+    group.position.set(0, 0, 8);
+    group.rotation.y = Math.PI;
+    scene.add(group);
+    me = { id: join.id, name, skin: join.skin, mesh: group, nameTag };
+    camYaw = Math.PI; // câmera começa olhando o salão
+    document.getElementById('screen-loading').style.display = 'none';
+    document.getElementById('hud-top').style.display = 'flex';
+    showMsg('Bem-vindo, ' + name + '! 🎩');
+  } catch (e) {
+    document.getElementById('screen-loading').style.display = 'none';
+    document.getElementById('screen-menu').style.display = 'flex';
+    document.getElementById('errorMsg').textContent = e.message || 'Erro ao entrar';
+  }
+}
+
+function showMsg(msg, ms = 2400) {
+  const el = document.getElementById('hud-msg');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(showMsg._t);
+  showMsg._t = setTimeout(() => el.classList.remove('show'), ms);
+}
+
+// botões
+document.getElementById('btnJoin').addEventListener('click', () => {
+  const name = document.getElementById('nameInput').value.trim();
+  if (!name) {
+    document.getElementById('errorMsg').textContent = 'Coloca um nome aí 😉';
+    return;
+  }
+  startGame(name);
+});
+document.getElementById('nameInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('btnJoin').click();
+});
+
+// pré-preenche com nome salvo
+const lastName = localStorage.getItem('salao-damas-name');
+if (lastName) document.getElementById('nameInput').value = lastName;
+document.getElementById('nameInput').addEventListener('change', (e) => {
+  localStorage.setItem('salao-damas-name', e.target.value.trim());
+});
+</script>
+</body>
+</html>

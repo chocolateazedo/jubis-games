@@ -1,0 +1,8 @@
+{
+  "title": "Salão de Damas",
+  "description": "Entre no salão 3D online, sente em uma mesa e jogue damas com outros jogadores!",
+  "emoji": "♟️",
+  "tags": ["3d", "multiplayer", "damas", "online", "social"],
+  "entry": "index.html",
+  "order": 2
+}

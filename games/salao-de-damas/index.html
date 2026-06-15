@@ -172,6 +172,134 @@ button.primary:active { transform: translateY(1px); }
   margin-left: 8px;
   font-size: 13px;
 }
+
+/* ----- Tabuleiro de damas (overlay) ----- */
+#damas {
+  position: fixed; inset: 0; z-index: 90;
+  display: none;
+  align-items: center; justify-content: center;
+  background: rgba(8, 5, 20, 0.78);
+  backdrop-filter: blur(3px);
+  padding: 16px;
+}
+#damas.show { display: flex; }
+.damas-wrap {
+  display: flex; flex-direction: column; gap: 10px;
+  align-items: center;
+  width: min(94vw, 92vh, 560px);
+}
+.damas-info {
+  width: 100%;
+  display: flex; justify-content: space-between; align-items: center;
+  background: linear-gradient(160deg, rgba(60,30,100,.85), rgba(20,10,40,.92));
+  border: 2px solid rgba(255,210,63,.45);
+  border-radius: 14px;
+  padding: 10px 14px;
+  font-weight: 800; font-size: 14px;
+}
+.damas-info .turn-badge {
+  background: #ffd23f; color: #2a1500;
+  padding: 4px 10px; border-radius: 999px; font-size: 13px;
+}
+.damas-info .you-color {
+  display: inline-block; width: 12px; height: 12px; border-radius: 50%;
+  vertical-align: middle; margin: 0 6px;
+  border: 2px solid #ffd23f;
+}
+.damas-info .you-color.white { background: #f5e6c8; }
+.damas-info .you-color.black { background: #1a0a2e; }
+
+.damas-board {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(8, 1fr);
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border: 4px solid #ffd23f;
+  border-radius: 8px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.6);
+  overflow: hidden;
+}
+.damas-cell {
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  user-select: none;
+}
+.damas-cell.light { background: #d9b88a; }
+.damas-cell.dark  { background: #5a2e10; }
+.damas-cell.sel   { box-shadow: inset 0 0 0 4px #ffd23f; }
+.damas-cell.dest::after {
+  content: '';
+  position: absolute; left: 25%; top: 25%; width: 50%; height: 50%;
+  border-radius: 50%;
+  background: rgba(255, 210, 63, 0.6);
+  pointer-events: none;
+}
+.damas-cell.dest.capture::after {
+  background: rgba(255, 60, 60, 0.7);
+}
+.damas-piece {
+  width: 76%; height: 76%;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 900; font-size: 22px;
+  box-shadow: inset 0 -4px 8px rgba(0,0,0,.4), inset 0 2px 4px rgba(255,255,255,.25), 0 2px 4px rgba(0,0,0,.4);
+}
+.damas-piece.white { background: radial-gradient(circle at 30% 30%, #fff8dc, #cdb88a); color: #3a1500; }
+.damas-piece.black { background: radial-gradient(circle at 30% 30%, #3a2050, #0a0612); color: #ffd23f; }
+
+.damas-controls {
+  display: flex; gap: 10px;
+  width: 100%; justify-content: center;
+}
+.damas-controls button {
+  padding: 10px 18px;
+  border: 0; border-radius: 999px;
+  background: rgba(0,0,0,.55);
+  color: #fff; font-weight: 800;
+  cursor: pointer;
+  border: 1px solid rgba(255,255,255,.2);
+}
+.damas-controls button.danger {
+  background: linear-gradient(135deg, #ff5a5a, #c01818);
+}
+
+/* tela de fim de partida */
+#damas-end {
+  position: fixed; inset: 0; z-index: 95;
+  display: none; align-items: center; justify-content: center;
+  background: rgba(8,5,20,.85);
+}
+#damas-end.show { display: flex; }
+.end-card {
+  background: linear-gradient(160deg, rgba(60,30,100,.95), rgba(20,10,40,.97));
+  border: 3px solid #ffd23f;
+  border-radius: 22px;
+  padding: 30px 26px;
+  text-align: center;
+  width: min(94vw, 420px);
+  box-shadow: 0 18px 50px rgba(0,0,0,.7);
+}
+.end-card h2 {
+  margin: 0 0 6px;
+  font-size: 36px;
+  color: #ffd23f;
+  text-shadow: 0 0 12px rgba(255,210,63,.5);
+}
+.end-card .streak {
+  background: rgba(0,0,0,.4);
+  border-radius: 12px;
+  padding: 14px;
+  margin: 14px 0;
+  font-weight: 700;
+}
+.end-card .big {
+  font-size: 44px;
+  color: #ffd23f;
+  font-weight: 900;
+  text-shadow: 0 0 12px rgba(255,210,63,.5);
+}
 </style>
 </head>
 <body>
@@ -188,7 +316,7 @@ button.primary:active { transform: translateY(1px); }
     <input id="nameInput" type="text" maxlength="14" placeholder="Ex: João" autocomplete="off" />
     <button class="primary" id="btnJoin">Entrar no Salão</button>
     <div class="error" id="errorMsg"></div>
-    <p class="hint">💡 WASD ou joystick pra andar · arrastar pra olhar · <b>Shift</b> liga/desliga Shift Lock 🔒</p>
+    <p class="hint">💡 WASD/joystick pra andar · <b>Space</b> pular · arrastar pra olhar · <b>Shift</b> = Shift Lock 🔒 · <b>E</b> = Interagir</p>
   </div>
 </div>
 
@@ -215,6 +343,35 @@ button.primary:active { transform: translateY(1px); }
 <!-- ---------- Botão Interagir ---------- -->
 <button id="btn-interact" type="button"></button>
 
+<!-- ---------- Overlay Damas (Fase 3) ---------- -->
+<div id="damas">
+  <div class="damas-wrap">
+    <div class="damas-info">
+      <span>Você: <span class="you-color" id="damas-mycolor"></span><span id="damas-myname">--</span></span>
+      <span class="turn-badge" id="damas-turn">Carregando...</span>
+      <span>Oponente: <span id="damas-oppname">--</span></span>
+    </div>
+    <div class="damas-board" id="damas-board"></div>
+    <div class="damas-controls">
+      <button id="damas-leave" class="danger" type="button">Desistir e levantar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ---------- Tela de fim de partida ---------- -->
+<div id="damas-end">
+  <div class="end-card">
+    <h2 id="end-title">🏆 Vitória!</h2>
+    <p id="end-subtitle">Você venceu seu oponente!</p>
+    <div class="streak">
+      <div>Sequência de vitórias</div>
+      <div class="big" id="end-streak">0</div>
+      <div id="end-best" style="opacity:.8; font-size:13px; margin-top:6px;">Recorde: 0</div>
+    </div>
+    <button class="primary" id="end-back" type="button" style="margin-top: 8px;">Voltar pro salão</button>
+  </div>
+</div>
+
 <!-- ---------- Three.js (módulos via importmap) ---------- -->
 <script type="importmap">
 {
@@ -236,6 +393,8 @@ const ROOM_SIZE = 22;       // metade da largura/profundidade do salão
 const MOVE_SPEED = 4.2;     // unidades por segundo
 const SEAT_OFFSET = 1.05;   // distância da cadeira ao centro da mesa (precisa bater com o api.php)
 const INTERACT_DIST = 1.7;  // distância pra aparecer "Sentar"
+const JUMP_VEL = 5.5;       // velocidade inicial do pulo
+const GRAVITY  = 16;        // gravidade (unidades/s²)
 const SKIN_COLORS = [
   0xffd23f, 0x00f0ff, 0xff2bd6, 0x4cff7a,
   0xff8c42, 0xb78bff, 0xffffff, 0x66f0ff
@@ -257,6 +416,18 @@ let SEAT_USAGE = new Map(); // "tID:seatIdx" -> true (ocupada por algum jogador)
 let interactTarget = null;  // { type:'sit'|'stand', tableId, seat } ou null
 let sitBusy = false;        // evita clique duplo na hora de sentar/levantar
 let shiftLock = false;      // modo Roblox: pointer lock + personagem segue câmera
+
+// estado damas
+const BOARD_N = 8;
+let currentMatch = null;    // objeto recebido do servidor da partida em que ESTOU
+let myColor = null;         // 'white' | 'black' | null
+let opponentName = '';
+let selectedCell = null;    // {r, c} | null
+let validDests = [];        // [{r,c,capture:bool}]
+let lastMatchSeen = null;   // pra detectar transição de "em jogo" -> "acabou"
+let winStreak = Number(localStorage.getItem('salao-damas-streak') || 0);
+let winBest = Number(localStorage.getItem('salao-damas-streak-best') || 0);
+let moveBusy = false;
 
 // ============================================================================
 // REDE
@@ -285,6 +456,10 @@ async function netStand() {
   return api({ action: 'stand', id: me.id });
 }
 
+async function netMove(tableId, from, to) {
+  return api({ action: 'move', id: me.id, tableId, from, to });
+}
+
 async function netUpdate() {
   if (!me || pollInflight) return;
   pollInflight = true;
@@ -300,6 +475,7 @@ async function netUpdate() {
     const r = await api(payload);
     if (r.expired) { showMsg('Você caiu do salão, recarregue a página'); return; }
     if (r.players) syncPlayers(r.players);
+    if (r.matches) syncMatches(r.matches);
   } catch (e) {
     // erros temporários não derrubam o jogo
   } finally {
@@ -701,6 +877,8 @@ function syncPlayers(serverPlayers) {
       const { group, nameTag } = buildPlayerMesh(p.skin, p.name, false);
       group.position.set(p.x, p.y, p.z);
       group.rotation.y = p.rot;
+      group.userData.id = p.id;
+      group.userData.name = p.name;
       scene.add(group);
       other = { mesh: group, nameTag, target: { x: p.x, y: p.y, z: p.z, rot: p.rot }, seat: p.seat || null };
       players.set(p.id, other);
@@ -725,6 +903,235 @@ function syncPlayers(serverPlayers) {
     serverPlayers.length === 1 ? 'só você por aqui' : `${serverPlayers.length} pessoas`;
 }
 
+// ----- Damas: sincronia da partida ------------------------------------------
+function syncMatches(matches) {
+  // qual partida envolve este jogador?
+  let myMatch = null, myTid = null;
+  for (const [tid, m] of Object.entries(matches)) {
+    if (m.white === me.id || m.black === me.id) { myMatch = m; myTid = tid; break; }
+  }
+
+  // se não tô em partida nenhuma...
+  if (!myMatch) {
+    // se o histórico anterior dizia que terminou agora (ainda não mostrei tela): mostra
+    if (lastMatchSeen && lastMatchSeen.winner !== null && currentMatch && !currentMatch.endHandled) {
+      currentMatch.endHandled = true;
+      handleMatchEnd(lastMatchSeen);
+    } else {
+      currentMatch = null;
+      myColor = null;
+      document.getElementById('damas').classList.remove('show');
+    }
+    return;
+  }
+
+  // estou na partida
+  myColor = (myMatch.white === me.id) ? 'white' : 'black';
+  const oppId = (myColor === 'white') ? myMatch.black : myMatch.white;
+  // pega nome do oponente
+  const oppPlayer = [...players.values()].find(p => p.mesh.userData.id === oppId);
+  if (oppPlayer && oppPlayer.mesh.userData.name) opponentName = oppPlayer.mesh.userData.name;
+
+  // primeira vez (acabou de começar) ou board mudou: re-renderiza
+  const wasActive = currentMatch !== null;
+  lastMatchSeen = myMatch;
+
+  // se acabou agora
+  if (myMatch.winner !== null && (!currentMatch || !currentMatch.endHandled)) {
+    currentMatch = { ...myMatch, endHandled: true };
+    handleMatchEnd(myMatch);
+    return;
+  }
+
+  currentMatch = myMatch;
+  showDamasOverlay();
+  renderBoard();
+  updateTurnHud();
+
+  // se acabou de sentar (era apenas hub), centra a câmera na mesa
+  if (!wasActive) {
+    selectedCell = null; validDests = [];
+  }
+}
+
+function showDamasOverlay() {
+  const el = document.getElementById('damas');
+  if (!el.classList.contains('show')) {
+    el.classList.add('show');
+    document.getElementById('damas-mycolor').className = 'you-color ' + myColor;
+    document.getElementById('damas-myname').textContent = me.name;
+    document.getElementById('damas-oppname').textContent = opponentName || '...';
+    // tira shift lock se estiver, pra deixar mouse livre
+    if (shiftLock) document.exitPointerLock();
+  } else {
+    document.getElementById('damas-oppname').textContent = opponentName || '...';
+  }
+}
+
+function updateTurnHud() {
+  const turn = currentMatch.turn;
+  const isMyTurn = (turn === myColor);
+  const badge = document.getElementById('damas-turn');
+  if (currentMatch.continueWith && isMyTurn) {
+    badge.textContent = '⚡ Continue capturando!';
+  } else if (isMyTurn) {
+    badge.textContent = '🎯 Sua vez';
+  } else {
+    badge.textContent = '⏳ Vez do oponente';
+  }
+}
+
+function renderBoard() {
+  const boardEl = document.getElementById('damas-board');
+  const board = currentMatch.board;
+  // se a tela do jogador é "preto", inverte visualmente pra ele jogar com a vista igual ao branco
+  const flip = (myColor === 'black');
+  boardEl.innerHTML = '';
+  for (let dispR = 0; dispR < BOARD_N; dispR++) {
+    for (let dispC = 0; dispC < BOARD_N; dispC++) {
+      const r = flip ? (BOARD_N - 1 - dispR) : dispR;
+      const c = flip ? (BOARD_N - 1 - dispC) : dispC;
+      const cell = document.createElement('div');
+      const dark = ((r + c) % 2 === 1);
+      cell.className = 'damas-cell ' + (dark ? 'dark' : 'light');
+      cell.dataset.r = r; cell.dataset.c = c;
+      // peça
+      const p = board[r][c];
+      if (p) {
+        const piece = document.createElement('div');
+        piece.className = 'damas-piece ' + p.color;
+        if (p.king) piece.textContent = '♛';
+        cell.appendChild(piece);
+      }
+      // estado de seleção/destino
+      if (selectedCell && selectedCell.r === r && selectedCell.c === c) cell.classList.add('sel');
+      const dest = validDests.find(d => d.r === r && d.c === c);
+      if (dest) {
+        cell.classList.add('dest');
+        if (dest.capture) cell.classList.add('capture');
+      }
+      cell.addEventListener('click', () => onCellClick(r, c));
+      boardEl.appendChild(cell);
+    }
+  }
+}
+
+function onCellClick(r, c) {
+  if (!currentMatch || currentMatch.winner !== null) return;
+  if (currentMatch.turn !== myColor) return;
+  if (moveBusy) return;
+  const board = currentMatch.board;
+
+  // se há um destino selecionado válido aqui, move
+  if (selectedCell) {
+    const d = validDests.find(x => x.r === r && x.c === c);
+    if (d) {
+      doMove(selectedCell, { r, c });
+      return;
+    }
+  }
+
+  // seleciona uma peça minha
+  const p = board[r][c];
+  if (p && p.color === myColor) {
+    // se há multi-jump em andamento, só pode selecionar a peça obrigatória
+    if (currentMatch.continueWith) {
+      const [cr, cc] = currentMatch.continueWith;
+      if (cr !== r || cc !== c) return;
+    }
+    selectedCell = { r, c };
+    validDests = computeValidDestinations(board, r, c, myColor);
+    renderBoard();
+    return;
+  }
+
+  // clique em vazio fora dos destinos: limpa seleção
+  if (selectedCell && (!currentMatch.continueWith)) {
+    selectedCell = null; validDests = [];
+    renderBoard();
+  }
+}
+
+function computeValidDestinations(board, r, c, color) {
+  const p = board[r][c];
+  if (!p) return [];
+  const dests = [];
+  const isKing = !!p.king;
+  const forward = (color === 'white') ? -1 : 1;
+  // movimento simples (1 casa, pra frente se peão; qualquer diagonal se dama)
+  const moveDirs = isKing ? [[-1,-1],[-1,1],[1,-1],[1,1]] : [[forward,-1],[forward,1]];
+  for (const [dr, dc] of moveDirs) {
+    const nr = r + dr, nc = c + dc;
+    if (nr<0||nr>=BOARD_N||nc<0||nc>=BOARD_N) continue;
+    if (board[nr][nc] === null) dests.push({ r: nr, c: nc, capture: false });
+  }
+  // capturas: 4 diagonais, pulando 2 casas
+  for (const [dr, dc] of [[-1,-1],[-1,1],[1,-1],[1,1]]) {
+    const er = r + dr, ec = c + dc;
+    const lr = r + 2*dr, lc = c + 2*dc;
+    if (lr<0||lr>=BOARD_N||lc<0||lc>=BOARD_N) continue;
+    const mid = board[er][ec];
+    if (mid && mid.color !== color && board[lr][lc] === null) {
+      dests.push({ r: lr, c: lc, capture: true });
+    }
+  }
+  // se há multi-jump, só destinos de captura
+  if (currentMatch.continueWith) {
+    return dests.filter(d => d.capture);
+  }
+  return dests;
+}
+
+async function doMove(from, to) {
+  if (!currentMatch || moveBusy) return;
+  moveBusy = true;
+  try {
+    const r = await netMove(currentMatch.tableId, [from.r, from.c], [to.r, to.c]);
+    if (r.error) {
+      showMsg(r.error);
+    } else {
+      selectedCell = null; validDests = [];
+      await netUpdate();  // pega o board atualizado imediatamente
+    }
+  } catch (e) {
+    showMsg('Erro ao mover');
+  } finally {
+    moveBusy = false;
+  }
+}
+
+function handleMatchEnd(match) {
+  const won = (match.winner === myColor);
+  if (won) {
+    winStreak += 1;
+    if (winStreak > winBest) winBest = winStreak;
+  } else {
+    winStreak = 0;
+  }
+  localStorage.setItem('salao-damas-streak', String(winStreak));
+  localStorage.setItem('salao-damas-streak-best', String(winBest));
+
+  document.getElementById('damas').classList.remove('show');
+  const endEl = document.getElementById('damas-end');
+  document.getElementById('end-title').textContent = won ? '🏆 Vitória!' : '💀 Derrota';
+  document.getElementById('end-subtitle').textContent = won
+    ? (match.reason === 'forfeit' ? 'Seu oponente fugiu! Vitória sua!' : 'Você venceu!')
+    : 'Quem sabe na próxima 😉';
+  document.getElementById('end-streak').textContent = won ? winStreak : 0;
+  document.getElementById('end-best').textContent = 'Recorde: ' + winBest;
+  endEl.classList.add('show');
+}
+
+function closeEndScreen() {
+  document.getElementById('damas-end').classList.remove('show');
+  currentMatch = null;
+  lastMatchSeen = null;
+  selectedCell = null;
+  validDests = [];
+  // automaticamente sai da cadeira (já saiu no servidor por causa do forfeit/win)
+  if (me && me.seat) netStand();
+}
+
 // ============================================================================
 // INPUT
 // ============================================================================
@@ -734,8 +1141,11 @@ addEventListener('keydown', (e) => {
   if (k === 'a' || k === 'arrowleft')  keys.a = true;
   if (k === 's' || k === 'arrowdown')  keys.s = true;
   if (k === 'd' || k === 'arrowright') keys.d = true;
-  if (k === 'e' || k === ' ' || k === 'enter') {
+  if (k === 'e' || k === 'enter') {
     if (me && interactTarget) { e.preventDefault(); tryInteract(); }
+  }
+  if (k === ' ') {
+    if (me && me.seat === null) { e.preventDefault(); tryJump(); }
   }
   // Shift Lock estilo Roblox
   if (e.key === 'Shift' && me && !e.repeat) {
@@ -833,9 +1243,21 @@ function setupJoystick() {
 // ============================================================================
 // LOOP
 // ============================================================================
+function tryJump() {
+  if (!me || me.seat) return;
+  // só pula se estiver no chão
+  if (me.mesh.position.y <= 0.001 && (me.vy ?? 0) <= 0) {
+    me.vy = JUMP_VEL;
+  }
+}
+
 function updateMe(dt) {
-  // sentado: não anda
-  if (me.seat) return;
+  // sentado: não anda nem pula
+  if (me.seat) { me.vy = 0; me.mesh.position.y = 0; return; }
+  // gravidade
+  me.vy = (me.vy ?? 0) - GRAVITY * dt;
+  me.mesh.position.y += me.vy * dt;
+  if (me.mesh.position.y < 0) { me.mesh.position.y = 0; me.vy = 0; }
   // input local: forward = +1 (W / joystick pra cima), right = +1 (D / joystick pra direita)
   let fwd = 0, right = 0;
   if (keys.w) fwd += 1; if (keys.s) fwd -= 1;
@@ -896,6 +1318,13 @@ function updateCamera() {
 
 function updateInteract() {
   const btn = document.getElementById('btn-interact');
+  // se o tabuleiro de damas está aberto, nada de botão Interagir (overlay tem o seu próprio)
+  if (document.getElementById('damas').classList.contains('show') ||
+      document.getElementById('damas-end').classList.contains('show')) {
+    btn.classList.remove('show');
+    interactTarget = null;
+    return;
+  }
   // sentado: oferece "Levantar"
   if (me.seat) {
     interactTarget = { type: 'stand' };
@@ -1002,7 +1431,7 @@ async function startGame(name) {
     group.position.set(0, 0, 18);
     group.rotation.y = Math.PI;
     scene.add(group);
-    me = { id: join.id, name, skin: join.skin, mesh: group, nameTag, seat: null };
+    me = { id: join.id, name, skin: join.skin, mesh: group, nameTag, seat: null, vy: 0 };
     camYaw = Math.PI; // câmera começa olhando o salão
     document.getElementById('screen-loading').style.display = 'none';
     document.getElementById('hud-top').style.display = 'flex';
@@ -1026,6 +1455,21 @@ function showMsg(msg, ms = 2400) {
 document.getElementById('btn-interact').addEventListener('click', (e) => {
   e.preventDefault();
   if (me) tryInteract();
+});
+
+// botões da partida de damas
+document.getElementById('damas-leave').addEventListener('click', async (e) => {
+  e.preventDefault();
+  if (!me || moveBusy) return;
+  moveBusy = true;
+  try {
+    await netStand();
+    await netUpdate();
+  } finally { moveBusy = false; }
+});
+document.getElementById('end-back').addEventListener('click', (e) => {
+  e.preventDefault();
+  closeEndScreen();
 });
 
 // botões

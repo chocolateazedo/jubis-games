@@ -33,6 +33,18 @@ const TABLES = [
 ];
 const SEAT_OFFSET = 1.05;
 
+/** Damas (regras simplificadas estilo brasileiro):
+ *  - tabuleiro 8x8, casas escuras onde (r+c)%2 === 1
+ *  - peças comuns andam 1 diagonal pra frente
+ *  - peças comuns capturam pulando 2 casas em qualquer diagonal (frente OU trás)
+ *  - dama (king): anda/captura 1 casa em qualquer diagonal
+ *  - quando peça comum chega na última fileira do oponente, vira dama
+ *  - multi-jump: se após captura ainda dá pra capturar com a MESMA peça, jogador continua
+ *  - ganha quem comer todas as peças do oponente OU deixar oponente sem lance possível
+ *  - seat 0 (sul) joga as brancas (descem); seat 1 (norte) joga as pretas (sobem)
+ */
+const BOARD_N = 8;
+
 $DATA = __DIR__ . '/data';
 ensure_data_dir($DATA);
 
@@ -46,6 +58,7 @@ try {
         case 'update':  echo json_encode(update_salao($DATA, $input)); break;
         case 'sit':     echo json_encode(sit_salao($DATA, $input)); break;
         case 'stand':   echo json_encode(stand_salao($DATA, $input)); break;
+        case 'move':    echo json_encode(move_damas($DATA, $input)); break;
         case 'leave':   echo json_encode(leave_salao($DATA, $input)); break;
         default:
             http_response_code(400);
@@ -118,7 +131,21 @@ function update_salao(string $dir, array $in): array
                 'seat' => $pl['seat'] ?? null,
             ];
         }
-        return [$state, ['players' => $players]];
+        // partidas (todas — são poucas; cliente filtra qual interessa)
+        $matches = [];
+        foreach ($state['matches'] as $tid => $m) {
+            $matches[$tid] = [
+                'tableId' => $tid,
+                'white'   => $m['white'],
+                'black'   => $m['black'],
+                'board'   => $m['board'],
+                'turn'    => $m['turn'],
+                'continueWith' => $m['continueWith'],
+                'winner'  => $m['winner'],
+                'reason'  => $m['reason'],
+            ];
+        }
+        return [$state, ['players' => $players, 'matches' => $matches]];
     });
 }
 
@@ -165,6 +192,28 @@ function sit_salao(string $dir, array $in): array
         $p['rot'] = $seatRot;
         $p['ts'] = time();
         unset($p);
+
+        // se ambos os assentos da mesa estão ocupados, inicia/reinicia uma partida
+        $whiteId = null; $blackId = null;
+        foreach ($state['players'] as $pl) {
+            if (($pl['seat'] ?? null) === $tid . ':0') $whiteId = $pl['id'];
+            if (($pl['seat'] ?? null) === $tid . ':1') $blackId = $pl['id'];
+        }
+        if ($whiteId !== null && $blackId !== null) {
+            $state['matches'][$tid] = [
+                'tableId' => $tid,
+                'white'   => $whiteId,
+                'black'   => $blackId,
+                'board'   => damas_init_board(),
+                'turn'    => 'white',
+                'continueWith' => null,
+                'winner'  => null,
+                'reason'  => null,
+                'endedAt' => null,
+                'lastMoveAt' => time(),
+                'startedAt'  => time(),
+            ];
+        }
         return [$state, ['ok' => true, 'seat' => $seatKey, 'x' => $seatX, 'z' => $seatZ, 'rot' => $seatRot]];
     });
 }
@@ -176,6 +225,8 @@ function stand_salao(string $dir, array $in): array
 
     return with_lock($dir, function (array $state) use ($id) {
         if (!isset($state['players'][$id])) return [$state, err('você saiu do salão')];
+        // libera assento + encerra match se houver
+        $state = release_seat_if_any($state, $id);
         $p =& $state['players'][$id];
         if ($p['seat'] !== null) {
             // empurra o jogador um pouquinho pra trás da cadeira pra ele não voltar a sentar
@@ -190,12 +241,180 @@ function stand_salao(string $dir, array $in): array
     });
 }
 
+// ----- Damas ---------------------------------------------------------------
+
+function move_damas(string $dir, array $in): array
+{
+    $id = clean_id($in['id'] ?? '');
+    $tid = (string)($in['tableId'] ?? '');
+    $from = $in['from'] ?? null;
+    $to   = $in['to'] ?? null;
+    if ($id === null) return err('id inválido', 400);
+    if (!is_array($from) || !is_array($to) || count($from) < 2 || count($to) < 2) return err('lance inválido');
+    $fr = (int)$from[0]; $fc = (int)$from[1];
+    $tr = (int)$to[0];   $tc = (int)$to[1];
+
+    return with_lock($dir, function (array $state) use ($id, $tid, $fr, $fc, $tr, $tc) {
+        if (!isset($state['matches'][$tid])) return [$state, err('não há partida ativa nessa mesa')];
+        $m = $state['matches'][$tid];
+        if ($m['winner'] !== null) return [$state, err('a partida já terminou')];
+
+        $myColor = ($m['white'] === $id) ? 'white' : (($m['black'] === $id) ? 'black' : null);
+        if ($myColor === null) return [$state, err('você não está jogando essa partida')];
+        if ($m['turn'] !== $myColor) return [$state, err('não é a sua vez')];
+
+        // se estamos no meio de um multi-jump, o lance precisa começar da peça correta
+        if ($m['continueWith'] !== null) {
+            [$cr, $cc] = $m['continueWith'];
+            if ($fr !== $cr || $fc !== $cc) return [$state, err('continue o sequência de capturas')];
+        }
+
+        $piece = $m['board'][$fr][$fc] ?? null;
+        if ($piece === null) return [$state, err('não há peça nessa casa')];
+        if ($piece['color'] !== $myColor) return [$state, err('essa peça não é sua')];
+
+        // aplica lance
+        $result = damas_try_move($m['board'], $fr, $fc, $tr, $tc, $myColor);
+        if (!$result['ok']) return [$state, err($result['error'] ?? 'lance ilegal')];
+        $m['board'] = $result['board'];
+        $m['lastMoveAt'] = time();
+
+        // multi-jump: se foi captura e a peça (na nova posição, podendo ser dama agora) pode capturar de novo, mesmo jogador continua
+        if ($result['captured'] && damas_piece_can_capture($m['board'], $tr, $tc)) {
+            $m['continueWith'] = [$tr, $tc];
+        } else {
+            $m['continueWith'] = null;
+            $m['turn'] = ($myColor === 'white') ? 'black' : 'white';
+        }
+
+        // checa vencedor
+        $winner = damas_check_winner($m['board'], $m['turn']);
+        if ($winner !== null) {
+            $m['winner'] = $winner;
+            $m['reason'] = 'checkmate';
+            $m['endedAt'] = time();
+        }
+
+        $state['matches'][$tid] = $m;
+        return [$state, ['ok' => true]];
+    });
+}
+
+function damas_init_board(): array
+{
+    $b = [];
+    for ($r = 0; $r < BOARD_N; $r++) {
+        $row = [];
+        for ($c = 0; $c < BOARD_N; $c++) {
+            $row[] = null;
+        }
+        $b[] = $row;
+    }
+    for ($r = 0; $r < 3; $r++)
+        for ($c = 0; $c < BOARD_N; $c++)
+            if (($r + $c) % 2 === 1) $b[$r][$c] = ['color' => 'black', 'king' => false];
+    for ($r = 5; $r < BOARD_N; $r++)
+        for ($c = 0; $c < BOARD_N; $c++)
+            if (($r + $c) % 2 === 1) $b[$r][$c] = ['color' => 'white', 'king' => false];
+    return $b;
+}
+
+function damas_try_move(array $board, int $fr, int $fc, int $tr, int $tc, string $color): array
+{
+    if ($tr < 0 || $tr >= BOARD_N || $tc < 0 || $tc >= BOARD_N) return ['ok' => false, 'error' => 'fora do tabuleiro'];
+    if (($tr + $tc) % 2 !== 1) return ['ok' => false, 'error' => 'casa clara'];
+    if ($board[$tr][$tc] !== null) return ['ok' => false, 'error' => 'casa ocupada'];
+    $piece = $board[$fr][$fc];
+    if ($piece === null) return ['ok' => false, 'error' => 'sem peça'];
+
+    $dr = $tr - $fr; $dc = $tc - $fc;
+    if (abs($dr) !== abs($dc) || $dr === 0) return ['ok' => false, 'error' => 'movimento não é diagonal'];
+
+    $forward = ($color === 'white') ? -1 : 1;
+    $isKing = !empty($piece['king']);
+
+    // movimento simples (1 casa)
+    if (abs($dr) === 1) {
+        if (!$isKing && $dr !== $forward) return ['ok' => false, 'error' => 'peça comum só anda pra frente'];
+        $board[$fr][$fc] = null;
+        $piece = damas_maybe_promote($piece, $tr, $color);
+        $board[$tr][$tc] = $piece;
+        return ['ok' => true, 'board' => $board, 'captured' => false];
+    }
+
+    // captura (pula 2 casas, com inimigo no meio)
+    if (abs($dr) === 2) {
+        $mr = $fr + ($dr / 2); $mc = $fc + ($dc / 2);
+        $mid = $board[$mr][$mc] ?? null;
+        if ($mid === null) return ['ok' => false, 'error' => 'não tem peça pra capturar'];
+        if ($mid['color'] === $color) return ['ok' => false, 'error' => 'não pode capturar peça própria'];
+        $board[$fr][$fc] = null;
+        $board[$mr][$mc] = null;
+        $piece = damas_maybe_promote($piece, $tr, $color);
+        $board[$tr][$tc] = $piece;
+        return ['ok' => true, 'board' => $board, 'captured' => true];
+    }
+
+    return ['ok' => false, 'error' => 'distância inválida'];
+}
+
+function damas_maybe_promote(array $piece, int $r, string $color): array
+{
+    $lastRow = ($color === 'white') ? 0 : (BOARD_N - 1);
+    if ($r === $lastRow) $piece['king'] = true;
+    return $piece;
+}
+
+function damas_piece_can_capture(array $board, int $r, int $c): bool
+{
+    $p = $board[$r][$c] ?? null;
+    if ($p === null) return false;
+    foreach ([[-1,-1],[-1,1],[1,-1],[1,1]] as [$dr, $dc]) {
+        $er = $r + $dr; $ec = $c + $dc;
+        $lr = $r + 2 * $dr; $lc = $c + 2 * $dc;
+        if ($lr < 0 || $lr >= BOARD_N || $lc < 0 || $lc >= BOARD_N) continue;
+        $mid = $board[$er][$ec] ?? null;
+        $land = $board[$lr][$lc] ?? null;
+        if ($mid !== null && $mid['color'] !== $p['color'] && $land === null) return true;
+    }
+    return false;
+}
+
+function damas_check_winner(array $board, string $turn): ?string
+{
+    $hasOwn = false;
+    $hasMove = false;
+    for ($r = 0; $r < BOARD_N; $r++) {
+        for ($c = 0; $c < BOARD_N; $c++) {
+            $p = $board[$r][$c];
+            if ($p === null || $p['color'] !== $turn) continue;
+            $hasOwn = true;
+            if ($hasMove) continue;
+            $isKing = !empty($p['king']);
+            $forward = ($turn === 'white') ? -1 : 1;
+            $dirs = $isKing ? [[-1,-1],[-1,1],[1,-1],[1,1]] : [[$forward,-1],[$forward,1]];
+            foreach ($dirs as [$dr, $dc]) {
+                $nr = $r + $dr; $nc = $c + $dc;
+                if ($nr>=0&&$nr<BOARD_N&&$nc>=0&&$nc<BOARD_N && $board[$nr][$nc] === null) {
+                    $hasMove = true; break;
+                }
+            }
+            if (!$hasMove && damas_piece_can_capture($board, $r, $c)) $hasMove = true;
+        }
+    }
+    if (!$hasOwn || !$hasMove) {
+        return $turn === 'white' ? 'black' : 'white';
+    }
+    return null;
+}
+
 function leave_salao(string $dir, array $in): array
 {
     $id = clean_id($in['id'] ?? '');
     if ($id === null) return ['ok' => true];
 
     return with_lock($dir, function (array $state) use ($id) {
+        $state = release_seat_if_any($state, $id);
         unset($state['players'][$id]);
         return [$state, ['ok' => true]];
     });
@@ -221,21 +440,49 @@ function with_lock(string $dir, callable $fn): array
 
 function read_state(string $path): array
 {
-    $default = ['players' => []];
+    $default = ['players' => [], 'matches' => []];
     if (!is_file($path)) return $default;
     $d = json_decode((string)file_get_contents($path), true);
     if (!is_array($d)) return $default;
     if (!isset($d['players']) || !is_array($d['players'])) $d['players'] = [];
+    if (!isset($d['matches']) || !is_array($d['matches'])) $d['matches'] = [];
     return $d;
 }
 
 function gc(array $state): array
 {
     $now = time();
+    // remove jogadores ofline
     foreach ($state['players'] as $id => $p) {
         if (($now - ($p['ts'] ?? 0)) > PLAYER_TTL) {
+            $state = release_seat_if_any($state, $id);
             unset($state['players'][$id]);
         }
+    }
+    // remove partidas terminadas há mais de 8s (já mostrou tela de vitória)
+    foreach ($state['matches'] as $tid => $m) {
+        if (($m['winner'] ?? null) !== null && ($now - ($m['endedAt'] ?? 0)) > 8) {
+            unset($state['matches'][$tid]);
+        }
+    }
+    return $state;
+}
+
+// libera assento de um jogador (uso em GC quando jogador some) e remove match associado
+function release_seat_if_any(array $state, string $playerId): array
+{
+    $p = $state['players'][$playerId] ?? null;
+    if ($p === null || empty($p['seat'])) return $state;
+    [$tid, $sidx] = explode(':', $p['seat'], 2);
+    // se tinha match ativa, oponente vence
+    if (isset($state['matches'][$tid]) && ($state['matches'][$tid]['winner'] ?? null) === null) {
+        $m = $state['matches'][$tid];
+        $loserColor = ($sidx === '0') ? 'white' : 'black';
+        $winnerColor = $loserColor === 'white' ? 'black' : 'white';
+        $m['winner'] = $winnerColor;
+        $m['reason'] = 'forfeit';
+        $m['endedAt'] = time();
+        $state['matches'][$tid] = $m;
     }
     return $state;
 }

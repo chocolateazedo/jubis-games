@@ -83,6 +83,29 @@ button.primary:active { transform: translateY(1px); }
 }
 #hud-top span.dot { color: #4cff7a; }
 
+#hud-lock {
+  position: fixed; top: 10px; right: 10px; z-index: 50;
+  background: rgba(0,0,0,.55); padding: 8px 12px; border-radius: 12px;
+  border: 1px solid rgba(255,210,63,.45);
+  font-size: 12px; font-weight: 800;
+  color: #ffd23f;
+  pointer-events: none;
+  display: none;
+}
+#hud-lock.show { display: block; }
+
+#crosshair {
+  position: fixed; left: 50%; top: 50%;
+  width: 8px; height: 8px; margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: rgba(255,210,63,.85);
+  box-shadow: 0 0 8px rgba(0,0,0,.6);
+  z-index: 49;
+  pointer-events: none;
+  display: none;
+}
+#crosshair.show { display: block; }
+
 #hud-msg {
   position: fixed; bottom: 22%; left: 50%; transform: translateX(-50%);
   z-index: 50; pointer-events: none;
@@ -165,7 +188,7 @@ button.primary:active { transform: translateY(1px); }
     <input id="nameInput" type="text" maxlength="14" placeholder="Ex: João" autocomplete="off" />
     <button class="primary" id="btnJoin">Entrar no Salão</button>
     <div class="error" id="errorMsg"></div>
-    <p class="hint">💡 Use WASD ou o joystick pra andar. Mouse / arrastar olha em volta.</p>
+    <p class="hint">💡 WASD ou joystick pra andar · arrastar pra olhar · <b>Shift</b> liga/desliga Shift Lock 🔒</p>
   </div>
 </div>
 
@@ -183,6 +206,8 @@ button.primary:active { transform: translateY(1px); }
   <span id="playerCount">1 pessoa</span>
 </div>
 <div id="hud-msg"></div>
+<div id="hud-lock">🔒 Shift Lock <span style="opacity:.7">(Shift / Esc pra sair)</span></div>
+<div id="crosshair"></div>
 
 <!-- ---------- Joystick mobile ---------- -->
 <div id="joystick" style="display:none;"><div class="stick" id="stick"></div></div>
@@ -231,6 +256,7 @@ let TABLES = [];            // recebido do servidor no join
 let SEAT_USAGE = new Map(); // "tID:seatIdx" -> true (ocupada por algum jogador)
 let interactTarget = null;  // { type:'sit'|'stand', tableId, seat } ou null
 let sitBusy = false;        // evita clique duplo na hora de sentar/levantar
+let shiftLock = false;      // modo Roblox: pointer lock + personagem segue câmera
 
 // ============================================================================
 // REDE
@@ -711,6 +737,32 @@ addEventListener('keydown', (e) => {
   if (k === 'e' || k === ' ' || k === 'enter') {
     if (me && interactTarget) { e.preventDefault(); tryInteract(); }
   }
+  // Shift Lock estilo Roblox
+  if (e.key === 'Shift' && me && !e.repeat) {
+    e.preventDefault();
+    toggleShiftLock();
+  }
+});
+
+function toggleShiftLock() {
+  if (shiftLock) {
+    document.exitPointerLock();
+  } else {
+    if (renderer) renderer.domElement.requestPointerLock();
+  }
+}
+
+document.addEventListener('pointerlockchange', () => {
+  shiftLock = !!(renderer && document.pointerLockElement === renderer.domElement);
+  document.getElementById('hud-lock').classList.toggle('show', shiftLock);
+  document.getElementById('crosshair').classList.toggle('show', shiftLock);
+  // joystick e botão de interagir continuam funcionando, mas o drag-to-rotate da câmera
+  // não interfere mais (mouse tá travado no centro)
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (!shiftLock) return;
+  camYaw -= e.movementX * 0.0035;
 });
 addEventListener('keyup', (e) => {
   const k = e.key.toLowerCase();
@@ -804,12 +856,21 @@ function updateMe(dt) {
     const lim = ROOM_SIZE - 0.6;
     me.mesh.position.x = Math.max(-lim, Math.min(lim, me.mesh.position.x));
     me.mesh.position.z = Math.max(-lim, Math.min(lim, me.mesh.position.z));
-    // rotação suave pro lado do movimento
-    const targetRot = Math.atan2(wx, wz);
-    let diff = targetRot - me.mesh.rotation.y;
+    // rotação suave pro lado do movimento (só quando NÃO está em shift lock)
+    if (!shiftLock) {
+      const targetRot = Math.atan2(wx, wz);
+      let diff = targetRot - me.mesh.rotation.y;
+      while (diff >  Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      me.mesh.rotation.y += diff * Math.min(1, dt * 10);
+    }
+  }
+  // shift lock: personagem sempre vira pra onde a câmera olha
+  if (shiftLock) {
+    let diff = camYaw - me.mesh.rotation.y;
     while (diff >  Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
-    me.mesh.rotation.y += diff * Math.min(1, dt * 10);
+    me.mesh.rotation.y += diff * Math.min(1, dt * 14);
   }
 }
 

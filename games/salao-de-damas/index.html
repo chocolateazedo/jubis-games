@@ -134,8 +134,10 @@ button.primary:active { transform: translateY(1px); }
   border-radius: 50%;
   box-shadow: 0 4px 14px rgba(0,0,0,.5);
 }
-@media (pointer: coarse) { #joystick, #btn-jump { display: flex; } }
-@media (max-width: 760px) { #joystick, #btn-jump { display: flex; } }
+@media (pointer: coarse), (max-width: 760px) {
+  #joystick { display: block !important; }
+  #btn-jump { display: flex !important; }
+}
 body.in-match #joystick, body.in-match #btn-jump, body.in-match #btn-interact { display: none !important; }
 
 #btn-jump {
@@ -359,7 +361,7 @@ body.in-match #joystick, body.in-match #btn-jump, body.in-match #btn-interact { 
 <div id="crosshair"></div>
 
 <!-- ---------- Joystick mobile ---------- -->
-<div id="joystick" style="display:none;"><div class="stick" id="stick"></div></div>
+<div id="joystick"><div class="stick" id="stick"></div></div>
 
 <!-- ---------- Botão Pular (mobile) ---------- -->
 <button id="btn-jump" type="button" aria-label="Pular">🦘</button>

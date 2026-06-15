@@ -793,8 +793,9 @@ function updateMe(dt) {
   if (len > 0) {
     fwd /= len; right /= len;
     // direção pra frente da câmera no plano XZ (a câmera olha do behind do player para o player)
+    // "right" = up (Y) × back (camera local +Z) — dá (-cos, sin) no plano XZ
     const fX = Math.sin(camYaw),  fZ = Math.cos(camYaw);
-    const rX = Math.cos(camYaw),  rZ = -Math.sin(camYaw);
+    const rX = -Math.cos(camYaw), rZ = Math.sin(camYaw);
     const wx = fX * fwd + rX * right;
     const wz = fZ * fwd + rZ * right;
     me.mesh.position.x += wx * MOVE_SPEED * dt;

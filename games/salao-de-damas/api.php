@@ -17,6 +17,21 @@ header('Cache-Control: no-store');
 const PLAYER_TTL = 8;     // segundos sem heartbeat -> jogador sai do salão
 const MAX_NAME   = 14;
 const MAX_PLAYERS = 32;   // limite por segurança no salão
+const SIT_DIST   = 2.2;   // distância máx do jogador até a cadeira pra poder sentar
+
+/**
+ * Mesas do salão (definição estática — cliente e servidor concordam pelos IDs).
+ * Cada mesa tem 2 cadeiras opostas. Seat 0 fica no lado sul (z menor), seat 1 no norte.
+ */
+const TABLES = [
+    ['id' => 't1', 'floor' => 1, 'x' => -9.0, 'z' => -6.0],
+    ['id' => 't2', 'floor' => 1, 'x' => -9.0, 'z' =>  6.0],
+    ['id' => 't3', 'floor' => 1, 'x' =>  9.0, 'z' => -6.0],
+    ['id' => 't4', 'floor' => 1, 'x' =>  9.0, 'z' =>  6.0],
+    ['id' => 't5', 'floor' => 1, 'x' =>  0.0, 'z' => -14.0],
+    ['id' => 't6', 'floor' => 1, 'x' =>  0.0, 'z' =>  14.0],
+];
+const SEAT_OFFSET = 1.05;
 
 $DATA = __DIR__ . '/data';
 ensure_data_dir($DATA);
@@ -29,6 +44,8 @@ try {
     switch ($action) {
         case 'join':    echo json_encode(join_salao($DATA, $input)); break;
         case 'update':  echo json_encode(update_salao($DATA, $input)); break;
+        case 'sit':     echo json_encode(sit_salao($DATA, $input)); break;
+        case 'stand':   echo json_encode(stand_salao($DATA, $input)); break;
         case 'leave':   echo json_encode(leave_salao($DATA, $input)); break;
         default:
             http_response_code(400);
@@ -57,12 +74,13 @@ function join_salao(string $dir, array $in): array
             'name' => $name,
             'x'    => (float)(rand(-200, 200) / 100),  // entrada perto do centro
             'y'    => 0.0,
-            'z'    => 8.0,                              // entra pela porta (z grande)
+            'z'    => 18.0,                             // entra pela porta (z grande, perto da parede sul)
             'rot'  => 3.14159,                          // virado pro centro
             'skin' => $skin,
+            'seat' => null,                             // "tableId:seatIdx" quando sentado
             'ts'   => time(),
         ];
-        return [$state, ['id' => $id, 'skin' => $skin]];
+        return [$state, ['id' => $id, 'skin' => $skin, 'tables' => array_values(TABLES)]];
     });
 }
 
@@ -76,10 +94,13 @@ function update_salao(string $dir, array $in): array
             return [$state, ['expired' => true]];
         }
         $p =& $state['players'][$id];
-        $p['x']  = clean_float($in['x'] ?? $p['x'], -50, 50);
-        $p['y']  = clean_float($in['y'] ?? $p['y'], -5, 5);
-        $p['z']  = clean_float($in['z'] ?? $p['z'], -50, 50);
-        $p['rot']= clean_float($in['rot'] ?? $p['rot'], -10, 10);
+        // só atualiza posição se NÃO estiver sentado (a posição é determinada pela cadeira)
+        if ($p['seat'] === null) {
+            $p['x']  = clean_float($in['x'] ?? $p['x'], -50, 50);
+            $p['y']  = clean_float($in['y'] ?? $p['y'], -5, 5);
+            $p['z']  = clean_float($in['z'] ?? $p['z'], -50, 50);
+            $p['rot']= clean_float($in['rot'] ?? $p['rot'], -10, 10);
+        }
         $p['ts'] = time();
         unset($p);
 
@@ -94,9 +115,78 @@ function update_salao(string $dir, array $in): array
                 'z'    => $pl['z'],
                 'rot'  => $pl['rot'],
                 'skin' => $pl['skin'],
+                'seat' => $pl['seat'] ?? null,
             ];
         }
         return [$state, ['players' => $players]];
+    });
+}
+
+function sit_salao(string $dir, array $in): array
+{
+    $id     = clean_id($in['id'] ?? '');
+    $tid    = (string)($in['tableId'] ?? '');
+    $seatIx = (int)($in['seat'] ?? -1);
+    if ($id === null) return err('id inválido', 400);
+    if ($seatIx !== 0 && $seatIx !== 1) return err('cadeira inválida');
+
+    $table = null;
+    foreach (TABLES as $t) if ($t['id'] === $tid) { $table = $t; break; }
+    if ($table === null) return err('mesa não encontrada');
+
+    // posição-alvo da cadeira
+    $seatX = $table['x'];
+    $seatZ = $table['z'] + ($seatIx === 0 ? -SEAT_OFFSET : SEAT_OFFSET);
+    $seatRot = $seatIx === 0 ? 0.0 : 3.14159;   // seat 0 olha pro norte; seat 1 pro sul
+
+    return with_lock($dir, function (array $state) use ($id, $tid, $seatIx, $seatX, $seatZ, $seatRot) {
+        if (!isset($state['players'][$id])) return [$state, err('você saiu do salão')];
+        $p =& $state['players'][$id];
+
+        // a cadeira já está ocupada?
+        $seatKey = $tid . ':' . $seatIx;
+        foreach ($state['players'] as $other) {
+            if ($other['id'] === $id) continue;
+            if (($other['seat'] ?? null) === $seatKey) {
+                return [$state, err('a cadeira foi ocupada por outro jogador')];
+            }
+        }
+
+        // o jogador está perto o suficiente?
+        $dx = $p['x'] - $seatX; $dz = $p['z'] - $seatZ;
+        if (sqrt($dx*$dx + $dz*$dz) > SIT_DIST) {
+            return [$state, err('chegue mais perto da cadeira')];
+        }
+
+        $p['seat'] = $seatKey;
+        $p['x'] = $seatX;
+        $p['z'] = $seatZ;
+        $p['y'] = 0.0;
+        $p['rot'] = $seatRot;
+        $p['ts'] = time();
+        unset($p);
+        return [$state, ['ok' => true, 'seat' => $seatKey, 'x' => $seatX, 'z' => $seatZ, 'rot' => $seatRot]];
+    });
+}
+
+function stand_salao(string $dir, array $in): array
+{
+    $id = clean_id($in['id'] ?? '');
+    if ($id === null) return err('id inválido', 400);
+
+    return with_lock($dir, function (array $state) use ($id) {
+        if (!isset($state['players'][$id])) return [$state, err('você saiu do salão')];
+        $p =& $state['players'][$id];
+        if ($p['seat'] !== null) {
+            // empurra o jogador um pouquinho pra trás da cadeira pra ele não voltar a sentar
+            $seatRot = $p['rot'];
+            $p['x'] -= sin($seatRot) * 1.4;
+            $p['z'] -= cos($seatRot) * 1.4;
+            $p['seat'] = null;
+        }
+        $p['ts'] = time();
+        unset($p);
+        return [$state, ['ok' => true]];
     });
 }
 

@@ -113,6 +113,42 @@ button.primary:active { transform: translateY(1px); }
 }
 @media (pointer: coarse) { #joystick { display: block; } }
 @media (max-width: 760px) { #joystick { display: block; } }
+
+/* ----- Botão de interagir ----- */
+#btn-interact {
+  position: fixed;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 70;
+  background: linear-gradient(135deg, #ffd23f, #ff8c00);
+  color: #2a1500;
+  border: 0;
+  border-radius: 999px;
+  padding: 14px 28px;
+  font-size: 16px;
+  font-weight: 900;
+  display: none;
+  box-shadow: 0 8px 24px rgba(255,140,0,.4), 0 0 24px rgba(255,210,63,.5);
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+#btn-interact.show { display: block; }
+#btn-interact:active { transform: translateX(-50%) translateY(1px); animation: none; }
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 8px 24px rgba(255,140,0,.4), 0 0 24px rgba(255,210,63,.4); }
+  50%      { box-shadow: 0 8px 28px rgba(255,140,0,.7), 0 0 36px rgba(255,210,63,.8); }
+}
+.interact-key {
+  display: inline-block;
+  background: rgba(0,0,0,.2);
+  border: 1px solid rgba(0,0,0,.3);
+  border-radius: 6px;
+  padding: 2px 8px;
+  margin-left: 8px;
+  font-size: 13px;
+}
 </style>
 </head>
 <body>
@@ -151,6 +187,9 @@ button.primary:active { transform: translateY(1px); }
 <!-- ---------- Joystick mobile ---------- -->
 <div id="joystick" style="display:none;"><div class="stick" id="stick"></div></div>
 
+<!-- ---------- Botão Interagir ---------- -->
+<button id="btn-interact" type="button"></button>
+
 <!-- ---------- Three.js (módulos via importmap) ---------- -->
 <script type="importmap">
 {
@@ -170,6 +209,8 @@ const API = 'api.php';
 const POLL_MS = 160;        // 6,25 atualizações por segundo
 const ROOM_SIZE = 22;       // metade da largura/profundidade do salão
 const MOVE_SPEED = 4.2;     // unidades por segundo
+const SEAT_OFFSET = 1.05;   // distância da cadeira ao centro da mesa (precisa bater com o api.php)
+const INTERACT_DIST = 1.7;  // distância pra aparecer "Sentar"
 const SKIN_COLORS = [
   0xffd23f, 0x00f0ff, 0xff2bd6, 0x4cff7a,
   0xff8c42, 0xb78bff, 0xffffff, 0x66f0ff
@@ -179,13 +220,17 @@ const SKIN_COLORS = [
 // ESTADO GLOBAL
 // ============================================================================
 let renderer, scene, camera, clock;
-let me = null;             // { id, name, skin, mesh, nameTag }
-let players = new Map();   // id -> { mesh, nameTag, target:{x,z,rot} }
+let me = null;             // { id, name, skin, mesh, nameTag, seat:string|null }
+let players = new Map();   // id -> { mesh, nameTag, target:{x,z,rot}, seat:string|null }
 let keys = { w:false, a:false, s:false, d:false };
 let joy = { active:false, x:0, y:0 };
 let camYaw = 0;
 let lastPoll = 0;
 let pollInflight = false;
+let TABLES = [];            // recebido do servidor no join
+let SEAT_USAGE = new Map(); // "tID:seatIdx" -> true (ocupada por algum jogador)
+let interactTarget = null;  // { type:'sit'|'stand', tableId, seat } ou null
+let sitBusy = false;        // evita clique duplo na hora de sentar/levantar
 
 // ============================================================================
 // REDE
@@ -203,21 +248,30 @@ async function api(payload) {
 async function netJoin(name) {
   const r = await api({ action: 'join', name });
   if (r.error) throw new Error(r.error);
-  return r; // { id, skin }
+  return r; // { id, skin, tables }
+}
+
+async function netSit(tableId, seat) {
+  return api({ action: 'sit', id: me.id, tableId, seat });
+}
+
+async function netStand() {
+  return api({ action: 'stand', id: me.id });
 }
 
 async function netUpdate() {
   if (!me || pollInflight) return;
   pollInflight = true;
   try {
-    const r = await api({
-      action: 'update',
-      id: me.id,
-      x: me.mesh.position.x,
-      y: me.mesh.position.y,
-      z: me.mesh.position.z,
-      rot: me.mesh.rotation.y,
-    });
+    // se estou sentado, não envio posição (o servidor ignora) — só dou heartbeat
+    const payload = { action: 'update', id: me.id };
+    if (me.seat === null) {
+      payload.x = me.mesh.position.x;
+      payload.y = me.mesh.position.y;
+      payload.z = me.mesh.position.z;
+      payload.rot = me.mesh.rotation.y;
+    }
+    const r = await api(payload);
     if (r.expired) { showMsg('Você caiu do salão, recarregue a página'); return; }
     if (r.players) syncPlayers(r.players);
   } catch (e) {
@@ -355,14 +409,112 @@ function buildScene() {
   rugInner.position.y = 0.02;
   scene.add(rugInner);
 
-  // pequena placa "Em construção" (provisória, removida na fase 2)
+  // placa decorativa "salão"
   const sign = new THREE.Mesh(
-    new THREE.PlaneGeometry(4, 1.2),
-    new THREE.MeshBasicMaterial({ map: makeTextTexture('🪑 Mesas chegam na Fase 2 🪑', 512, 128, '#ffd23f', '#1a0d2e'), transparent: true })
+    new THREE.PlaneGeometry(5, 1.0),
+    new THREE.MeshBasicMaterial({ map: makeTextTexture('— SALÃO DE DAMAS —', 512, 96, '#ffd23f', '#1a0d2e'), transparent: true })
   );
-  sign.position.set(0, 2.5, -ROOM_SIZE + 0.3);
+  sign.position.set(0, 3.4, -ROOM_SIZE + 0.25);
   scene.add(sign);
 }
+
+// ----- Mesas e cadeiras (Fase 2) -----
+function buildTables(tables) {
+  for (const t of tables) {
+    const group = new THREE.Group();
+    group.position.set(t.x, 0, t.z);
+    group.userData.tableId = t.id;
+    scene.add(group);
+
+    // 4 pernas
+    const legMat = new THREE.MeshStandardMaterial({ color: 0x3a1e08, roughness: 0.85 });
+    const legGeo = new THREE.BoxGeometry(0.12, 0.78, 0.12);
+    for (const [lx, lz] of [[-0.55,-0.55],[0.55,-0.55],[-0.55,0.55],[0.55,0.55]]) {
+      const leg = new THREE.Mesh(legGeo, legMat);
+      leg.position.set(lx, 0.39, lz);
+      leg.castShadow = true;
+      group.add(leg);
+    }
+
+    // tampo
+    const top = new THREE.Mesh(
+      new THREE.BoxGeometry(1.4, 0.1, 1.4),
+      new THREE.MeshStandardMaterial({ color: 0x5a2e10, roughness: 0.7 })
+    );
+    top.position.y = 0.83;
+    top.castShadow = true;
+    top.receiveShadow = true;
+    group.add(top);
+
+    // tabuleiro de damas em cima
+    const board = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.05, 1.05),
+      new THREE.MeshStandardMaterial({ map: makeCheckerTexture(256), roughness: 0.4 })
+    );
+    board.rotation.x = -Math.PI / 2;
+    board.position.y = 0.886;
+    group.add(board);
+
+    // 2 cadeiras
+    for (let s = 0; s < 2; s++) {
+      const cz = s === 0 ? -SEAT_OFFSET : SEAT_OFFSET;
+      const facingRot = s === 0 ? 0 : Math.PI;
+      const chair = buildChair();
+      chair.position.set(0, 0, cz);
+      chair.rotation.y = facingRot;
+      chair.userData.tableId = t.id;
+      chair.userData.seat = s;
+      group.add(chair);
+    }
+
+    // placa com o ID da mesa (ajuda a localizar)
+    const idLabel = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: makeTextTexture('Mesa ' + t.id.toUpperCase(), 256, 80, '#ffd23f', 'rgba(0,0,0,0.6)'),
+      depthTest: false,
+    }));
+    idLabel.scale.set(1.2, 0.38, 1);
+    idLabel.position.y = 1.7;
+    group.add(idLabel);
+  }
+}
+
+function buildChair() {
+  const chair = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x7a3dff, roughness: 0.6 });
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.08, 0.5), mat);
+  seat.position.y = 0.45;
+  seat.castShadow = true;
+  chair.add(seat);
+  const back = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.55, 0.07), mat);
+  back.position.set(0, 0.7, -0.21);  // encosto fica atrás (lado oposto ao da mesa)
+  back.castShadow = true;
+  chair.add(back);
+  // 4 pernas
+  const legGeo = new THREE.BoxGeometry(0.06, 0.45, 0.06);
+  const legMat = new THREE.MeshStandardMaterial({ color: 0x4a1e8a, roughness: 0.8 });
+  for (const [lx, lz] of [[-0.2,-0.2],[0.2,-0.2],[-0.2,0.2],[0.2,0.2]]) {
+    const l = new THREE.Mesh(legGeo, legMat);
+    l.position.set(lx, 0.22, lz);
+    chair.add(l);
+  }
+  return chair;
+}
+
+function makeCheckerTexture(size) {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  const g = cv.getContext('2d');
+  const n = 8, sz = size / n;
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+    g.fillStyle = ((r + c) % 2 === 0) ? '#d9b88a' : '#5a2e10';
+    g.fillRect(c * sz, r * sz, sz, sz);
+  }
+  // moldura
+  g.strokeStyle = '#ffd23f'; g.lineWidth = 6;
+  g.strokeRect(3, 3, size - 6, size - 6);
+  return new THREE.CanvasTexture(cv);
+}
+
 
 // textura tipo tábuas de madeira / quadriculado escuro
 function makeBoardTexture(size, c1, c2) {
@@ -497,19 +649,43 @@ function roundRect(g, x, y, w, h, r) {
 
 function syncPlayers(serverPlayers) {
   const seen = new Set();
+  SEAT_USAGE.clear();
   for (const p of serverPlayers) {
     seen.add(p.id);
-    if (p.id === me.id) continue;
+    if (p.seat) SEAT_USAGE.set(p.seat, true);
+
+    if (p.id === me.id) {
+      // o servidor decide se eu estou sentado
+      const wasSitting = me.seat !== null;
+      me.seat = p.seat || null;
+      if (me.seat && !wasSitting) {
+        // acabou de sentar: snapa posição
+        me.mesh.position.set(p.x, p.y, p.z);
+        me.mesh.rotation.y = p.rot;
+      } else if (!me.seat && wasSitting) {
+        // acabou de levantar
+        me.mesh.position.set(p.x, p.y, p.z);
+        me.mesh.rotation.y = p.rot;
+      }
+      continue;
+    }
+
     let other = players.get(p.id);
     if (!other) {
       const { group, nameTag } = buildPlayerMesh(p.skin, p.name, false);
       group.position.set(p.x, p.y, p.z);
       group.rotation.y = p.rot;
       scene.add(group);
-      other = { mesh: group, nameTag, target: { x: p.x, y: p.y, z: p.z, rot: p.rot } };
+      other = { mesh: group, nameTag, target: { x: p.x, y: p.y, z: p.z, rot: p.rot }, seat: p.seat || null };
       players.set(p.id, other);
     } else {
       other.target.x = p.x; other.target.y = p.y; other.target.z = p.z; other.target.rot = p.rot;
+      // se acabou de sentar/levantar, snapa direto sem interpolar (fica menos esquisito)
+      if ((other.seat === null) !== ((p.seat || null) === null)) {
+        other.mesh.position.set(p.x, p.y, p.z);
+        other.mesh.rotation.y = p.rot;
+      }
+      other.seat = p.seat || null;
     }
   }
   // remove quem saiu
@@ -532,6 +708,9 @@ addEventListener('keydown', (e) => {
   if (k === 'a' || k === 'arrowleft')  keys.a = true;
   if (k === 's' || k === 'arrowdown')  keys.s = true;
   if (k === 'd' || k === 'arrowright') keys.d = true;
+  if (k === 'e' || k === ' ' || k === 'enter') {
+    if (me && interactTarget) { e.preventDefault(); tryInteract(); }
+  }
 });
 addEventListener('keyup', (e) => {
   const k = e.key.toLowerCase();
@@ -544,7 +723,7 @@ addEventListener('keyup', (e) => {
 // mouse drag pra girar câmera
 let dragging = false, lastDragX = 0;
 addEventListener('pointerdown', (e) => {
-  if (e.target.closest('#joystick') || e.target.closest('a.back')) return;
+  if (e.target.closest('#joystick') || e.target.closest('a.back') || e.target.closest('#btn-interact') || e.target.closest('.card')) return;
   dragging = true; lastDragX = e.clientX;
 });
 addEventListener('pointermove', (e) => {
@@ -603,18 +782,21 @@ function setupJoystick() {
 // LOOP
 // ============================================================================
 function updateMe(dt) {
-  // input → vetor de movimento no espaço da câmera
-  let mx = 0, mz = 0;
-  if (keys.w) mz -= 1; if (keys.s) mz += 1;
-  if (keys.a) mx -= 1; if (keys.d) mx += 1;
-  if (joy.active) { mx += joy.x; mz += joy.y; }
-  const len = Math.hypot(mx, mz);
+  // sentado: não anda
+  if (me.seat) return;
+  // input local: forward = +1 (W / joystick pra cima), right = +1 (D / joystick pra direita)
+  let fwd = 0, right = 0;
+  if (keys.w) fwd += 1; if (keys.s) fwd -= 1;
+  if (keys.a) right -= 1; if (keys.d) right += 1;
+  if (joy.active) { right += joy.x; fwd -= joy.y; }
+  const len = Math.hypot(fwd, right);
   if (len > 0) {
-    mx /= len; mz /= len;
-    // converte pro mundo girando pelo yaw da câmera
-    const cosY = Math.cos(camYaw), sinY = Math.sin(camYaw);
-    const wx = mx * cosY - mz * sinY;
-    const wz = mx * sinY + mz * cosY;
+    fwd /= len; right /= len;
+    // direção pra frente da câmera no plano XZ (a câmera olha do behind do player para o player)
+    const fX = Math.sin(camYaw),  fZ = Math.cos(camYaw);
+    const rX = Math.cos(camYaw),  rZ = -Math.sin(camYaw);
+    const wx = fX * fwd + rX * right;
+    const wz = fZ * fwd + rZ * right;
     me.mesh.position.x += wx * MOVE_SPEED * dt;
     me.mesh.position.z += wz * MOVE_SPEED * dt;
     // limita ao salão
@@ -650,6 +832,62 @@ function updateCamera() {
   camera.lookAt(me.mesh.position.x, me.mesh.position.y + 1.2, me.mesh.position.z);
 }
 
+function updateInteract() {
+  const btn = document.getElementById('btn-interact');
+  // sentado: oferece "Levantar"
+  if (me.seat) {
+    interactTarget = { type: 'stand' };
+    btn.innerHTML = 'Levantar <span class="interact-key">E</span>';
+    btn.classList.add('show');
+    return;
+  }
+  // andando: procura cadeira vazia próxima
+  let best = null, bestDist = INTERACT_DIST;
+  for (const t of TABLES) {
+    for (let s = 0; s < 2; s++) {
+      const seatKey = t.id + ':' + s;
+      if (SEAT_USAGE.get(seatKey)) continue;
+      const sx = t.x;
+      const sz = t.z + (s === 0 ? -SEAT_OFFSET : SEAT_OFFSET);
+      const dx = me.mesh.position.x - sx;
+      const dz = me.mesh.position.z - sz;
+      const d = Math.hypot(dx, dz);
+      if (d < bestDist) { bestDist = d; best = { type: 'sit', tableId: t.id, seat: s }; }
+    }
+  }
+  interactTarget = best;
+  if (best) {
+    btn.innerHTML = `Sentar na mesa ${best.tableId.toUpperCase()} <span class="interact-key">E</span>`;
+    btn.classList.add('show');
+  } else {
+    btn.classList.remove('show');
+  }
+}
+
+async function tryInteract() {
+  if (sitBusy || !interactTarget) return;
+  sitBusy = true;
+  try {
+    if (interactTarget.type === 'sit') {
+      const r = await netSit(interactTarget.tableId, interactTarget.seat);
+      if (r.error) {
+        showMsg(r.error);
+      } else {
+        showMsg('Esperando outro jogador... 🪑');
+      }
+    } else if (interactTarget.type === 'stand') {
+      const r = await netStand();
+      if (r.error) showMsg(r.error);
+    }
+    // pede uma atualização imediata pra estado refletir já
+    await netUpdate();
+  } catch (e) {
+    showMsg('Falha ao interagir');
+  } finally {
+    sitBusy = false;
+  }
+}
+
 function animate() {
   requestAnimationFrame(animate);
   const dt = Math.min(0.05, clock.getDelta());
@@ -657,6 +895,7 @@ function animate() {
     updateMe(dt);
     lerpOthers(dt);
     updateCamera();
+    updateInteract();
     // polling
     const now = performance.now();
     if (now - lastPoll > POLL_MS) { lastPoll = now; netUpdate(); }
@@ -695,11 +934,13 @@ async function startGame(name) {
   try {
     const join = await netJoin(name);
     if (!renderer) initThree();
+    TABLES = Array.isArray(join.tables) ? join.tables : [];
+    buildTables(TABLES);
     const { group, nameTag } = buildPlayerMesh(join.skin, name, true);
-    group.position.set(0, 0, 8);
+    group.position.set(0, 0, 18);
     group.rotation.y = Math.PI;
     scene.add(group);
-    me = { id: join.id, name, skin: join.skin, mesh: group, nameTag };
+    me = { id: join.id, name, skin: join.skin, mesh: group, nameTag, seat: null };
     camYaw = Math.PI; // câmera começa olhando o salão
     document.getElementById('screen-loading').style.display = 'none';
     document.getElementById('hud-top').style.display = 'flex';
@@ -718,6 +959,12 @@ function showMsg(msg, ms = 2400) {
   clearTimeout(showMsg._t);
   showMsg._t = setTimeout(() => el.classList.remove('show'), ms);
 }
+
+// botão de interagir
+document.getElementById('btn-interact').addEventListener('click', (e) => {
+  e.preventDefault();
+  if (me) tryInteract();
+});
 
 // botões
 document.getElementById('btnJoin').addEventListener('click', () => {

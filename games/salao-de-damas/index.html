@@ -294,6 +294,92 @@ body.in-match #joystick, body.in-match #btn-jump, body.in-match #btn-interact { 
 .damas-controls button.danger {
   background: linear-gradient(135deg, #ff5a5a, #c01818);
 }
+.damas-controls button.blow {
+  background: linear-gradient(135deg, #66e0ff, #2a7bd2);
+  color: #04223a;
+  animation: blow-btn-pulse 1.1s ease-in-out infinite;
+}
+@keyframes blow-btn-pulse {
+  0%, 100% { box-shadow: 0 0 0 rgba(120,220,255,0); }
+  50%      { box-shadow: 0 0 22px rgba(120,220,255,.8); }
+}
+/* casa com peça que pode ser soprada */
+.damas-cell.blowable::before {
+  content: '';
+  position: absolute; inset: 4%;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 4px #5ad1ff, inset 0 0 20px rgba(90,209,255,.7);
+  pointer-events: none;
+  animation: blow-pulse .9s ease-in-out infinite;
+  z-index: 2;
+}
+@keyframes blow-pulse {
+  0%, 100% { opacity: .55; transform: scale(.92); }
+  50%      { opacity: 1;   transform: scale(1.02); }
+}
+
+/* ----- Chat de texto ----- */
+#chat-log {
+  position: fixed; left: 12px; bottom: 168px; z-index: 55;
+  width: min(62vw, 320px);
+  display: flex; flex-direction: column; gap: 4px;
+  pointer-events: none;
+}
+#chat-log .chat-line {
+  background: rgba(0,0,0,.5);
+  border-radius: 10px;
+  padding: 5px 10px;
+  font-size: 13px; line-height: 1.3;
+  width: fit-content; max-width: 100%;
+  word-break: break-word;
+  box-shadow: 0 2px 8px rgba(0,0,0,.35);
+  animation: chat-in .18s ease-out;
+}
+#chat-log .chat-line b { font-weight: 800; }
+@keyframes chat-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+#chat-input-wrap {
+  position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%);
+  z-index: 120; width: min(94vw, 460px);
+  display: none; gap: 8px;
+}
+#chat-input-wrap.show { display: flex; }
+#chat-text {
+  flex: 1; padding: 12px 14px;
+  border: 2px solid #ffd23f; border-radius: 12px;
+  background: rgba(10,6,18,.92); color: #fff;
+  font-size: 16px; font-weight: 600; outline: none;
+}
+#chat-send {
+  border: 0; border-radius: 12px; padding: 0 18px;
+  background: linear-gradient(135deg, #ffd23f, #ff8c00);
+  color: #2a1500; font-weight: 900; font-size: 15px; cursor: pointer;
+}
+
+/* ----- Botões flutuantes (chat / voz) ----- */
+.fab {
+  position: fixed; z-index: 62;
+  width: 54px; height: 54px; border-radius: 50%;
+  border: 2px solid rgba(255,255,255,.3);
+  background: rgba(0,0,0,.5);
+  font-size: 24px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 6px 18px rgba(0,0,0,.45);
+  -webkit-user-select: none; user-select: none;
+}
+.fab:active { transform: scale(.93); }
+#btn-chat  { right: 18px; bottom: 150px; }
+#btn-voice { right: 18px; bottom: 214px; }
+#btn-voice.on { background: linear-gradient(135deg, #4cff7a, #16a34a); border-color: #bbf7d0; }
+#btn-voice.muted { background: linear-gradient(135deg, #ff5a5a, #c01818); border-color: #fecaca; }
+#btn-voice.connecting { animation: voice-wait 1s ease-in-out infinite; }
+@keyframes voice-wait { 50% { opacity: .5; } }
+/* no celular o botão de pular ocupa o canto inferior direito: sobe os FABs */
+@media (pointer: coarse), (max-width: 760px) {
+  #btn-chat  { bottom: 150px; }
+  #btn-voice { bottom: 214px; }
+}
+body.in-match #btn-chat, body.in-match #btn-voice, body.in-match #chat-log { display: none !important; }
 
 /* tela de fim de partida */
 #damas-end {
@@ -346,7 +432,7 @@ body.in-match #joystick, body.in-match #btn-jump, body.in-match #btn-interact { 
     <input id="nameInput" type="text" maxlength="14" placeholder="Ex: João" autocomplete="off" />
     <button class="primary" id="btnJoin">Entrar no Salão</button>
     <div class="error" id="errorMsg"></div>
-    <p class="hint">💡 WASD/joystick pra andar · <b>Space</b> pular · arrastar pra olhar · <b>Shift</b> = Shift Lock 🔒 · <b>E</b> = Interagir</p>
+    <p class="hint">💡 WASD/joystick pra andar · <b>Space</b> pular · <b>E</b> interagir · <b>Enter</b> conversar 💬 · 🎤 voz por perto</p>
   </div>
 </div>
 
@@ -376,6 +462,20 @@ body.in-match #joystick, body.in-match #btn-jump, body.in-match #btn-interact { 
 <!-- ---------- Botão Interagir ---------- -->
 <button id="btn-interact" type="button"></button>
 
+<!-- ---------- Chat de texto ---------- -->
+<div id="chat-log"></div>
+<div id="chat-input-wrap">
+  <input id="chat-text" type="text" maxlength="140" placeholder="Escreva e aperte Enter…" autocomplete="off" />
+  <button id="chat-send" type="button">Enviar</button>
+</div>
+
+<!-- ---------- Botões flutuantes (chat / voz) ---------- -->
+<button id="btn-chat" class="fab" type="button" title="Conversar (Enter)" style="display:none;">💬</button>
+<button id="btn-voice" class="fab" type="button" title="Chat de voz" style="display:none;">🎤</button>
+
+<!-- container escondido pros áudios remotos do chat de voz -->
+<div id="voice-audios" style="position:fixed;width:0;height:0;overflow:hidden;"></div>
+
 <!-- ---------- Overlay Damas (Fase 3) ---------- -->
 <div id="damas">
   <div class="damas-wrap">
@@ -386,6 +486,7 @@ body.in-match #joystick, body.in-match #btn-jump, body.in-match #btn-interact { 
     </div>
     <div class="damas-board" id="damas-board"></div>
     <div class="damas-controls">
+      <button id="damas-blow" class="blow" type="button" style="display:none;">💨 Soprar peça</button>
       <button id="damas-leave" class="danger" type="button">Desistir e levantar</button>
     </div>
   </div>
@@ -404,6 +505,9 @@ body.in-match #joystick, body.in-match #btn-jump, body.in-match #btn-interact { 
     <button class="primary" id="end-back" type="button" style="margin-top: 8px;">Voltar pro salão</button>
   </div>
 </div>
+
+<!-- ---------- PeerJS (WebRTC) pro chat de voz ---------- -->
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 
 <!-- ---------- Three.js (módulos via importmap) ---------- -->
 <script type="importmap">
@@ -463,6 +567,22 @@ let winBest = Number(localStorage.getItem('salao-damas-streak-best') || 0);
 let moveBusy = false;
 let spectatingTable = null; // tableId quando o jogador está só assistindo (não joga)
 
+// chat de texto
+let chatOpen = false;
+let lastChatSeq = 0;
+let chatInited = false;
+const CHAT_BUBBLE_MS = 5500;
+
+// chat de voz (PeerJS mesh)
+let peer = null;            // objeto PeerJS
+let myPeerId = null;        // meu id PeerJS (pode demorar a abrir)
+let peerIdSynced = false;   // servidor já conhece meu peerId?
+let micStream = null;       // MediaStream do microfone
+let voiceState = 'off';     // 'off' | 'connecting' | 'on' | 'muted'
+let voiceMuted = false;
+const voiceCalls = new Map();   // peerId remoto -> { call, audioEl, analyser, data, playerId, speaking }
+const VOICE_MAX_DIST = 16;      // além disso, não escuta o jogador (voz por proximidade)
+
 // ============================================================================
 // REDE
 // ============================================================================
@@ -477,7 +597,7 @@ async function api(payload) {
 }
 
 async function netJoin(name) {
-  const r = await api({ action: 'join', name });
+  const r = await api({ action: 'join', name, peerId: myPeerId || undefined });
   if (r.error) throw new Error(r.error);
   return r; // { id, skin, tables }
 }
@@ -494,6 +614,14 @@ async function netMove(tableId, from, to) {
   return api({ action: 'move', id: me.id, tableId, from, to });
 }
 
+async function netBlow(tableId) {
+  return api({ action: 'blow', id: me.id, tableId });
+}
+
+async function netSay(text) {
+  return api({ action: 'say', id: me.id, text });
+}
+
 async function netUpdate() {
   if (!me || pollInflight) return;
   pollInflight = true;
@@ -506,10 +634,13 @@ async function netUpdate() {
       payload.z = me.mesh.position.z;
       payload.rot = me.mesh.rotation.y;
     }
+    // manda o peerId enquanto o servidor ainda não souber dele (PeerJS abre assíncrono)
+    if (myPeerId && !peerIdSynced) payload.peerId = myPeerId;
     const r = await api(payload);
     if (r.expired) { showMsg('Você caiu do salão, recarregue a página'); return; }
     if (r.players) syncPlayers(r.players);
     if (r.matches) syncMatches(r.matches);
+    if (r.chat) syncChat(r.chat);
   } catch (e) {
     // erros temporários não derrubam o jogo
   } finally {
@@ -930,6 +1061,7 @@ function syncPlayers(serverPlayers) {
     if (p.seat) SEAT_USAGE.set(p.seat, true);
 
     if (p.id === me.id) {
+      if (p.peer && p.peer === myPeerId) peerIdSynced = true;
       // o servidor decide se eu estou sentado
       const wasSitting = me.seat !== null;
       me.seat = p.seat || null;
@@ -954,7 +1086,7 @@ function syncPlayers(serverPlayers) {
       group.userData.name = p.name;
       scene.add(group);
       scene.add(shadowMesh);
-      other = { mesh: group, nameTag, shadowMesh, target: { x: p.x, y: p.y, z: p.z, rot: p.rot }, seat: p.seat || null };
+      other = { mesh: group, nameTag, shadowMesh, target: { x: p.x, y: p.y, z: p.z, rot: p.rot }, seat: p.seat || null, peer: p.peer || null };
       players.set(p.id, other);
     } else {
       other.target.x = p.x; other.target.y = p.y; other.target.z = p.z; other.target.rot = p.rot;
@@ -964,8 +1096,11 @@ function syncPlayers(serverPlayers) {
         other.mesh.rotation.y = p.rot;
       }
       other.seat = p.seat || null;
+      other.peer = p.peer || null;
     }
   }
+  // chat de voz: tenta conectar com peers novos / limpa quem saiu
+  if (voiceState === 'on' || voiceState === 'muted') updateVoiceMesh();
   // remove quem saiu
   for (const [id, other] of players) {
     if (!seen.has(id)) {
@@ -1004,10 +1139,16 @@ function syncMatches(matches) {
       return;
     }
     const wasActive = currentMatch !== null;
+    const couldBlowBefore = wasActive && currentMatch.blow && currentMatch.turn === myColor;
     currentMatch = myMatch;
     showDamasOverlay(false);
     renderBoard(false);
     updateTurnHud(false);
+    updateBlowButton(false);
+    // avisa quando o direito de soprar acabou de aparecer
+    if (myMatch.blow && myMatch.turn === myColor && !couldBlowBefore) {
+      showMsg('O oponente não capturou — você pode soprar! 💨', 3200);
+    }
     if (!wasActive) { selectedCell = null; validDests = []; }
     return;
   }
@@ -1038,6 +1179,7 @@ function syncMatches(matches) {
     showDamasOverlay(true, whitePlayer?.mesh.userData.name || '?', blackPlayer?.mesh.userData.name || '?');
     renderBoard(true);
     updateTurnHud(true);
+    updateBlowButton(true);
     return;
   }
 
@@ -1072,18 +1214,31 @@ function showDamasOverlay(isSpectator, whiteName, blackName) {
 function updateTurnHud(isSpectator) {
   const turn = currentMatch.turn;
   const badge = document.getElementById('damas-turn');
+  const blow = currentMatch.blow;
   if (isSpectator) {
+    if (blow) { badge.textContent = (turn === 'white') ? '💨 Brancas podem soprar' : '💨 Pretas podem soprar'; return; }
     badge.textContent = (turn === 'white') ? '⏳ Vez das brancas' : '⏳ Vez das pretas';
     return;
   }
   const isMyTurn = (turn === myColor);
-  if (currentMatch.continueWith && isMyTurn) {
+  if (blow && isMyTurn) {
+    badge.textContent = '💨 Sopre ou jogue!';
+  } else if (blow && !isMyTurn) {
+    badge.textContent = '😬 Faltou capturar...';
+  } else if (currentMatch.continueWith && isMyTurn) {
     badge.textContent = '⚡ Continue capturando!';
   } else if (isMyTurn) {
     badge.textContent = '🎯 Sua vez';
   } else {
     badge.textContent = '⏳ Vez do oponente';
   }
+}
+
+function updateBlowButton(isSpectator) {
+  const btn = document.getElementById('damas-blow');
+  const canBlow = !isSpectator && currentMatch && currentMatch.blow
+    && currentMatch.turn === myColor && currentMatch.winner === null;
+  btn.style.display = canBlow ? 'block' : 'none';
 }
 
 function renderBoard(isSpectator) {
@@ -1107,6 +1262,10 @@ function renderBoard(isSpectator) {
         piece.className = 'damas-piece ' + p.color;
         if (p.king) piece.textContent = '♛';
         cell.appendChild(piece);
+      }
+      // peça que pode ser soprada (vê tanto jogador quanto espectador)
+      if (currentMatch.blow && currentMatch.blow[0] === r && currentMatch.blow[1] === c) {
+        cell.classList.add('blowable');
       }
       // estado de seleção/destino (só pra jogador)
       if (!isSpectator) {
@@ -1209,6 +1368,26 @@ async function doMove(from, to) {
   }
 }
 
+async function doBlow() {
+  if (!currentMatch || moveBusy) return;
+  if (!currentMatch.blow || currentMatch.turn !== myColor) return;
+  moveBusy = true;
+  try {
+    const r = await netBlow(currentMatch.tableId);
+    if (r.error) {
+      showMsg(r.error);
+    } else {
+      selectedCell = null; validDests = [];
+      showMsg('Você soprou a peça! 💨');
+      await netUpdate();
+    }
+  } catch (e) {
+    showMsg('Erro ao soprar');
+  } finally {
+    moveBusy = false;
+  }
+}
+
 function handleMatchEnd(match) {
   const won = (match.winner === myColor);
   if (won) {
@@ -1246,12 +1425,18 @@ function closeEndScreen() {
 // INPUT
 // ============================================================================
 addEventListener('keydown', (e) => {
+  if (chatOpen) return;   // enquanto digita no chat, o input cuida das teclas
   const k = e.key.toLowerCase();
+  // Enter abre o chat (fora de partida)
+  if (e.key === 'Enter') {
+    if (me && !document.body.classList.contains('in-match')) { e.preventDefault(); openChat(); }
+    return;
+  }
   if (k === 'w' || k === 'arrowup')    keys.w = true;
   if (k === 'a' || k === 'arrowleft')  keys.a = true;
   if (k === 's' || k === 'arrowdown')  keys.s = true;
   if (k === 'd' || k === 'arrowright') keys.d = true;
-  if (k === 'e' || k === 'enter') {
+  if (k === 'e') {
     if (me && interactTarget) { e.preventDefault(); tryInteract(); }
   }
   if (k === ' ') {
@@ -1297,7 +1482,8 @@ let dragging = false, lastDragX = 0, dragPointerId = null;
 function isUiTarget(el) {
   if (!el) return false;
   return el.closest('#joystick') || el.closest('a.back') || el.closest('#btn-interact')
-    || el.closest('#btn-jump') || el.closest('.card') || el.closest('#damas') || el.closest('#damas-end');
+    || el.closest('#btn-jump') || el.closest('.card') || el.closest('#damas') || el.closest('#damas-end')
+    || el.closest('#btn-chat') || el.closest('#btn-voice') || el.closest('#chat-input-wrap');
 }
 addEventListener('pointerdown', (e) => {
   if (isUiTarget(e.target)) return;
@@ -1536,6 +1722,364 @@ function hideDamasOverlay() {
   document.body.classList.remove('in-match');
 }
 
+// ============================================================================
+// CHAT DE TEXTO (+ balões 3D acima da cabeça)
+// ============================================================================
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, ch =>
+    ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]));
+}
+function colorHexForSkin(skin) {
+  const c = SKIN_COLORS[(skin ?? 0) % SKIN_COLORS.length];
+  return '#' + c.toString(16).padStart(6, '0');
+}
+
+function openChat() {
+  if (!me || chatOpen) return;
+  if (document.body.classList.contains('in-match')) return;   // não abre durante a partida
+  chatOpen = true;
+  document.getElementById('chat-input-wrap').classList.add('show');
+  const inp = document.getElementById('chat-text');
+  inp.value = '';
+  keys.w = keys.a = keys.s = keys.d = false;   // não deixa tecla "grudada"
+  setTimeout(() => inp.focus(), 0);
+}
+function closeChat() {
+  chatOpen = false;
+  document.getElementById('chat-input-wrap').classList.remove('show');
+  document.getElementById('chat-text').blur();
+}
+async function sendChat() {
+  const inp = document.getElementById('chat-text');
+  const text = inp.value.trim();
+  closeChat();
+  if (!text || !me) return;
+  try {
+    const r = await netSay(text);
+    if (r && r.error) showMsg(r.error);
+    else await netUpdate();   // traz a própria mensagem na hora
+  } catch (e) { /* erros temporários não importam */ }
+}
+
+function syncChat(messages) {
+  if (!Array.isArray(messages)) return;
+  const firstTime = !chatInited;
+  let maxSeq = lastChatSeq;
+  for (const m of messages) {
+    if (!m || m.seq <= lastChatSeq) continue;
+    appendChatLine(m);
+    if (!firstTime) showBubbleFor(m);   // balão só pra mensagens novas (não no histórico ao entrar)
+    if (m.seq > maxSeq) maxSeq = m.seq;
+  }
+  lastChatSeq = maxSeq;
+  chatInited = true;
+}
+
+function appendChatLine(m) {
+  const logEl = document.getElementById('chat-log');
+  const line = document.createElement('div');
+  line.className = 'chat-line';
+  const col = colorHexForSkin(m.skin);
+  line.innerHTML = `<b style="color:${col}">${escapeHtml(m.name)}:</b> ${escapeHtml(m.text)}`;
+  logEl.appendChild(line);
+  while (logEl.children.length > 6) logEl.removeChild(logEl.firstChild);
+}
+
+function showBubbleFor(m) {
+  const target = (me && m.id === me.id) ? me : players.get(m.id);
+  if (!target || !target.mesh) return;
+  setBubble(target, m.text);
+}
+
+function setBubble(target, text) {
+  removeBubble(target);
+  const { texture, aspect } = makeBubbleTexture(text);
+  const mat = new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true });
+  const sprite = new THREE.Sprite(mat);
+  const h = 0.66;
+  sprite.scale.set(h * aspect, h, 1);
+  sprite.position.set(0, 2.98, 0);   // acima da tag de nome (que fica em ~2.4)
+  sprite.renderOrder = 20;
+  target.mesh.add(sprite);
+  target.bubble = sprite;
+  target.bubbleUntil = performance.now() + CHAT_BUBBLE_MS;
+}
+
+function removeBubble(target) {
+  if (target && target.bubble) {
+    target.mesh.remove(target.bubble);
+    if (target.bubble.material.map) target.bubble.material.map.dispose();
+    target.bubble.material.dispose();
+    target.bubble = null;
+  }
+}
+
+function makeBubbleTexture(text) {
+  const fontPx = 30, lineH = 38, pad = 18, maxW = 440, tail = 16;
+  const cv = document.createElement('canvas');
+  let g = cv.getContext('2d');
+  g.font = '700 ' + fontPx + 'px Arial';
+  // quebra em linhas
+  const words = String(text).split(' ');
+  const lines = [];
+  let cur = '';
+  for (const w of words) {
+    const test = cur ? cur + ' ' + w : w;
+    if (g.measureText(test).width > maxW && cur) { lines.push(cur); cur = w; }
+    else cur = test;
+  }
+  if (cur) lines.push(cur);
+  const maxLines = 4;
+  if (lines.length > maxLines) { lines.length = maxLines; lines[maxLines - 1] += '…'; }
+  let textW = 0;
+  for (const ln of lines) textW = Math.max(textW, g.measureText(ln).width);
+  const W = Math.ceil(Math.min(maxW, textW) + pad * 2);
+  const H = Math.ceil(lines.length * lineH + pad * 2 + tail);
+  cv.width = W; cv.height = H;
+  g = cv.getContext('2d');
+  g.font = '700 ' + fontPx + 'px Arial';
+  g.textBaseline = 'top';
+  // balão
+  g.fillStyle = 'rgba(255,255,255,.96)';
+  g.strokeStyle = 'rgba(122,61,255,.95)';
+  g.lineWidth = 4;
+  roundRect(g, 3, 3, W - 6, H - tail - 3, 16);
+  g.fill(); g.stroke();
+  // rabinho apontando pra baixo
+  g.beginPath();
+  g.moveTo(W / 2 - 13, H - tail - 2);
+  g.lineTo(W / 2 + 13, H - tail - 2);
+  g.lineTo(W / 2, H - 2);
+  g.closePath();
+  g.fillStyle = 'rgba(255,255,255,.96)';
+  g.fill();
+  // texto
+  g.fillStyle = '#1a0d2e';
+  g.textAlign = 'center';
+  for (let i = 0; i < lines.length; i++) g.fillText(lines[i], W / 2, pad + i * lineH);
+  return { texture: new THREE.CanvasTexture(cv), aspect: W / H };
+}
+
+function updateBubbles() {
+  const now = performance.now();
+  const check = (t) => { if (t && t.bubble && now > t.bubbleUntil) removeBubble(t); };
+  if (me) check(me);
+  for (const o of players.values()) check(o);
+}
+
+// ============================================================================
+// CHAT DE VOZ (PeerJS mesh + voz por proximidade)
+// ============================================================================
+let voiceAudioCtx = null;
+let myMicAnalyser = null, myMicData = null;
+let RING_TEX = null;
+const voiceCooldown = new Map();   // peerId -> próxima hora (ms) que posso tentar ligar de novo
+const VOICE_RETRY_MS = 3500;
+
+function ensurePeer() {
+  if (peer || !window.Peer) return;
+  try {
+    peer = new window.Peer(undefined, { debug: 1 });
+  } catch (e) { return; }
+  peer.on('open', (id) => { myPeerId = id; peerIdSynced = false; });
+  peer.on('error', () => { /* erros transitórios não derrubam o jogo */ });
+  peer.on('disconnected', () => { try { peer.reconnect(); } catch (e) {} });
+  // chamadas recebidas
+  peer.on('call', (call) => {
+    if (!micStream) { try { call.close(); } catch (e) {} return; }  // só atende com a voz ligada
+    call.answer(micStream);
+    wireCall(call);
+  });
+}
+
+async function toggleVoice() {
+  if (voiceState === 'off') { await enableVoice(); return; }
+  // liga/desliga o microfone
+  voiceMuted = !voiceMuted;
+  if (micStream) micStream.getAudioTracks().forEach(t => t.enabled = !voiceMuted);
+  voiceState = voiceMuted ? 'muted' : 'on';
+  updateVoiceButton();
+  showMsg(voiceMuted ? 'Microfone mutado 🔇' : 'Microfone ligado 🎤');
+}
+
+async function enableVoice() {
+  if (!window.Peer) { showMsg('Voz indisponível agora 😕'); return; }
+  if (!peer) ensurePeer();
+  if (!myPeerId) { showMsg('Conectando à voz... tenta de novo num instante 🎤'); return; }
+  voiceState = 'connecting'; updateVoiceButton();
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      video: false,
+    });
+  } catch (e) {
+    voiceState = 'off'; updateVoiceButton();
+    showMsg('Precisa permitir o microfone pra usar a voz 🎤');
+    return;
+  }
+  // analisador do próprio mic (pra mostrar quando EU falo)
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (AC) {
+      voiceAudioCtx = voiceAudioCtx || new AC();
+      if (voiceAudioCtx.state === 'suspended') voiceAudioCtx.resume();
+      const src = voiceAudioCtx.createMediaStreamSource(micStream);
+      const an = voiceAudioCtx.createAnalyser();
+      an.fftSize = 256;
+      src.connect(an);   // NÃO conecta no destino (pra não ouvir a própria voz)
+      myMicAnalyser = an;
+      myMicData = new Uint8Array(an.frequencyBinCount);
+    }
+  } catch (e) {}
+  voiceMuted = false;
+  voiceState = 'on';
+  updateVoiceButton();
+  showMsg('Voz ligada! Chegue perto pra ouvir melhor 🎤');
+  updateVoiceMesh();
+}
+
+function updateVoiceButton() {
+  const btn = document.getElementById('btn-voice');
+  btn.classList.remove('on', 'muted', 'connecting');
+  if (voiceState === 'connecting') { btn.classList.add('connecting'); btn.textContent = '🎤'; }
+  else if (voiceState === 'on')     { btn.classList.add('on');         btn.textContent = '🎤'; }
+  else if (voiceState === 'muted')  { btn.classList.add('muted');      btn.textContent = '🔇'; }
+  else                              { btn.textContent = '🎤'; }
+}
+
+// liga com os peers presentes (regra: quem tem id menor inicia, evita ligação dupla)
+function updateVoiceMesh() {
+  if (!peer || !micStream) return;
+  const livePeers = new Set();
+  for (const o of players.values()) if (o.peer) livePeers.add(o.peer);
+  const now = performance.now();
+  for (const o of players.values()) {
+    const rp = o.peer;
+    if (!rp || voiceCalls.has(rp)) continue;
+    if (myPeerId && myPeerId < rp) {
+      if ((voiceCooldown.get(rp) || 0) > now) continue;   // ainda em cooldown
+      voiceCooldown.set(rp, now + VOICE_RETRY_MS);
+      try { const call = peer.call(rp, micStream); if (call) wireCall(call); } catch (e) {}
+    }
+  }
+  for (const rp of [...voiceCalls.keys()]) {
+    if (!livePeers.has(rp)) removeCall(rp);
+  }
+}
+
+function wireCall(call) {
+  if (!voiceCalls.has(call.peer)) voiceCalls.set(call.peer, { call, audioEl: null, analyser: null, data: null, speaking: false });
+  else voiceCalls.get(call.peer).call = call;
+  call.on('stream', (remote) => attachRemote(call, remote));
+  call.on('close', () => removeCall(call.peer));
+  call.on('error', () => removeCall(call.peer));
+}
+
+function attachRemote(call, stream) {
+  let entry = voiceCalls.get(call.peer);
+  if (!entry) { entry = { call, speaking: false }; voiceCalls.set(call.peer, entry); }
+  if (!entry.audioEl) {
+    const a = document.createElement('audio');
+    a.autoplay = true; a.playsInline = true;
+    document.getElementById('voice-audios').appendChild(a);
+    entry.audioEl = a;
+  }
+  entry.audioEl.srcObject = stream;
+  const pp = entry.audioEl.play && entry.audioEl.play();
+  if (pp && pp.catch) pp.catch(() => {});
+  // analisador pra detectar quando ESSE jogador fala
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (AC) {
+      voiceAudioCtx = voiceAudioCtx || new AC();
+      const src = voiceAudioCtx.createMediaStreamSource(stream);
+      const an = voiceAudioCtx.createAnalyser();
+      an.fftSize = 256;
+      src.connect(an);
+      entry.analyser = an;
+      entry.data = new Uint8Array(an.frequencyBinCount);
+    }
+  } catch (e) {}
+}
+
+function removeCall(peerId) {
+  const entry = voiceCalls.get(peerId);
+  if (!entry) return;
+  try { entry.call && entry.call.close(); } catch (e) {}
+  if (entry.audioEl) { try { entry.audioEl.srcObject = null; entry.audioEl.remove(); } catch (e) {} }
+  voiceCalls.delete(peerId);
+}
+
+function makeRingTexture() {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 64;
+  const g = cv.getContext('2d');
+  g.strokeStyle = '#4cff7a'; g.lineWidth = 9;
+  g.beginPath(); g.arc(32, 32, 23, 0, Math.PI * 2); g.stroke();
+  g.fillStyle = '#4cff7a';
+  // ondinhas de som
+  g.font = '700 30px Arial'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText('🔊', 32, 34);
+  return new THREE.CanvasTexture(cv);
+}
+function ensureRing(target) {
+  if (target.voiceRing) return target.voiceRing;
+  RING_TEX = RING_TEX || makeRingTexture();
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: RING_TEX, depthTest: false, transparent: true }));
+  s.scale.set(0.5, 0.5, 1);
+  s.position.set(0, 2.64, 0);
+  s.visible = false;
+  s.renderOrder = 19;
+  target.mesh.add(s);
+  target.voiceRing = s;
+  return s;
+}
+function setSpeaking(target, on) {
+  const ring = ensureRing(target);
+  ring.visible = !!on;
+  if (on) {
+    const k = 0.5 + Math.sin(performance.now() * 0.012) * 0.07;
+    ring.scale.set(k, k, 1);
+  }
+}
+function rms(data) {
+  let sum = 0;
+  for (let i = 0; i < data.length; i++) { const v = (data[i] - 128) / 128; sum += v * v; }
+  return Math.sqrt(sum / data.length);
+}
+
+function updateVoice() {
+  if (voiceState === 'off' || !me) return;
+  const mx = me.mesh.position.x, mz = me.mesh.position.z;
+  // estou falando?
+  if (myMicAnalyser && !voiceMuted) {
+    myMicAnalyser.getByteTimeDomainData(myMicData);
+    setSpeaking(me, rms(myMicData) > 0.045);
+  } else if (me.voiceRing) {
+    me.voiceRing.visible = false;
+  }
+  // cada peer remoto: volume por distância + indicador de fala
+  for (const [peerId, entry] of voiceCalls) {
+    let ply = null;
+    for (const o of players.values()) { if (o.peer === peerId) { ply = o; break; } }
+    if (entry.audioEl) {
+      let vol = 0.6;
+      if (ply) {
+        const d = Math.hypot(ply.mesh.position.x - mx, ply.mesh.position.z - mz);
+        vol = Math.max(0, Math.min(1, 1 - d / VOICE_MAX_DIST));
+        vol *= vol;   // cai mais rápido com a distância
+      }
+      entry.audioEl.volume = vol;
+    }
+    let speaking = false;
+    if (entry.analyser && entry.data) {
+      entry.analyser.getByteTimeDomainData(entry.data);
+      speaking = rms(entry.data) > 0.045 && (entry.audioEl ? entry.audioEl.volume : 0) > 0.03;
+    }
+    if (ply) setSpeaking(ply, speaking);
+  }
+}
+
 function syncShadows() {
   // sombras seguem x/z do player mas ficam no chão (escalam pela altura do pulo)
   if (me && me.shadowMesh) {
@@ -1566,6 +2110,8 @@ function animate() {
     syncShadows();
     updateCamera();
     updateInteract();
+    updateBubbles();
+    updateVoice();
     // polling
     const now = performance.now();
     if (now - lastPoll > POLL_MS) { lastPoll = now; netUpdate(); }
@@ -1602,6 +2148,7 @@ async function startGame(name) {
   document.getElementById('screen-menu').style.display = 'none';
   document.getElementById('screen-loading').style.display = 'flex';
   try {
+    ensurePeer();   // começa a abrir o PeerJS já (pro chat de voz ficar pronto)
     const join = await netJoin(name);
     if (!renderer) initThree();
     TABLES = Array.isArray(join.tables) ? join.tables : [];
@@ -1615,6 +2162,9 @@ async function startGame(name) {
     camYaw = Math.PI; // câmera começa olhando o salão
     document.getElementById('screen-loading').style.display = 'none';
     document.getElementById('hud-top').style.display = 'flex';
+    document.getElementById('btn-chat').style.display = 'flex';
+    document.getElementById('btn-voice').style.display = 'flex';
+    updateVoiceButton();
     showMsg('Bem-vindo, ' + name + '! 🎩');
   } catch (e) {
     document.getElementById('screen-loading').style.display = 'none';
@@ -1637,6 +2187,18 @@ document.getElementById('btn-interact').addEventListener('click', (e) => {
   if (me) tryInteract();
 });
 
+// chat de texto
+document.getElementById('btn-chat').addEventListener('click', (e) => { e.preventDefault(); openChat(); });
+document.getElementById('chat-send').addEventListener('click', (e) => { e.preventDefault(); sendChat(); });
+document.getElementById('chat-text').addEventListener('keydown', (e) => {
+  e.stopPropagation();   // não deixa as teclas vazarem pro movimento
+  if (e.key === 'Enter') { e.preventDefault(); sendChat(); }
+  else if (e.key === 'Escape') { e.preventDefault(); closeChat(); }
+});
+
+// chat de voz
+document.getElementById('btn-voice').addEventListener('click', (e) => { e.preventDefault(); toggleVoice(); });
+
 // botão de pular (mobile)
 const btnJumpEl = document.getElementById('btn-jump');
 btnJumpEl.addEventListener('touchstart', (e) => { e.preventDefault(); if (me) tryJump(); }, { passive: false });
@@ -1657,6 +2219,10 @@ document.getElementById('damas-leave').addEventListener('click', async (e) => {
     await netStand();
     await netUpdate();
   } finally { moveBusy = false; }
+});
+document.getElementById('damas-blow').addEventListener('click', (e) => {
+  e.preventDefault();
+  doBlow();
 });
 document.getElementById('end-back').addEventListener('click', (e) => {
   e.preventDefault();

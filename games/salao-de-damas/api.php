@@ -18,6 +18,8 @@ const PLAYER_TTL = 8;     // segundos sem heartbeat -> jogador sai do salão
 const MAX_NAME   = 14;
 const MAX_PLAYERS = 32;   // limite por segurança no salão
 const SIT_DIST   = 2.2;   // distância máx do jogador até a cadeira pra poder sentar
+const MAX_CHAT   = 140;   // tamanho máximo de uma mensagem de chat de texto
+const CHAT_KEEP  = 25;    // quantas mensagens de chat manter no histórico
 
 /**
  * Mesas do salão (definição estática — cliente e servidor concordam pelos IDs).
@@ -33,13 +35,16 @@ const TABLES = [
 ];
 const SEAT_OFFSET = 1.05;
 
-/** Damas (regras simplificadas estilo brasileiro):
+/** Damas (regras simplificadas estilo brasileiro, COM SOPRO):
  *  - tabuleiro 8x8, casas escuras onde (r+c)%2 === 1
  *  - peças comuns andam 1 diagonal pra frente
  *  - peças comuns capturam pulando 2 casas em qualquer diagonal (frente OU trás)
  *  - dama (king): anda/captura 1 casa em qualquer diagonal
  *  - quando peça comum chega na última fileira do oponente, vira dama
  *  - multi-jump: se após captura ainda dá pra capturar com a MESMA peça, jogador continua
+ *  - SOPRO: capturar NÃO é obrigatório. Se o jogador faz um lance simples tendo uma
+ *    captura disponível, o oponente pode "soprar" (remover) a peça que deveria ter
+ *    capturado. Soprar gasta o turno do oponente — ele sopra OU faz uma jogada normal.
  *  - ganha quem comer todas as peças do oponente OU deixar oponente sem lance possível
  *  - seat 0 (sul) joga as brancas (descem); seat 1 (norte) joga as pretas (sobem)
  */
@@ -56,9 +61,11 @@ try {
     switch ($action) {
         case 'join':    echo json_encode(join_salao($DATA, $input)); break;
         case 'update':  echo json_encode(update_salao($DATA, $input)); break;
+        case 'say':     echo json_encode(say_salao($DATA, $input)); break;
         case 'sit':     echo json_encode(sit_salao($DATA, $input)); break;
         case 'stand':   echo json_encode(stand_salao($DATA, $input)); break;
         case 'move':    echo json_encode(move_damas($DATA, $input)); break;
+        case 'blow':    echo json_encode(blow_damas($DATA, $input)); break;
         case 'leave':   echo json_encode(leave_salao($DATA, $input)); break;
         default:
             http_response_code(400);
@@ -91,6 +98,7 @@ function join_salao(string $dir, array $in): array
             'rot'  => 3.14159,                          // virado pro centro
             'skin' => $skin,
             'seat' => null,                             // "tableId:seatIdx" quando sentado
+            'peer' => clean_peer($in['peerId'] ?? ''), // id PeerJS pro chat de voz (pode ser null)
             'ts'   => time(),
         ];
         return [$state, ['id' => $id, 'skin' => $skin, 'tables' => array_values(TABLES)]];
@@ -114,6 +122,11 @@ function update_salao(string $dir, array $in): array
             $p['z']  = clean_float($in['z'] ?? $p['z'], -50, 50);
             $p['rot']= clean_float($in['rot'] ?? $p['rot'], -10, 10);
         }
+        // o peerId pode chegar depois (o PeerJS abre de forma assíncrona)
+        if (isset($in['peerId'])) {
+            $pp = clean_peer($in['peerId']);
+            if ($pp !== null) $p['peer'] = $pp;
+        }
         $p['ts'] = time();
         unset($p);
 
@@ -129,6 +142,7 @@ function update_salao(string $dir, array $in): array
                 'rot'  => $pl['rot'],
                 'skin' => $pl['skin'],
                 'seat' => $pl['seat'] ?? null,
+                'peer' => $pl['peer'] ?? null,
             ];
         }
         // partidas (todas — são poucas; cliente filtra qual interessa)
@@ -141,11 +155,45 @@ function update_salao(string $dir, array $in): array
                 'board'   => $m['board'],
                 'turn'    => $m['turn'],
                 'continueWith' => $m['continueWith'],
+                'blow'    => $m['blow'] ?? null,
                 'winner'  => $m['winner'],
                 'reason'  => $m['reason'],
             ];
         }
-        return [$state, ['players' => $players, 'matches' => $matches]];
+        return [$state, [
+            'players' => $players,
+            'matches' => $matches,
+            'chat'    => array_slice($state['chat'] ?? [], -20),
+            'chatSeq' => $state['chatSeq'] ?? 0,
+        ]];
+    });
+}
+
+function say_salao(string $dir, array $in): array
+{
+    $id   = clean_id($in['id'] ?? '');
+    $text = clean_chat($in['text'] ?? '');
+    if ($id === null) return err('id inválido', 400);
+    if ($text === '') return err('mensagem vazia');
+
+    return with_lock($dir, function (array $state) use ($id, $text) {
+        if (!isset($state['players'][$id])) return [$state, ['expired' => true]];
+        $p = $state['players'][$id];
+        $seq = ($state['chatSeq'] ?? 0) + 1;
+        $state['chatSeq'] = $seq;
+        $state['chat'][] = [
+            'seq'  => $seq,
+            'id'   => $id,
+            'name' => $p['name'],
+            'skin' => $p['skin'] ?? 0,
+            'text' => $text,
+            'ts'   => time(),
+        ];
+        if (count($state['chat']) > CHAT_KEEP) {
+            $state['chat'] = array_slice($state['chat'], -CHAT_KEEP);
+        }
+        $state['players'][$id]['ts'] = time();   // mandar mensagem também é sinal de vida
+        return [$state, ['ok' => true, 'seq' => $seq]];
     });
 }
 
@@ -207,6 +255,7 @@ function sit_salao(string $dir, array $in): array
                 'board'   => damas_init_board(),
                 'turn'    => 'white',
                 'continueWith' => null,
+                'blow'    => null,
                 'winner'  => null,
                 'reason'  => null,
                 'endedAt' => null,
@@ -273,21 +322,77 @@ function move_damas(string $dir, array $in): array
         if ($piece === null) return [$state, err('não há peça nessa casa')];
         if ($piece['color'] !== $myColor) return [$state, err('essa peça não é sua')];
 
+        // havia captura disponível antes de jogar? (pra regra do sopro)
+        $wasContinue = (($m['continueWith'] ?? null) !== null);
+        $hadCapture  = !$wasContinue && damas_color_can_capture($m['board'], $myColor);
+
         // aplica lance
         $result = damas_try_move($m['board'], $fr, $fc, $tr, $tc, $myColor);
         if (!$result['ok']) return [$state, err($result['error'] ?? 'lance ilegal')];
         $m['board'] = $result['board'];
         $m['lastMoveAt'] = time();
+        $m['blow'] = null;   // fazer um lance abre mão do direito de soprar
 
         // multi-jump: se foi captura e a peça (na nova posição, podendo ser dama agora) pode capturar de novo, mesmo jogador continua
         if ($result['captured'] && damas_piece_can_capture($m['board'], $tr, $tc)) {
             $m['continueWith'] = [$tr, $tc];
         } else {
             $m['continueWith'] = null;
+            // SOPRO: jogou um lance simples tendo captura disponível -> o oponente pode soprar esta peça
+            if (!$result['captured'] && $hadCapture) {
+                $m['blow'] = [$tr, $tc];
+            }
             $m['turn'] = ($myColor === 'white') ? 'black' : 'white';
         }
 
-        // checa vencedor
+        // checa vencedor (não encerra se há sopro pendente: o oponente ainda tem ação)
+        if (($m['blow'] ?? null) === null) {
+            $winner = damas_check_winner($m['board'], $m['turn']);
+            if ($winner !== null) {
+                $m['winner'] = $winner;
+                $m['reason'] = 'checkmate';
+                $m['endedAt'] = time();
+            }
+        }
+
+        $state['matches'][$tid] = $m;
+        return [$state, ['ok' => true]];
+    });
+}
+
+function blow_damas(string $dir, array $in): array
+{
+    $id  = clean_id($in['id'] ?? '');
+    $tid = (string)($in['tableId'] ?? '');
+    if ($id === null) return err('id inválido', 400);
+
+    return with_lock($dir, function (array $state) use ($id, $tid) {
+        if (!isset($state['matches'][$tid])) return [$state, err('não há partida ativa nessa mesa')];
+        $m = $state['matches'][$tid];
+        if ($m['winner'] !== null) return [$state, err('a partida já terminou')];
+
+        $myColor = ($m['white'] === $id) ? 'white' : (($m['black'] === $id) ? 'black' : null);
+        if ($myColor === null) return [$state, err('você não está jogando essa partida')];
+        if ($m['turn'] !== $myColor) return [$state, err('não é a sua vez')];
+        if (($m['blow'] ?? null) === null) return [$state, err('não há nada pra soprar')];
+
+        [$br, $bc] = $m['blow'];
+        $piece = $m['board'][$br][$bc] ?? null;
+        // a peça soprada tem que ser do oponente (e ainda estar lá)
+        if ($piece === null || $piece['color'] === $myColor) {
+            $m['blow'] = null;
+            $state['matches'][$tid] = $m;
+            return [$state, err('a peça já não está mais lá')];
+        }
+
+        // remove a peça soprada
+        $m['board'][$br][$bc] = null;
+        $m['blow'] = null;
+        $m['continueWith'] = null;
+        $m['lastMoveAt'] = time();
+        // soprar gasta o turno: passa a vez de volta pro oponente
+        $m['turn'] = ($myColor === 'white') ? 'black' : 'white';
+
         $winner = damas_check_winner($m['board'], $m['turn']);
         if ($winner !== null) {
             $m['winner'] = $winner;
@@ -296,7 +401,7 @@ function move_damas(string $dir, array $in): array
         }
 
         $state['matches'][$tid] = $m;
-        return [$state, ['ok' => true]];
+        return [$state, ['ok' => true, 'blew' => [$br, $bc]]];
     });
 }
 
@@ -363,6 +468,19 @@ function damas_maybe_promote(array $piece, int $r, string $color): array
     $lastRow = ($color === 'white') ? 0 : (BOARD_N - 1);
     if ($r === $lastRow) $piece['king'] = true;
     return $piece;
+}
+
+function damas_color_can_capture(array $board, string $color): bool
+{
+    for ($r = 0; $r < BOARD_N; $r++) {
+        for ($c = 0; $c < BOARD_N; $c++) {
+            $p = $board[$r][$c];
+            if ($p !== null && $p['color'] === $color && damas_piece_can_capture($board, $r, $c)) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 function damas_piece_can_capture(array $board, int $r, int $c): bool
@@ -440,12 +558,14 @@ function with_lock(string $dir, callable $fn): array
 
 function read_state(string $path): array
 {
-    $default = ['players' => [], 'matches' => []];
+    $default = ['players' => [], 'matches' => [], 'chat' => [], 'chatSeq' => 0];
     if (!is_file($path)) return $default;
     $d = json_decode((string)file_get_contents($path), true);
     if (!is_array($d)) return $default;
     if (!isset($d['players']) || !is_array($d['players'])) $d['players'] = [];
     if (!isset($d['matches']) || !is_array($d['matches'])) $d['matches'] = [];
+    if (!isset($d['chat']) || !is_array($d['chat'])) $d['chat'] = [];
+    if (!isset($d['chatSeq'])) $d['chatSeq'] = 0;
     return $d;
 }
 
@@ -515,6 +635,13 @@ function rand_skin(array $players): int
 }
 
 function clean_id($v): ?string { $v = (string)$v; return preg_match('/^[a-f0-9]{6,32}$/', $v) ? $v : null; }
+function clean_peer($v): ?string { $v = (string)$v; return preg_match('/^[A-Za-z0-9_-]{1,64}$/', $v) ? $v : null; }
+function clean_chat($v): string {
+    $v = trim((string)$v);
+    $v = preg_replace('/[\x00-\x1F\x7F]+/u', ' ', $v);   // remove quebras/controle
+    $v = preg_replace('/\s+/u', ' ', $v);
+    return mb_substr($v, 0, MAX_CHAT);
+}
 function clean_name($v): string {
     $v = trim((string)$v);
     $v = preg_replace('/\s+/u', ' ', $v);

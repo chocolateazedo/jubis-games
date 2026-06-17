@@ -25,7 +25,12 @@ export class Net {
     this.roster = roster;
     this.conns = new Map();   // host: peerId -> DataConnection
     this.hostConn = null;     // cliente: conexão com o host
-    this.handlers = { world: () => {}, input: () => {}, hit: () => {}, pickup: () => {}, transform: () => {}, close: () => {} };
+    this.handlers = { world: () => {}, input: () => {}, hit: () => {}, pickup: () => {}, transform: () => {}, chat: () => {}, close: () => {} };
+  }
+
+  // lista de peerIds dos OUTROS jogadores (usada pela malha de voz)
+  remotePeerIds() {
+    return this.roster.map((p) => p.peerId).filter((id) => id && id !== this.myPeerId);
   }
 
   on(evt, cb) { this.handlers[evt] = cb; return this; }
@@ -46,6 +51,11 @@ export class Net {
       else if (d.t === 'hit') this.handlers.hit(c.peer, d);
       else if (d.t === 'pk') this.handlers.pickup(c.peer, d);
       else if (d.t === 'tf') this.handlers.transform(c.peer, d);
+      else if (d.t === 'chat') {
+        // chat: o host mostra e re-transmite pra todos os clientes
+        this.handlers.chat(d);
+        this.broadcastChat(d.name, d.text);
+      }
     });
     c.on('close', () => { this.conns.delete(c.peer); this.handlers.close(c.peer); });
     c.on('error', () => {});
@@ -55,7 +65,11 @@ export class Net {
     const conn = this.peer.connect(this.hostPeerId, { reliable: true, serialization: 'json' });
     let opened = false;
     conn.on('open', () => { opened = true; this.hostConn = conn; });
-    conn.on('data', (d) => { if (d && d.t === 'w') this.handlers.world(d); });
+    conn.on('data', (d) => {
+      if (!d) return;
+      if (d.t === 'w') this.handlers.world(d);
+      else if (d.t === 'chat') this.handlers.chat(d);
+    });
     conn.on('close', () => this.handlers.close(this.hostPeerId));
     conn.on('error', () => {
       if (!opened && attempt < 5) setTimeout(() => this._connectToHost(attempt + 1), 600);
@@ -73,6 +87,19 @@ export class Net {
   // host -> todos
   broadcast(world) {
     const msg = { t: 'w', ...world };
+    for (const c of this.conns.values()) if (c.open) c.send(msg);
+  }
+
+  // ---- chat de texto ----
+  // cliente manda a mensagem pro host (que re-transmite); o host chama broadcastChat direto.
+  sendChat(name, text) {
+    if (this.isHost) this.broadcastChat(name, text);
+    else if (this.hostConn && this.hostConn.open) this.hostConn.send({ t: 'chat', name, text });
+  }
+
+  // host -> todos os clientes
+  broadcastChat(name, text) {
+    const msg = { t: 'chat', name, text };
     for (const c of this.conns.values()) if (c.open) c.send(msg);
   }
 

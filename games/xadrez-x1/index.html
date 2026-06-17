@@ -84,6 +84,58 @@
     .cell.target.cap::after { width: 86%; border-radius: 50%; background: transparent; border: 5px solid var(--target); }
     .result { margin: 12px 0; font-size: 1.15rem; font-weight: 800; }
 
+    /* ----- Chat de texto ----- */
+    #chat-log {
+      position: fixed; left: 12px; bottom: 86px; z-index: 55;
+      width: min(70vw, 300px);
+      display: flex; flex-direction: column; gap: 4px;
+      pointer-events: none;
+    }
+    #chat-log .chat-line {
+      background: rgba(0,0,0,.55);
+      border-radius: 10px;
+      padding: 5px 10px;
+      font-size: 13px; line-height: 1.3;
+      width: fit-content; max-width: 100%;
+      word-break: break-word; text-align: left;
+      box-shadow: 0 2px 8px rgba(0,0,0,.35);
+      animation: chat-in .18s ease-out;
+    }
+    #chat-log .chat-line b { font-weight: 800; }
+    @keyframes chat-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+    #chat-input-wrap {
+      position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%);
+      z-index: 120; width: min(94vw, 460px);
+      display: none; gap: 8px;
+    }
+    #chat-input-wrap.show { display: flex; }
+    #chat-text {
+      flex: 1; padding: 12px 14px;
+      border: 2px solid #4aa3ff; border-radius: 12px;
+      background: rgba(10,16,32,.94); color: #fff;
+      font-size: 16px; font-weight: 600; outline: none; max-width: none; margin: 0;
+    }
+    #chat-send {
+      border: 0; border-radius: 12px; padding: 0 18px;
+      background: linear-gradient(135deg, #4aa3ff, #1f6fd0);
+      color: #fff; font-weight: 900; font-size: 15px; cursor: pointer;
+    }
+
+    /* botão flutuante azul de chat (só durante a partida) */
+    #btn-chat {
+      position: fixed; right: 18px; bottom: 18px; z-index: 62;
+      width: 54px; height: 54px; border-radius: 50%;
+      border: 2px solid rgba(255,255,255,.3);
+      background: linear-gradient(135deg, #4aa3ff, #1f6fd0);
+      color: #fff; font-size: 26px; cursor: pointer;
+      display: none; align-items: center; justify-content: center;
+      box-shadow: 0 6px 18px rgba(0,0,0,.45);
+      -webkit-user-select: none; user-select: none;
+    }
+    #btn-chat:active { transform: scale(.93); }
+    body.in-match #btn-chat { display: flex; }
+
     /* modal de promoção */
     .modal { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: none; place-items: center; z-index: 30; }
     .modal.open { display: grid; }
@@ -151,6 +203,14 @@
     </section>
   </div>
 
+  <!-- chat de texto (durante a partida) -->
+  <div id="chat-log"></div>
+  <div id="chat-input-wrap">
+    <input id="chat-text" type="text" maxlength="140" placeholder="Escreva e aperte Enter…" autocomplete="off" />
+    <button id="chat-send" type="button">Enviar</button>
+  </div>
+  <button id="btn-chat" type="button" title="Conversar">💬</button>
+
   <!-- modal de promoção -->
   <div class="modal" id="promoModal">
     <div class="box">
@@ -178,6 +238,7 @@
     let selected = null, legalTargets = [];
     let waitTimer = null, stateTimer = null;
     let status = 'playing', winner = null, lastMove = null, sending = false, recorded = false;
+    let lastChatSeq = 0, chatOpen = false, chatInited = false;
 
     // elementos
     const $ = (id) => document.getElementById(id);
@@ -273,6 +334,9 @@
       gameId = assign.gameId; myColor = assign.color; myToken = assign.token;
       chess = new Chess();
       selected = null; legalTargets = []; status = 'playing'; winner = null; lastMove = null; recorded = false;
+      lastChatSeq = 0; chatInited = false; closeChat();
+      $('chat-log').innerHTML = '';
+      document.body.classList.add('in-match');
       $('resultBox').classList.add('hidden');
       $('btnResign').classList.remove('hidden');
       $('btnLobby').classList.add('hidden');
@@ -302,6 +366,7 @@
       if (selected) { selected = null; legalTargets = []; }
       render();
       updateTurnInfo();
+      if (s.chat) syncChat(s.chat);
       if (status !== 'playing') endGame();
     }
 
@@ -429,6 +494,8 @@
 
     $('btnLobby').addEventListener('click', () => {
       clearTimeout(stateTimer); stateTimer = null;
+      closeChat();
+      document.body.classList.remove('in-match');
       gameId = null; show('lobby'); setMsg('');
     });
 
@@ -450,6 +517,67 @@
       $('turnInfo').textContent = '';
       if (!recorded) { recorded = true; bumpRecord(kind); }
     }
+
+    // ---------- CHAT DE TEXTO ----------
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, ch =>
+        ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]));
+    }
+
+    function openChat() {
+      if (!gameId || chatOpen) return;
+      chatOpen = true;
+      $('chat-input-wrap').classList.add('show');
+      const inp = $('chat-text');
+      inp.value = '';
+      setTimeout(() => inp.focus(), 0);
+    }
+    function closeChat() {
+      chatOpen = false;
+      $('chat-input-wrap').classList.remove('show');
+      $('chat-text').blur();
+    }
+    async function sendChat() {
+      const inp = $('chat-text');
+      const text = inp.value.trim();
+      closeChat();
+      if (!text || !gameId) return;
+      try {
+        const r = await api('say', { gameId, color: myColor, token: myToken, text });
+        if (r && !r.error) await doPollState();   // traz a própria mensagem na hora
+      } catch (e) { /* erros temporários não importam */ }
+    }
+
+    function syncChat(messages) {
+      if (!Array.isArray(messages)) return;
+      let maxSeq = lastChatSeq;
+      for (const m of messages) {
+        if (!m || m.seq <= lastChatSeq) continue;
+        appendChatLine(m);
+        if (m.seq > maxSeq) maxSeq = m.seq;
+      }
+      lastChatSeq = maxSeq;
+      chatInited = true;
+    }
+    function appendChatLine(m) {
+      const logEl = $('chat-log');
+      const line = document.createElement('div');
+      line.className = 'chat-line';
+      const col = m.color === 'w' ? '#cfe0ff' : '#ff9ab0';
+      line.innerHTML = `<b style="color:${col}">${escapeHtml(m.name)}:</b> ${escapeHtml(m.text)}`;
+      logEl.appendChild(line);
+      while (logEl.children.length > 6) logEl.removeChild(logEl.firstChild);
+    }
+
+    $('btn-chat').addEventListener('click', (e) => {
+      e.preventDefault();
+      if (chatOpen) closeChat(); else openChat();
+    });
+    $('chat-send').addEventListener('click', (e) => { e.preventDefault(); sendChat(); });
+    $('chat-text').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); sendChat(); }
+      else if (e.key === 'Escape') { e.preventDefault(); closeChat(); }
+    });
 
     // ---------- init ----------
     $('name').value = localStorage.getItem(NAME_KEY) || '';

@@ -18,6 +18,8 @@ header('Cache-Control: no-store');
 const QUEUE_TTL   = 30;   // segundos que um jogador esperando fica vivo sem dar sinal
 const POINTER_TTL = 120;  // segundos que um pareamento fica disponível para o jogador buscar
 const GAME_TTL    = 86400; // remove partidas com mais de 24h sem atividade
+const MAX_CHAT    = 140;   // tamanho máximo de uma mensagem de chat de texto
+const CHAT_KEEP   = 25;    // quantas mensagens de chat manter no histórico da partida
 
 $DATA = __DIR__ . '/data';
 ensure_data_dir($DATA);
@@ -36,6 +38,7 @@ try {
         case 'state':        echo json_encode(game_state($DATA, $input)); break;
         case 'move':         echo json_encode(make_move($DATA, $input)); break;
         case 'resign':       echo json_encode(resign($DATA, $input)); break;
+        case 'say':          echo json_encode(say_game($DATA, $input)); break;
         default:
             http_response_code(400);
             echo json_encode(['error' => 'ação inválida']);
@@ -182,7 +185,42 @@ function game_state(string $dir, array $in): array
         'white'    => $g['players']['w']['name'],
         'black'    => $g['players']['b']['name'],
         'updatedAt' => $g['updatedAt'],
+        'chat'     => array_slice($g['chat'] ?? [], -20),
+        'chatSeq'  => $g['chatSeq'] ?? 0,
     ];
+}
+
+function say_game(string $dir, array $in): array
+{
+    $id    = clean_id($in['gameId'] ?? '');
+    $color = (string)($in['color'] ?? '');
+    $token = clean_id($in['token'] ?? '');
+    $text  = clean_chat($in['text'] ?? '');
+    if ($id === null || !in_array($color, ['w', 'b'], true) || $token === null) return err('dados inválidos', 400);
+    if ($text === '') return err('mensagem vazia');
+
+    return with_lock($dir, "g_$id", function () use ($dir, $id, $color, $token, $text) {
+        $g = read_json($dir . "/g_$id.json", null);
+        if (!is_array($g)) return err('jogo não encontrado', 404);
+        if (($g['players'][$color]['token'] ?? '') !== $token) return err('não autorizado', 403);
+
+        if (!isset($g['chat']) || !is_array($g['chat'])) $g['chat'] = [];
+        $seq = ($g['chatSeq'] ?? 0) + 1;
+        $g['chatSeq'] = $seq;
+        $g['chat'][] = [
+            'seq'   => $seq,
+            'color' => $color,
+            'name'  => $g['players'][$color]['name'] ?? '?',
+            'text'  => $text,
+            'ts'    => time(),
+        ];
+        if (count($g['chat']) > CHAT_KEEP) {
+            $g['chat'] = array_slice($g['chat'], -CHAT_KEEP);
+        }
+        $g['updatedAt'] = time();
+        write_json($dir . "/g_$id.json", $g);
+        return ['ok' => true, 'seq' => $seq];
+    });
 }
 
 function make_move(string $dir, array $in): array
@@ -265,6 +303,8 @@ function create_game(string $dir, string $mode, ?string $code, string $nameA, st
         'lastMove'  => null,
         'status'    => 'playing',
         'winner'    => null,
+        'chat'      => [],
+        'chatSeq'   => 0,
         'createdAt' => time(),
         'updatedAt' => time(),
     ];
@@ -369,6 +409,14 @@ function clean_name($v): string
     $v = preg_replace('/\s+/u', ' ', $v);
     $v = mb_substr($v, 0, 20);
     return $v;
+}
+
+function clean_chat($v): string
+{
+    $v = trim((string)$v);
+    $v = preg_replace('/[\x00-\x1F\x7F]+/u', ' ', $v);   // remove quebras/controle
+    $v = preg_replace('/\s+/u', ' ', $v);
+    return mb_substr($v, 0, MAX_CHAT);
 }
 
 function fen_turn(string $fen): string

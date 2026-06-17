@@ -52,6 +52,15 @@ let sendAccum = 0;
 const raycaster = new THREE.Raycaster();
 const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
 
+// ---------- chat de texto ----------
+let chatOpen = false;
+
+// ---------- chat de voz (malha PeerJS, reusa o mesmo `peer`) ----------
+let micStream = null;            // MediaStream do microfone
+let voiceState = 'off';          // 'off' | 'connecting' | 'on' | 'muted'
+let voiceMuted = false;
+const voiceCalls = new Map();    // peerId remoto -> { call, audioEl }
+
 // ============================================================
 // BOOT — cria o Peer (PeerJS) e prepara o lobby
 // ============================================================
@@ -206,8 +215,10 @@ function startMatch(room) {
   if (me && me.canMelee) $('btnMelee').textContent = ({ hammer: '🔨', sword: '🗡', spray: '💧', ice: '❄', dualgun: '🔫' })[me.meleeType] || '🔨';
 
   net = new Net(peer, myPeerId, isHost, hostPeerId, roster);
-  net.on('world', onWorld).on('input', onClientInput).on('hit', onClientHit).on('pickup', onClientPickup).on('transform', onClientTransform).on('close', onPeerClose);
+  net.on('world', onWorld).on('input', onClientInput).on('hit', onClientHit).on('pickup', onClientPickup).on('transform', onClientTransform).on('chat', onChat).on('close', onPeerClose);
   net.start();
+  resetChat();
+  setupVoiceAnswer();
 
   host.startTime = nowS();
   host.dmgAccum = new Map();
@@ -470,6 +481,7 @@ function onClientHit(pid, d) {   // host recebe alegação de acerto
 function onPeerClose(pid) {
   const e = entities.get(pid);
   if (e && isHost) { e.alive = false; e.hp = 0; }
+  removeVoiceCall(pid); // limpa o <audio>/chamada de voz de quem saiu
   if (pid === net?.hostPeerId && !isHost && status === 'playing') {
     status = 'ended'; winner = null; showEnd('O host saiu da partida.');
   }
@@ -1041,6 +1053,163 @@ function onClientTransform(pid, d) {
   if (e && e.alive) { transform(e, d.ft, d.dur); if (d.dmg > 0) damage(e, d.dmg); }
 }
 
+// ============================================================
+// CHAT DE TEXTO (via WebRTC: cliente -> host -> todos)
+// ============================================================
+function resetChat() {
+  chatOpen = false;
+  $('chatInputWrap').classList.remove('show');
+  $('chatLog').innerHTML = '';
+}
+
+function openChat() {
+  if (!net || chatOpen || status !== 'playing') return;
+  chatOpen = true;
+  $('chatInputWrap').classList.add('show');
+  const inp = $('chatText');
+  inp.value = '';
+  // solta as teclas de movimento pra o boneco não sair "grudado" andando
+  for (const k in keys) keys[k] = false;
+  input.mx = input.my = 0; input.firing = false;
+  document.exitPointerLock?.();
+  setTimeout(() => inp.focus(), 0);
+}
+
+function closeChat() {
+  chatOpen = false;
+  $('chatInputWrap').classList.remove('show');
+  $('chatText').blur();
+}
+
+function sendChat() {
+  const inp = $('chatText');
+  const text = inp.value.trim().slice(0, 140);
+  closeChat();
+  if (!text || !net) return;
+  // mostra a própria mensagem na hora e envia pela rede
+  onChat({ name: myName || 'Você', text });
+  net.sendChat(myName || 'Você', text);
+}
+
+// recebe (host: dos clientes / re-transmite; cliente: do host) e mostra
+function onChat(d) {
+  if (!d || typeof d.text !== 'string') return;
+  const name = String(d.name || '???').slice(0, 24);
+  const text = String(d.text).slice(0, 140);
+  const log = $('chatLog');
+  const line = document.createElement('div');
+  line.className = 'chat-line';
+  line.innerHTML = `<b>${escapeHtml(name)}:</b> ${escapeHtml(text)}`;
+  log.appendChild(line);
+  while (log.children.length > 6) log.removeChild(log.firstChild);
+}
+
+// ============================================================
+// CHAT DE VOZ (malha PeerJS — reusa o `peer` e o roster já existentes)
+// ============================================================
+// atende chamadas de mídia recebidas (com a voz ligada). Registrado 1x por partida.
+let voiceAnswerWired = false;
+function setupVoiceAnswer() {
+  if (voiceAnswerWired || !peer) return;
+  voiceAnswerWired = true;
+  peer.on('call', (call) => {
+    if (!micStream) { try { call.close(); } catch {} return; } // só atende com a voz ligada
+    call.answer(micStream);
+    wireVoiceCall(call);
+  });
+}
+
+async function toggleVoice() {
+  if (voiceState === 'off') { await enableVoice(); return; }
+  // alterna mudo (liga/desliga a track, mantém a malha conectada)
+  voiceMuted = !voiceMuted;
+  if (micStream) micStream.getAudioTracks().forEach((t) => (t.enabled = !voiceMuted));
+  voiceState = voiceMuted ? 'muted' : 'on';
+  updateVoiceButton();
+}
+
+async function enableVoice() {
+  if (!window.Peer || !peer) { return; }
+  if (!myPeerId) { return; } // peer ainda abrindo
+  voiceState = 'connecting'; updateVoiceButton();
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      video: false,
+    });
+  } catch (e) {
+    voiceState = 'off'; updateVoiceButton();
+    return;
+  }
+  voiceMuted = false;
+  voiceState = 'on';
+  updateVoiceButton();
+  updateVoiceMesh();
+}
+
+function updateVoiceButton() {
+  const btn = $('btnVoice');
+  btn.classList.remove('on', 'muted', 'connecting');
+  if (voiceState === 'connecting') { btn.classList.add('connecting'); btn.textContent = '🎤'; btn.title = 'Conectando voz…'; }
+  else if (voiceState === 'on')     { btn.classList.add('on');        btn.textContent = '🎤'; btn.title = 'Voz ligada (toque pra mutar)'; }
+  else if (voiceState === 'muted')  { btn.classList.add('muted');     btn.textContent = '🔇'; btn.title = 'Mutado (toque pra falar)'; }
+  else                              { btn.textContent = '🎤'; btn.title = 'Chat de voz'; }
+}
+
+// liga com os peers do roster. Regra: só quem tem peerId MENOR inicia a chamada
+// (o outro só atende), pra não ter ligação dupla.
+function updateVoiceMesh() {
+  if (!peer || !micStream || !net) return;
+  const remote = net.remotePeerIds();
+  const live = new Set(remote);
+  for (const rp of remote) {
+    if (voiceCalls.has(rp)) continue;
+    if (myPeerId && myPeerId < rp) {
+      try { const call = peer.call(rp, micStream); if (call) wireVoiceCall(call); } catch {}
+    }
+  }
+  // limpa quem não está mais no roster
+  for (const rp of [...voiceCalls.keys()]) if (!live.has(rp)) removeVoiceCall(rp);
+}
+
+function wireVoiceCall(call) {
+  if (!voiceCalls.has(call.peer)) voiceCalls.set(call.peer, { call, audioEl: null });
+  else voiceCalls.get(call.peer).call = call;
+  call.on('stream', (remote) => attachRemoteAudio(call, remote));
+  call.on('close', () => removeVoiceCall(call.peer));
+  call.on('error', () => removeVoiceCall(call.peer));
+}
+
+function attachRemoteAudio(call, stream) {
+  let entry = voiceCalls.get(call.peer);
+  if (!entry) { entry = { call, audioEl: null }; voiceCalls.set(call.peer, entry); }
+  if (!entry.audioEl) {
+    const a = document.createElement('audio');
+    a.autoplay = true; a.playsInline = true;
+    $('voiceAudios').appendChild(a);
+    entry.audioEl = a;
+  }
+  entry.audioEl.srcObject = stream;
+  const pp = entry.audioEl.play && entry.audioEl.play();
+  if (pp && pp.catch) pp.catch(() => {});
+}
+
+function removeVoiceCall(peerId) {
+  const entry = voiceCalls.get(peerId);
+  if (!entry) return;
+  try { entry.call && entry.call.close(); } catch {}
+  if (entry.audioEl) { try { entry.audioEl.srcObject = null; entry.audioEl.remove(); } catch {} }
+  voiceCalls.delete(peerId);
+}
+
+function stopVoice() {
+  for (const id of [...voiceCalls.keys()]) removeVoiceCall(id);
+  if (micStream) { try { micStream.getTracks().forEach((t) => t.stop()); } catch {} }
+  micStream = null;
+  voiceState = 'off'; voiceMuted = false;
+  updateVoiceButton();
+}
+
 // ---------- HUD ----------
 function updateHud() {
   if (!me) return;
@@ -1083,6 +1252,8 @@ function showEnd(customMsg) {
 
 function backToLobby() {
   status = 'lobby'; training = false;
+  stopVoice();
+  closeChat();
   net?.destroy(); net = null;
   resetGrenades();
   resetAmmoPickups();
@@ -1100,8 +1271,16 @@ function backToLobby() {
 // ============================================================
 function bindInput() {
   // teclado
-  const FIRE_KEYS = new Set(['ControlLeft', 'ControlRight', 'Enter', 'NumpadEnter', 'KeyF']);
+  const FIRE_KEYS = new Set(['ControlLeft', 'ControlRight', 'KeyF']);
   addEventListener('keydown', (e) => {
+    // chat aberto: deixa o campo de texto receber as teclas (Enter envia, Esc fecha)
+    if (chatOpen) {
+      if (e.code === 'Enter' || e.code === 'NumpadEnter') { e.preventDefault(); sendChat(); }
+      else if (e.code === 'Escape') { e.preventDefault(); closeChat(); }
+      return;
+    }
+    // Enter abre o chat (fora da partida não faz nada)
+    if ((e.code === 'Enter' || e.code === 'NumpadEnter') && status === 'playing') { e.preventDefault(); openChat(); return; }
     keys[e.code] = true;
     if (e.code === 'Space') input.jump = true;
     if (e.code === 'KeyQ' && !e.repeat) toggleCamMode();
@@ -1125,7 +1304,9 @@ function bindInput() {
   // mouse (pointer lock)
   const cv = () => renderer?.domElement;
   document.addEventListener('mousedown', (e) => {
-    if (status !== 'playing') return;
+    if (status !== 'playing' || chatOpen) return;
+    // não rouba o clique dos botões/campo da UI (chat, voz, sair…)
+    if (e.target.closest && e.target.closest('button, input, #chatInputWrap')) return;
     if (document.pointerLockElement) { if (e.button === 0) input.firing = true; }
     else cv()?.requestPointerLock?.();
   });
@@ -1154,6 +1335,10 @@ function bindInput() {
   $('mapBosque').addEventListener('click', () => selectMap('bosque'));
   $('btnGrenade').addEventListener('click', throwGrenade);
   $('btnMelee').addEventListener('click', doSpecial);
+  // chat / voz
+  $('btnChat').addEventListener('click', openChat);
+  $('chatSend').addEventListener('click', sendChat);
+  $('btnVoice').addEventListener('click', () => { Sound.initAudio?.(); toggleVoice(); });
   $('elv0').addEventListener('click', () => pickFloor(0));
   $('elv1').addEventListener('click', () => pickFloor(1));
   $('elv2').addEventListener('click', () => pickFloor(2));

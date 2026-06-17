@@ -532,6 +532,13 @@ const SEAT_OFFSET = 1.05;   // distância da cadeira ao centro da mesa (precisa 
 const INTERACT_DIST = 1.7;  // distância pra aparecer "Sentar"
 const JUMP_VEL = 5.5;       // velocidade inicial do pulo
 const GRAVITY  = 16;        // gravidade (unidades/s²)
+// ----- Segundo andar (sacada norte) -----
+const FLOOR2_Y   = 4.5;     // altura do 2º andar (precisa bater com o api.php)
+const F2_EDGE_Z  = -2.0;    // borda sul da sacada (z menor = mais ao norte)
+const RAMP_ZTOP  = -2.0;    // topo da rampa (encosta na sacada)
+const RAMP_ZBOT  = 5.0;     // base da rampa (no térreo)
+const RAMP_XMIN  = 13.5;    // faixa de x da rampa (lado leste)
+const RAMP_XMAX  = 19.5;
 const SKIN_COLORS = [
   0xffd23f, 0x00f0ff, 0xff2bd6, 0x4cff7a,
   0xff8c42, 0xb78bff, 0xffffff, 0x66f0ff
@@ -553,6 +560,10 @@ let SEAT_USAGE = new Map(); // "tID:seatIdx" -> true (ocupada por algum jogador)
 let interactTarget = null;  // { type:'sit'|'stand', tableId, seat } ou null
 let sitBusy = false;        // evita clique duplo na hora de sentar/levantar
 let shiftLock = false;      // modo Roblox: pointer lock + personagem segue câmera
+let floor2Open = false;     // o 2º andar liberou? (quando o térreo lota)
+let floor2WasOpen = false;  // pra avisar só na transição
+let floor2Gate = null;      // corda/barreira que some quando libera
+let floor2Sign = null;      // placa do 2º andar
 
 // estado damas
 const BOARD_N = 8;
@@ -695,9 +706,9 @@ function buildScene() {
   floor.receiveShadow = true;
   scene.add(floor);
 
-  // paredes
+  // paredes (salão de pé-direito alto pra caber o 2º andar)
   const wallMat = new THREE.MeshStandardMaterial({ color: 0x3a1d5e, roughness: 0.9 });
-  const wallH = 5;
+  const wallH = 9;
   const walls = [
     [ ROOM_SIZE, wallH/2,  0, 0.2, wallH, ROOM_SIZE*2],
     [-ROOM_SIZE, wallH/2,  0, 0.2, wallH, ROOM_SIZE*2],
@@ -781,15 +792,121 @@ function buildScene() {
     new THREE.PlaneGeometry(5, 1.0),
     new THREE.MeshBasicMaterial({ map: makeTextTexture('— SALÃO DE DAMAS —', 512, 96, '#ffd23f', '#1a0d2e'), transparent: true })
   );
-  sign.position.set(0, 3.4, -ROOM_SIZE + 0.25);
+  sign.position.set(0, 7.0, -ROOM_SIZE + 0.25);
   scene.add(sign);
+
+  // luz extra pro 2º andar
+  const upLight = new THREE.PointLight(0xffd23f, 1.1, 30, 1.5);
+  upLight.position.set(0, FLOOR2_Y + 3.5, -10);
+  scene.add(upLight);
+
+  buildSecondFloor();
+}
+
+// ----- Segundo andar: sacada norte + rampa de acesso -----
+function buildSecondFloor() {
+  const woodMat = new THREE.MeshStandardMaterial({ color: 0x5a2e10, roughness: 0.8 });
+  const goldMat = new THREE.MeshStandardMaterial({ color: 0xffd23f, roughness: 0.4, metalness: 0.5 });
+
+  // laje da sacada (cobre o norte: z de -ROOM_SIZE até F2_EDGE_Z)
+  const depth = (F2_EDGE_Z + ROOM_SIZE);
+  const platform = new THREE.Mesh(new THREE.BoxGeometry(ROOM_SIZE * 2, 0.4, depth), woodMat);
+  platform.position.set(0, FLOOR2_Y - 0.2, (F2_EDGE_Z - ROOM_SIZE) / 2);
+  platform.receiveShadow = true;
+  scene.add(platform);
+
+  // tapete vermelho em cima
+  const rug = new THREE.Mesh(
+    new THREE.PlaneGeometry(ROOM_SIZE * 1.6, depth * 0.7),
+    new THREE.MeshStandardMaterial({ color: 0x6a1530, roughness: 0.9 })
+  );
+  rug.rotation.x = -Math.PI / 2;
+  rug.position.set(0, FLOOR2_Y + 0.01, (F2_EDGE_Z - ROOM_SIZE) / 2);
+  scene.add(rug);
+
+  // guarda-corpo na borda sul (deixa um vão pra rampa)
+  for (const seg of [[-ROOM_SIZE + 0.5, RAMP_XMIN], [RAMP_XMAX, ROOM_SIZE - 0.5]]) {
+    const w = seg[1] - seg[0];
+    if (w <= 0) continue;
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(w, 0.12, 0.12), goldMat);
+    rail.position.set((seg[0] + seg[1]) / 2, FLOOR2_Y + 0.6, F2_EDGE_Z);
+    scene.add(rail);
+    const base = new THREE.Mesh(new THREE.BoxGeometry(w, 0.1, 0.1), woodMat);
+    base.position.set((seg[0] + seg[1]) / 2, FLOOR2_Y + 0.05, F2_EDGE_Z);
+    scene.add(base);
+    // coluninhas
+    const posts = Math.max(2, Math.round(w / 2));
+    for (let i = 0; i <= posts; i++) {
+      const px = seg[0] + (w * i) / posts;
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.6, 8), goldMat);
+      post.position.set(px, FLOOR2_Y + 0.3, F2_EDGE_Z);
+      scene.add(post);
+    }
+  }
+
+  // rampa inclinada (lado leste)
+  const rampLen = Math.hypot(RAMP_ZBOT - RAMP_ZTOP, FLOOR2_Y);
+  const ang = Math.atan2(FLOOR2_Y, RAMP_ZBOT - RAMP_ZTOP);
+  const ramp = new THREE.Mesh(new THREE.BoxGeometry(RAMP_XMAX - RAMP_XMIN, 0.25, rampLen), woodMat);
+  ramp.position.set((RAMP_XMIN + RAMP_XMAX) / 2, FLOOR2_Y / 2, (RAMP_ZTOP + RAMP_ZBOT) / 2);
+  ramp.rotation.x = ang;
+  ramp.receiveShadow = true;
+  scene.add(ramp);
+  // corrimão da rampa
+  for (const sx of [RAMP_XMIN, RAMP_XMAX]) {
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, rampLen), goldMat);
+    hand.position.set(sx, FLOOR2_Y / 2 + 0.55, (RAMP_ZTOP + RAMP_ZBOT) / 2);
+    hand.rotation.x = ang;
+    scene.add(hand);
+  }
+
+  // placa "2º andar" no alto da rampa
+  floor2Sign = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: makeTextTexture('↑ 2º ANDAR', 256, 80, '#ffd23f', 'rgba(0,0,0,0.6)'),
+    depthTest: false,
+  }));
+  floor2Sign.scale.set(2.2, 0.7, 1);
+  floor2Sign.position.set((RAMP_XMIN + RAMP_XMAX) / 2, 2.2, RAMP_ZBOT - 0.5);
+  scene.add(floor2Sign);
+
+  // barreira (corda) na base da rampa — some quando o 2º andar libera
+  floor2Gate = new THREE.Group();
+  const ropeMat = new THREE.MeshStandardMaterial({ color: 0xff5a5a, roughness: 0.5, emissive: 0x4a0000, emissiveIntensity: 0.4 });
+  const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, RAMP_XMAX - RAMP_XMIN, 8), ropeMat);
+  rope.rotation.z = Math.PI / 2;
+  rope.position.set((RAMP_XMIN + RAMP_XMAX) / 2, 0.9, RAMP_ZBOT - 0.2);
+  floor2Gate.add(rope);
+  for (const sx of [RAMP_XMIN, RAMP_XMAX]) {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.0, 10), goldMat);
+    pole.position.set(sx, 0.5, RAMP_ZBOT - 0.2);
+    floor2Gate.add(pole);
+  }
+  scene.add(floor2Gate);
+}
+
+// altura do chão na posição (x,z) — leva em conta a rampa e a sacada do 2º andar
+function groundYAt(x, z) {
+  if (!floor2Open) return 0;
+  const onRampX = x > RAMP_XMIN && x < RAMP_XMAX;
+  if (onRampX && z < RAMP_ZBOT && z > RAMP_ZTOP) {
+    const t = (RAMP_ZBOT - z) / (RAMP_ZBOT - RAMP_ZTOP);   // 0 embaixo, 1 em cima
+    return Math.max(0, Math.min(FLOOR2_Y, t * FLOOR2_Y));
+  }
+  if (z <= RAMP_ZTOP && me && me.floor === 2) return FLOOR2_Y;
+  return 0;
+}
+
+function computeFloor2Open() {
+  const f1 = TABLES.filter(t => (t.floor || 1) === 1);
+  if (!f1.length) return false;
+  return f1.every(t => SEAT_USAGE.get(t.id + ':0') && SEAT_USAGE.get(t.id + ':1'));
 }
 
 // ----- Mesas e cadeiras (Fase 2) -----
 function buildTables(tables) {
   for (const t of tables) {
     const group = new THREE.Group();
-    group.position.set(t.x, 0, t.z);
+    group.position.set(t.x, t.y || 0, t.z);
     group.userData.tableId = t.id;
     scene.add(group);
 
@@ -933,36 +1050,60 @@ function makeTextTexture(text, w, h, fg, bg) {
 function buildPlayerMesh(skinIdx, name, isMe) {
   const group = new THREE.Group();
   const color = SKIN_COLORS[skinIdx % SKIN_COLORS.length];
+  const skinMat = new THREE.MeshStandardMaterial({ color: 0xf6c27a, roughness: 0.5, metalness: 0.05 });
+  const suitMat = new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.35, emissive: color, emissiveIntensity: 0.1 });
 
-  // corpo (cápsula) — brilho/metálico, emissive sutil
-  const body = new THREE.Mesh(
-    new THREE.CapsuleGeometry(0.32, 0.7, 10, 18),
-    new THREE.MeshStandardMaterial({
-      color, roughness: 0.28, metalness: 0.45,
-      emissive: color, emissiveIntensity: 0.12,
-    })
-  );
-  body.position.y = 0.85;
+  // ----- pernas + sapatos -----
+  const pantsMat = new THREE.MeshStandardMaterial({ color: 0x241640, roughness: 0.75 });
+  const shoeMat  = new THREE.MeshStandardMaterial({ color: 0x140a24, roughness: 0.35, metalness: 0.4 });
+  for (const sx of [-0.15, 0.15]) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.09, 0.55, 12), pantsMat);
+    leg.position.set(sx, 0.33, 0);
+    leg.castShadow = true;
+    group.add(leg);
+    const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.12, 0.34), shoeMat);
+    shoe.position.set(sx, 0.06, 0.07);
+    shoe.castShadow = true;
+    group.add(shoe);
+  }
+
+  // ----- corpo (paletó) -----
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 0.5, 10, 18), suitMat);
+  body.position.y = 1.0;
   body.castShadow = true;
   group.add(body);
 
-  // detalhe: faixa brilhante no peito (mesma cor, mais emissive)
-  const sash = new THREE.Mesh(
-    new THREE.TorusGeometry(0.34, 0.04, 8, 24),
-    new THREE.MeshStandardMaterial({
-      color: 0xffd23f, roughness: 0.15, metalness: 0.8,
-      emissive: 0xffd23f, emissiveIntensity: 0.5,
-    })
+  // camisa clara no meio do peito
+  const shirt = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.17, 0.34, 8, 14),
+    new THREE.MeshStandardMaterial({ color: 0xfdf3d8, roughness: 0.6 })
   );
-  sash.position.y = 1.05;
-  sash.rotation.x = Math.PI / 2 + 0.18;
-  group.add(sash);
+  shirt.position.set(0, 1.0, 0.17);
+  shirt.scale.set(1, 1, 0.45);
+  group.add(shirt);
 
-  // cabeça (pele com leve brilho)
-  const head = new THREE.Mesh(
-    new THREE.SphereGeometry(0.28, 24, 18),
-    new THREE.MeshStandardMaterial({ color: 0xf6c27a, roughness: 0.5, metalness: 0.05 })
+  // gravata-borboleta na cor do jogador (brilha)
+  const bow = new THREE.Mesh(
+    new THREE.BoxGeometry(0.22, 0.09, 0.06),
+    new THREE.MeshStandardMaterial({ color, roughness: 0.2, metalness: 0.6, emissive: color, emissiveIntensity: 0.7 })
   );
+  bow.position.set(0, 1.32, 0.26);
+  group.add(bow);
+
+  // ----- braços + mãos -----
+  for (const sx of [-1, 1]) {
+    const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.4, 8, 12), suitMat);
+    arm.position.set(sx * 0.42, 1.0, 0);
+    arm.rotation.z = sx * 0.16;
+    arm.castShadow = true;
+    group.add(arm);
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 10), skinMat);
+    hand.position.set(sx * 0.49, 0.74, 0);
+    group.add(hand);
+  }
+
+  // ----- cabeça -----
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.28, 24, 18), skinMat);
   head.position.y = 1.55;
   head.castShadow = true;
   group.add(head);
@@ -972,14 +1113,14 @@ function buildPlayerMesh(skinIdx, name, isMe) {
     new THREE.CylinderGeometry(0.18, 0.18, 0.32, 16),
     new THREE.MeshStandardMaterial({ color: 0x1a0a2e, roughness: 0.35, metalness: 0.55 })
   );
-  hat.position.y = 1.86;
+  hat.position.y = 1.9;
   hat.castShadow = true;
   group.add(hat);
   const hatBrim = new THREE.Mesh(
     new THREE.CylinderGeometry(0.34, 0.34, 0.04, 18),
     new THREE.MeshStandardMaterial({ color: 0x1a0a2e, roughness: 0.35, metalness: 0.55 })
   );
-  hatBrim.position.y = 1.71;
+  hatBrim.position.y = 1.74;
   group.add(hatBrim);
   // banda do chapéu — GLOW na cor do jogador
   const hatBand = new THREE.Mesh(
@@ -989,13 +1130,13 @@ function buildPlayerMesh(skinIdx, name, isMe) {
       emissive: color, emissiveIntensity: 0.85,
     })
   );
-  hatBand.position.y = 1.72;
+  hatBand.position.y = 1.76;
   group.add(hatBand);
 
-  // olhinhos brilhantes (não ficam mais zumbi)
+  // olhinhos
   const eyeMat = new THREE.MeshStandardMaterial({
     color: 0xffffff, roughness: 0.1, metalness: 0.1,
-    emissive: 0xffffff, emissiveIntensity: 0.8,
+    emissive: 0xffffff, emissiveIntensity: 0.7,
   });
   const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.042, 12, 10), eyeMat);
   const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.042, 12, 10), eyeMat);
@@ -1009,6 +1150,14 @@ function buildPlayerMesh(skinIdx, name, isMe) {
   pupL.position.set(-0.09, 1.6, 0.27);
   pupR.position.set( 0.09, 1.6, 0.27);
   group.add(pupL); group.add(pupR);
+  // sorriso (meio-arco)
+  const smile = new THREE.Mesh(
+    new THREE.TorusGeometry(0.07, 0.016, 8, 16, Math.PI),
+    new THREE.MeshStandardMaterial({ color: 0x5a2326 })
+  );
+  smile.position.set(0, 1.49, 0.25);
+  smile.rotation.z = Math.PI;   // abre pra cima (sorriso)
+  group.add(smile);
 
   // tag com o nome
   const tag = new THREE.Sprite(new THREE.SpriteMaterial({
@@ -1099,6 +1248,12 @@ function syncPlayers(serverPlayers) {
       other.peer = p.peer || null;
     }
   }
+  // 2º andar: libera quando todas as mesas do térreo estão cheias
+  floor2Open = computeFloor2Open();
+  if (floor2Gate) floor2Gate.visible = !floor2Open;
+  if (floor2Open && !floor2WasOpen) showMsg('🆙 2º andar liberado! Suba pela rampa (lado leste).', 3600);
+  floor2WasOpen = floor2Open;
+
   // chat de voz: tenta conectar com peers novos / limpa quem saiu
   if (voiceState === 'on' || voiceState === 'muted') updateVoiceMesh();
   // remove quem saiu
@@ -1552,19 +1707,22 @@ function setupJoystick() {
 // ============================================================================
 function tryJump() {
   if (!me || me.seat) return;
-  // só pula se estiver no chão
-  if (me.mesh.position.y <= 0.001 && (me.vy ?? 0) <= 0) {
+  // só pula se estiver no chão (térreo ou sacada)
+  const gy = groundYAt(me.mesh.position.x, me.mesh.position.z);
+  if (me.mesh.position.y <= gy + 0.03 && (me.vy ?? 0) <= 0) {
     me.vy = JUMP_VEL;
   }
 }
 
 function updateMe(dt) {
-  // sentado: não anda nem pula
-  if (me.seat) { me.vy = 0; me.mesh.position.y = 0; return; }
-  // gravidade
+  // sentado: não anda nem pula (a altura vem da cadeira/andar)
+  if (me.seat) { me.vy = 0; return; }
+  // gravidade + chão (respeita rampa e sacada do 2º andar)
+  const gy = groundYAt(me.mesh.position.x, me.mesh.position.z);
   me.vy = (me.vy ?? 0) - GRAVITY * dt;
   me.mesh.position.y += me.vy * dt;
-  if (me.mesh.position.y < 0) { me.mesh.position.y = 0; me.vy = 0; }
+  if (me.mesh.position.y < gy) { me.mesh.position.y = gy; me.vy = 0; }
+  me.floor = (me.mesh.position.y > FLOOR2_Y * 0.5) ? 2 : 1;
   // input local: forward = +1 (W / joystick pra cima), right = +1 (D / joystick pra direita)
   let fwd = 0, right = 0;
   if (keys.w) fwd += 1; if (keys.s) fwd -= 1;
@@ -1594,6 +1752,12 @@ function updateMe(dt) {
       me.mesh.rotation.y += diff * Math.min(1, dt * 10);
     }
   }
+  // na sacada (2º andar): não cai pela borda sul — só desce pela rampa
+  if (me.floor === 2) {
+    const onRampX = me.mesh.position.x > RAMP_XMIN && me.mesh.position.x < RAMP_XMAX;
+    if (!onRampX && me.mesh.position.z > F2_EDGE_Z) me.mesh.position.z = F2_EDGE_Z;
+  }
+
   // shift lock: personagem sempre vira pra onde a câmera olha
   if (shiftLock) {
     let diff = camYaw - me.mesh.rotation.y;
@@ -1619,7 +1783,7 @@ function updateCamera() {
   const dist = 5.2, height = 3.0;
   const cx = me.mesh.position.x - Math.sin(camYaw) * dist;
   const cz = me.mesh.position.z - Math.cos(camYaw) * dist;
-  camera.position.set(cx, height, cz);
+  camera.position.set(cx, me.mesh.position.y + height, cz);
   camera.lookAt(me.mesh.position.x, me.mesh.position.y + 1.2, me.mesh.position.z);
 }
 
@@ -1648,6 +1812,9 @@ function updateInteract() {
   let bestSit = null, bestSitDist = INTERACT_DIST;
   let bestSpec = null, bestSpecDist = INTERACT_DIST + 0.6;
   for (const t of TABLES) {
+    // 2º andar só conta quando liberou; e a mesa precisa estar no MEU andar (altura parecida)
+    if ((t.floor || 1) === 2 && !floor2Open) continue;
+    if (Math.abs(me.mesh.position.y - (t.y || 0)) > 1.8) continue;
     const dx = me.mesh.position.x - t.x;
     const dz = me.mesh.position.z - t.z;
     const dTable = Math.hypot(dx, dz);
@@ -2158,7 +2325,7 @@ async function startGame(name) {
     group.rotation.y = Math.PI;
     scene.add(group);
     scene.add(shadowMesh);
-    me = { id: join.id, name, skin: join.skin, mesh: group, nameTag, shadowMesh, seat: null, vy: 0 };
+    me = { id: join.id, name, skin: join.skin, mesh: group, nameTag, shadowMesh, seat: null, vy: 0, floor: 1 };
     camYaw = Math.PI; // câmera começa olhando o salão
     document.getElementById('screen-loading').style.display = 'none';
     document.getElementById('hud-top').style.display = 'flex';

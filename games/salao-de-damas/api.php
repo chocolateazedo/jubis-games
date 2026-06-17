@@ -25,13 +25,19 @@ const CHAT_KEEP  = 25;    // quantas mensagens de chat manter no histórico
  * Mesas do salão (definição estática — cliente e servidor concordam pelos IDs).
  * Cada mesa tem 2 cadeiras opostas. Seat 0 fica no lado sul (z menor), seat 1 no norte.
  */
+const FLOOR2_Y = 4.5;     // altura do segundo andar (precisa bater com o index.html)
 const TABLES = [
-    ['id' => 't1', 'floor' => 1, 'x' => -9.0, 'z' => -6.0],
-    ['id' => 't2', 'floor' => 1, 'x' => -9.0, 'z' =>  6.0],
-    ['id' => 't3', 'floor' => 1, 'x' =>  9.0, 'z' => -6.0],
-    ['id' => 't4', 'floor' => 1, 'x' =>  9.0, 'z' =>  6.0],
-    ['id' => 't5', 'floor' => 1, 'x' =>  0.0, 'z' => -14.0],
-    ['id' => 't6', 'floor' => 1, 'x' =>  0.0, 'z' =>  14.0],
+    // térreo (floor 1) — y = 0
+    ['id' => 't1', 'floor' => 1, 'x' => -9.0, 'z' => -6.0, 'y' => 0.0],
+    ['id' => 't2', 'floor' => 1, 'x' => -9.0, 'z' =>  6.0, 'y' => 0.0],
+    ['id' => 't3', 'floor' => 1, 'x' =>  9.0, 'z' => -6.0, 'y' => 0.0],
+    ['id' => 't4', 'floor' => 1, 'x' =>  9.0, 'z' =>  6.0, 'y' => 0.0],
+    ['id' => 't5', 'floor' => 1, 'x' =>  0.0, 'z' => -14.0, 'y' => 0.0],
+    ['id' => 't6', 'floor' => 1, 'x' =>  0.0, 'z' =>  14.0, 'y' => 0.0],
+    // segundo andar (floor 2) — sobre a sacada norte, y = FLOOR2_Y. Libera quando o térreo lota.
+    ['id' => 'u1', 'floor' => 2, 'x' => -8.0, 'z' => -6.0, 'y' => FLOOR2_Y],
+    ['id' => 'u2', 'floor' => 2, 'x' =>  8.0, 'z' => -6.0, 'y' => FLOOR2_Y],
+    ['id' => 'u3', 'floor' => 2, 'x' =>  0.0, 'z' => -13.0, 'y' => FLOOR2_Y],
 ];
 const SEAT_OFFSET = 1.05;
 
@@ -212,9 +218,10 @@ function sit_salao(string $dir, array $in): array
     // posição-alvo da cadeira
     $seatX = $table['x'];
     $seatZ = $table['z'] + ($seatIx === 0 ? -SEAT_OFFSET : SEAT_OFFSET);
+    $seatY = $table['y'] ?? 0.0;                // andar da mesa (0 no térreo, FLOOR2_Y no 2º andar)
     $seatRot = $seatIx === 0 ? 0.0 : 3.14159;   // seat 0 olha pro norte; seat 1 pro sul
 
-    return with_lock($dir, function (array $state) use ($id, $tid, $seatIx, $seatX, $seatZ, $seatRot) {
+    return with_lock($dir, function (array $state) use ($id, $tid, $seatIx, $seatX, $seatZ, $seatY, $seatRot) {
         if (!isset($state['players'][$id])) return [$state, err('você saiu do salão')];
         $p =& $state['players'][$id];
 
@@ -227,16 +234,16 @@ function sit_salao(string $dir, array $in): array
             }
         }
 
-        // o jogador está perto o suficiente?
+        // o jogador está perto o suficiente? (no mesmo andar, em x/z)
         $dx = $p['x'] - $seatX; $dz = $p['z'] - $seatZ;
-        if (sqrt($dx*$dx + $dz*$dz) > SIT_DIST) {
+        if (sqrt($dx*$dx + $dz*$dz) > SIT_DIST || abs(($p['y'] ?? 0.0) - $seatY) > 1.8) {
             return [$state, err('chegue mais perto da cadeira')];
         }
 
         $p['seat'] = $seatKey;
         $p['x'] = $seatX;
         $p['z'] = $seatZ;
-        $p['y'] = 0.0;
+        $p['y'] = $seatY;
         $p['rot'] = $seatRot;
         $p['ts'] = time();
         unset($p);

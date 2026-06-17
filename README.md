@@ -69,10 +69,10 @@ Pronto! Faz upload e o jogo aparece automaticamente na página inicial. Não pre
 - Stickman runner (`games/stickman-runner`)
 - Jogo de Stop (`games/jogo-de-stop`)
 - Jogo de Inglês (`games/jogo-de-ingles`)
-- Xadrez x1 (`games/xadrez-x1`) — multiplayer online (PHP + polling)
-- Jubis Fire (`games/jubis-fire`) — battle royale 3D até 4 jogadores (Three.js + WebRTC/PeerJS, lobby em PHP)
+- Xadrez x1 (`games/xadrez-x1`) — multiplayer online (PHP + polling) com chat de texto entre os jogadores
+- Jubis Fire (`games/jubis-fire`) — battle royale 3D até 4 jogadores (Three.js + WebRTC/PeerJS, lobby em PHP) com chat de texto e chat de voz
 - Plantão dos Vovôs (`games/plantao-dos-vovos`) — aventura top-down 2D de cuidado a idosos
-- Salão de Damas (`games/salao-de-damas`) — salão 3D multiplayer online onde os jogadores andam de cartola, sentam nas mesas e jogam damas (com regra do **sopro**), conversam por **chat de texto** (balões 3D) e por **chat de voz** com proximidade (WebRTC/PeerJS)
+- Salão de Damas (`games/salao-de-damas`) — salão 3D multiplayer online onde os jogadores andam de cartola, sentam nas mesas e jogam damas (com regra do **sopro**), conversam por **chat de texto** (balões 3D) e por **chat de voz** com proximidade (WebRTC/PeerJS). Tem **2º andar** que abre quando o térreo lota
 
 ## Requisitos do servidor
 

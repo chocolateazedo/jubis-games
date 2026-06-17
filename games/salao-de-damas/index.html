@@ -899,7 +899,10 @@ function groundYAt(x, z) {
 function computeFloor2Open() {
   const f1 = TABLES.filter(t => (t.floor || 1) === 1);
   if (!f1.length) return false;
-  return f1.every(t => SEAT_USAGE.get(t.id + ':0') && SEAT_USAGE.get(t.id + ':1'));
+  // abre quando pelo menos 1 mesa do térreo estiver cheia (limite baixo pra dar pra testar;
+  // pra exigir o térreo TODO cheio, troque por f1.every(...))
+  const cheias = f1.filter(t => SEAT_USAGE.get(t.id + ':0') && SEAT_USAGE.get(t.id + ':1')).length;
+  return cheias >= 1;
 }
 
 // ----- Mesas e cadeiras (Fase 2) -----

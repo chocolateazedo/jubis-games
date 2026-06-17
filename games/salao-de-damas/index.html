@@ -881,12 +881,12 @@ function buildSecondFloor() {
     pole.position.set(sx, 0.5, RAMP_ZBOT - 0.2);
     floor2Gate.add(pole);
   }
+  floor2Gate.visible = false;   // 2º andar é de acesso livre; corda fica escondida
   scene.add(floor2Gate);
 }
 
 // altura do chão na posição (x,z) — leva em conta a rampa e a sacada do 2º andar
 function groundYAt(x, z) {
-  if (!floor2Open) return 0;
   const onRampX = x > RAMP_XMIN && x < RAMP_XMAX;
   if (onRampX && z < RAMP_ZBOT && z > RAMP_ZTOP) {
     const t = (RAMP_ZBOT - z) / (RAMP_ZBOT - RAMP_ZTOP);   // 0 embaixo, 1 em cima
@@ -1251,11 +1251,9 @@ function syncPlayers(serverPlayers) {
       other.peer = p.peer || null;
     }
   }
-  // 2º andar: libera quando todas as mesas do térreo estão cheias
-  floor2Open = computeFloor2Open();
-  if (floor2Gate) floor2Gate.visible = !floor2Open;
-  if (floor2Open && !floor2WasOpen) showMsg('🆙 2º andar liberado! Suba pela rampa (lado leste).', 3600);
-  floor2WasOpen = floor2Open;
+  // 2º andar sempre acessível pela rampa (lado leste) — sem precisar lotar o térreo
+  floor2Open = true;
+  if (floor2Gate) floor2Gate.visible = false;
 
   // chat de voz: tenta conectar com peers novos / limpa quem saiu
   if (voiceState === 'on' || voiceState === 'muted') updateVoiceMesh();
@@ -1815,8 +1813,7 @@ function updateInteract() {
   let bestSit = null, bestSitDist = INTERACT_DIST;
   let bestSpec = null, bestSpecDist = INTERACT_DIST + 0.6;
   for (const t of TABLES) {
-    // 2º andar só conta quando liberou; e a mesa precisa estar no MEU andar (altura parecida)
-    if ((t.floor || 1) === 2 && !floor2Open) continue;
+    // a mesa precisa estar no MEU andar (altura parecida)
     if (Math.abs(me.mesh.position.y - (t.y || 0)) > 1.8) continue;
     const dx = me.mesh.position.x - t.x;
     const dz = me.mesh.position.z - t.z;

@@ -17,6 +17,16 @@ DirectoryIndex index.php index.html
   ExpiresByType image/webp          "access plus 30 days"
 </IfModule>
 
+# HTML e PHP NÃO ficam em cache: assim toda atualização aparece na hora
+# (os .js/.css mudam de versão via ?v=N, então podem ter cache longo)
+<IfModule mod_headers.c>
+  <FilesMatch "\.(html|php)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+  </FilesMatch>
+</IfModule>
+
 # Não permitir listagem de diretórios
 Options -Indexes
 

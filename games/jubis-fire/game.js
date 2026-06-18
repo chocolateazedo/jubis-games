@@ -4,11 +4,11 @@
 
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { CONFIG, ZONE_DAMAGE, computeZone, clamp, lerp } from './shared.js?v=3';
-import { CHARACTERS, getCharacter, buildBody, animateBody } from './characters.js?v=3';
-import { buildArena, resolveCollisions } from './arena.js?v=3';
-import { lobby, Net } from './net.js?v=3';
-import * as Sound from './sounds.js?v=3';
+import { CONFIG, ZONE_DAMAGE, computeZone, clamp, lerp } from './shared.js?v=4';
+import { CHARACTERS, getCharacter, buildBody, animateBody } from './characters.js?v=4';
+import { buildArena, resolveCollisions } from './arena.js?v=4';
+import { lobby, Net } from './net.js?v=4';
+import * as Sound from './sounds.js?v=4';
 
 const $ = (id) => document.getElementById(id);
 const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;

@@ -1284,6 +1284,12 @@ function bindInput() {
     keys[e.code] = true;
     if (e.code === 'Space') input.jump = true;
     if (e.code === 'KeyQ' && !e.repeat) toggleCamMode();
+    // Shift Lock (igual ao Salão): trava/destrava o mouse
+    if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !e.repeat) {
+      e.preventDefault();
+      if (document.pointerLockElement) document.exitPointerLock();
+      else if (status === 'playing') renderer?.domElement?.requestPointerLock?.();
+    }
     if (e.code === 'KeyE' && !e.repeat) throwGrenade();
     if (e.code === 'KeyX' && !e.repeat) doSpecial();
     // elevador: escolher andar pelo teclado (1/2/3 ou numpad) quando estiver nele
@@ -1315,6 +1321,15 @@ function bindInput() {
     if (!document.pointerLockElement) return;
     yaw -= e.movementX * 0.0024;
     pitch = clamp(pitch + e.movementY * 0.0024, -0.5, 1.0);
+  });
+
+  // Shift Lock (igual ao Salão de Damas): selo "🔒 Shift Lock" enquanto o mouse está travado
+  const lockBadge = document.createElement('div');
+  lockBadge.textContent = '🔒 Shift Lock';
+  lockBadge.style.cssText = 'position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:60;background:rgba(0,0,0,.55);border:1px solid rgba(255,210,63,.5);color:#ffd23f;font-weight:800;font-size:12px;padding:6px 12px;border-radius:10px;display:none;pointer-events:none;font-family:Arial,sans-serif';
+  document.body.appendChild(lockBadge);
+  document.addEventListener('pointerlockchange', () => {
+    lockBadge.style.display = document.pointerLockElement ? 'block' : 'none';
   });
 
   // touch

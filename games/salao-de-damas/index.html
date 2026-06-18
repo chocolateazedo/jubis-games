@@ -1055,19 +1055,24 @@ function buildPlayerMesh(skinIdx, name, isMe) {
   const color = SKIN_COLORS[skinIdx % SKIN_COLORS.length];
   const skinMat = new THREE.MeshStandardMaterial({ color: 0xf6c27a, roughness: 0.5, metalness: 0.05 });
   const suitMat = new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.35, emissive: color, emissiveIntensity: 0.1 });
+  const limbs = { legL: null, legR: null, armL: null, armR: null };
 
-  // ----- pernas + sapatos -----
+  // ----- pernas + sapatos (em grupos-quadril pra balançar ao andar) -----
   const pantsMat = new THREE.MeshStandardMaterial({ color: 0x241640, roughness: 0.75 });
   const shoeMat  = new THREE.MeshStandardMaterial({ color: 0x140a24, roughness: 0.35, metalness: 0.4 });
-  for (const sx of [-0.15, 0.15]) {
+  for (const [side, sx] of [['L', -0.15], ['R', 0.15]]) {
+    const hip = new THREE.Group();
+    hip.position.set(sx, 0.6, 0);     // pivô no quadril
     const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.09, 0.55, 12), pantsMat);
-    leg.position.set(sx, 0.33, 0);
+    leg.position.y = -0.27;
     leg.castShadow = true;
-    group.add(leg);
+    hip.add(leg);
     const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.12, 0.34), shoeMat);
-    shoe.position.set(sx, 0.06, 0.07);
+    shoe.position.set(0, -0.54, 0.07);
     shoe.castShadow = true;
-    group.add(shoe);
+    hip.add(shoe);
+    group.add(hip);
+    limbs['leg' + side] = hip;
   }
 
   // ----- corpo (paletó) -----
@@ -1093,16 +1098,20 @@ function buildPlayerMesh(skinIdx, name, isMe) {
   bow.position.set(0, 1.32, 0.26);
   group.add(bow);
 
-  // ----- braços + mãos -----
-  for (const sx of [-1, 1]) {
+  // ----- braços + mãos (em grupos-ombro pra balançar ao andar) -----
+  for (const [side, sgn] of [['L', -1], ['R', 1]]) {
+    const sh = new THREE.Group();
+    sh.position.set(sgn * 0.42, 1.2, 0);   // pivô no ombro
+    sh.rotation.z = sgn * 0.16;
     const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.4, 8, 12), suitMat);
-    arm.position.set(sx * 0.42, 1.0, 0);
-    arm.rotation.z = sx * 0.16;
+    arm.position.y = -0.2;
     arm.castShadow = true;
-    group.add(arm);
+    sh.add(arm);
     const hand = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 10), skinMat);
-    hand.position.set(sx * 0.49, 0.74, 0);
-    group.add(hand);
+    hand.position.y = -0.46;
+    sh.add(hand);
+    group.add(sh);
+    limbs['arm' + side] = sh;
   }
 
   // ----- cabeça -----
@@ -1180,7 +1189,38 @@ function buildPlayerMesh(skinIdx, name, isMe) {
   shadowMesh.position.y = 0.015;
   shadowMesh.renderOrder = -1;
 
-  return { group, nameTag: tag, shadowMesh };
+  return { group, nameTag: tag, shadowMesh, limbs };
+}
+
+// balança pernas e braços de quem está andando
+function animateLimbs(dt) {
+  const step = (P) => {
+    if (!P || !P.limbs || !P.mesh) return;
+    const mesh = P.mesh;
+    const dx = mesh.position.x - (P._px ?? mesh.position.x);
+    const dz = mesh.position.z - (P._pz ?? mesh.position.z);
+    P._px = mesh.position.x; P._pz = mesh.position.z;
+    const speed = Math.hypot(dx, dz) / Math.max(dt, 0.0001);
+    const moving = !P.seat && speed > 0.4;
+    P._walk = P._walk ?? 0;
+    if (moving) {
+      P._walk += dt * 9;
+      const s = Math.sin(P._walk) * 0.5;
+      if (P.limbs.legL) P.limbs.legL.rotation.x = s;
+      if (P.limbs.legR) P.limbs.legR.rotation.x = -s;
+      if (P.limbs.armL) P.limbs.armL.rotation.x = -s * 0.6;
+      if (P.limbs.armR) P.limbs.armR.rotation.x = s * 0.6;
+    } else {
+      // volta suave pra posição de descanso
+      const k = Math.min(1, dt * 10);
+      for (const key of ['legL', 'legR', 'armL', 'armR']) {
+        const l = P.limbs[key];
+        if (l) l.rotation.x += (0 - l.rotation.x) * k;
+      }
+    }
+  };
+  step(me);
+  for (const o of players.values()) step(o);
 }
 
 function makeNameTagTexture(name, isMe) {
@@ -1231,14 +1271,14 @@ function syncPlayers(serverPlayers) {
 
     let other = players.get(p.id);
     if (!other) {
-      const { group, nameTag, shadowMesh } = buildPlayerMesh(p.skin, p.name, false);
+      const { group, nameTag, shadowMesh, limbs } = buildPlayerMesh(p.skin, p.name, false);
       group.position.set(p.x, p.y, p.z);
       group.rotation.y = p.rot;
       group.userData.id = p.id;
       group.userData.name = p.name;
       scene.add(group);
       scene.add(shadowMesh);
-      other = { mesh: group, nameTag, shadowMesh, target: { x: p.x, y: p.y, z: p.z, rot: p.rot }, seat: p.seat || null, peer: p.peer || null };
+      other = { mesh: group, nameTag, shadowMesh, limbs, target: { x: p.x, y: p.y, z: p.z, rot: p.rot }, seat: p.seat || null, peer: p.peer || null };
       players.set(p.id, other);
     } else {
       other.target.x = p.x; other.target.y = p.y; other.target.z = p.z; other.target.rot = p.rot;
@@ -2277,6 +2317,7 @@ function animate() {
     syncShadows();
     updateCamera();
     updateInteract();
+    animateLimbs(dt);
     updateBubbles();
     updateVoice();
     // polling
@@ -2320,12 +2361,12 @@ async function startGame(name) {
     if (!renderer) initThree();
     TABLES = Array.isArray(join.tables) ? join.tables : [];
     buildTables(TABLES);
-    const { group, nameTag, shadowMesh } = buildPlayerMesh(join.skin, name, true);
+    const { group, nameTag, shadowMesh, limbs } = buildPlayerMesh(join.skin, name, true);
     group.position.set(0, 0, 18);
     group.rotation.y = Math.PI;
     scene.add(group);
     scene.add(shadowMesh);
-    me = { id: join.id, name, skin: join.skin, mesh: group, nameTag, shadowMesh, seat: null, vy: 0, floor: 1 };
+    me = { id: join.id, name, skin: join.skin, mesh: group, nameTag, shadowMesh, limbs, seat: null, vy: 0, floor: 1 };
     camYaw = Math.PI; // câmera começa olhando o salão
     document.getElementById('screen-loading').style.display = 'none';
     document.getElementById('hud-top').style.display = 'flex';

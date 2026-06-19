@@ -60,6 +60,7 @@ let micStream = null;            // MediaStream do microfone
 let voiceState = 'off';          // 'off' | 'connecting' | 'on' | 'muted'
 let voiceMuted = false;
 const voiceCalls = new Map();    // peerId remoto -> { call, audioEl }
+let voiceMeshTimer = null;       // re-tenta a malha de voz enquanto a voz está ligada
 
 // ============================================================
 // BOOT — cria o Peer (PeerJS) e prepara o lobby
@@ -69,7 +70,15 @@ function boot() {
   if (isTouch) $('pcHint').classList.add('hidden'); // no celular usa o botão 👁 Visão
   $('pname').value = localStorage.getItem('jubis-fire-name') || '';
   lobbyMsg('Conectando…');
-  peer = new window.Peer(undefined, { debug: 1 });
+  // STUN + TURN (grátis) pra voz/dados atravessarem firewalls/NAT na maioria das redes
+  const iceServers = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+  ];
+  peer = new window.Peer(undefined, { debug: 1, config: { iceServers } });
   peer.on('open', (id) => { myPeerId = id; lobbyMsg(''); enableLobby(true); });
   peer.on('error', (e) => lobbyMsg('Erro de conexão: ' + e.type + ' — recarregue a página.', true));
   peer.on('disconnected', () => { try { peer.reconnect(); } catch {} });
@@ -1063,7 +1072,7 @@ function resetChat() {
 }
 
 function openChat() {
-  if (!net || chatOpen || status !== 'playing') return;
+  if (chatOpen || status !== 'playing') return;   // funciona solo também (mostra suas msgs)
   chatOpen = true;
   $('chatInputWrap').classList.add('show');
   const inp = $('chatText');
@@ -1085,10 +1094,10 @@ function sendChat() {
   const inp = $('chatText');
   const text = inp.value.trim().slice(0, 140);
   closeChat();
-  if (!text || !net) return;
-  // mostra a própria mensagem na hora e envia pela rede
+  if (!text) return;
+  // mostra a própria mensagem na hora e envia pela rede (quando houver outros)
   onChat({ name: myName || 'Você', text });
-  net.sendChat(myName || 'Você', text);
+  if (net) net.sendChat(myName || 'Você', text);
 }
 
 // recebe (host: dos clientes / re-transmite; cliente: do host) e mostra
@@ -1145,6 +1154,11 @@ async function enableVoice() {
   voiceState = 'on';
   updateVoiceButton();
   updateVoiceMesh();
+  // re-tenta a malha a cada 1,5s: peers entram/saem e ligam a voz em momentos diferentes
+  if (voiceMeshTimer) clearInterval(voiceMeshTimer);
+  voiceMeshTimer = setInterval(() => {
+    if ((voiceState === 'on' || voiceState === 'muted') && net) updateVoiceMesh();
+  }, 1500);
 }
 
 function updateVoiceButton() {
@@ -1203,6 +1217,7 @@ function removeVoiceCall(peerId) {
 }
 
 function stopVoice() {
+  if (voiceMeshTimer) { clearInterval(voiceMeshTimer); voiceMeshTimer = null; }
   for (const id of [...voiceCalls.keys()]) removeVoiceCall(id);
   if (micStream) { try { micStream.getTracks().forEach((t) => t.stop()); } catch {} }
   micStream = null;

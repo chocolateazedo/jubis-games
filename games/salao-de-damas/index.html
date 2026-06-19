@@ -1968,28 +1968,39 @@ async function sendChat() {
   } catch (e) { /* erros temporários não importam */ }
 }
 
+let chatLogSig = '';
 function syncChat(messages) {
   if (!Array.isArray(messages)) return;
   const firstTime = !chatInited;
+  const prevSeq = lastChatSeq;
   let maxSeq = lastChatSeq;
+  // balão 3D só pras mensagens NOVAS (não repete o histórico ao entrar)
   for (const m of messages) {
-    if (!m || m.seq <= lastChatSeq) continue;
-    appendChatLine(m);
-    if (!firstTime) showBubbleFor(m);   // balão só pra mensagens novas (não no histórico ao entrar)
+    if (!m || m.seq <= prevSeq) continue;
+    if (!firstTime) showBubbleFor(m);
     if (m.seq > maxSeq) maxSeq = m.seq;
   }
   lastChatSeq = maxSeq;
   chatInited = true;
+  renderChatLog(messages);
 }
 
-function appendChatLine(m) {
+// re-renderiza o log inteiro a partir do servidor — assim, quando alguém sai e
+// as mensagens dele são apagadas, somem da tela de quem ficou também
+function renderChatLog(messages) {
+  const recent = messages.slice(-6);
+  const sig = recent.map(m => m.seq + ':' + (m.text || '')).join('|');
+  if (sig === chatLogSig) return;   // nada mudou: não re-renderiza (evita piscar)
+  chatLogSig = sig;
   const logEl = document.getElementById('chat-log');
-  const line = document.createElement('div');
-  line.className = 'chat-line';
-  const col = colorHexForSkin(m.skin);
-  line.innerHTML = `<b style="color:${col}">${escapeHtml(m.name)}:</b> ${escapeHtml(m.text)}`;
-  logEl.appendChild(line);
-  while (logEl.children.length > 6) logEl.removeChild(logEl.firstChild);
+  logEl.innerHTML = '';
+  for (const m of recent) {
+    const line = document.createElement('div');
+    line.className = 'chat-line';
+    const col = colorHexForSkin(m.skin);
+    line.innerHTML = `<b style="color:${col}">${escapeHtml(m.name)}:</b> ${escapeHtml(m.text)}`;
+    logEl.appendChild(line);
+  }
 }
 
 function showBubbleFor(m) {
@@ -2083,10 +2094,19 @@ let RING_TEX = null;
 const voiceCooldown = new Map();   // peerId -> próxima hora (ms) que posso tentar ligar de novo
 const VOICE_RETRY_MS = 3500;
 
+// STUN + TURN (grátis) pra voz atravessar firewalls/NAT na maioria das redes
+const ICE_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+];
+
 function ensurePeer() {
   if (peer || !window.Peer) return;
   try {
-    peer = new window.Peer(undefined, { debug: 1 });
+    peer = new window.Peer(undefined, { debug: 1, config: { iceServers: ICE_SERVERS } });
   } catch (e) { return; }
   peer.on('open', (id) => { myPeerId = id; peerIdSynced = false; });
   peer.on('error', () => { /* erros transitórios não derrubam o jogo */ });

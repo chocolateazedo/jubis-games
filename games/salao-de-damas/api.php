@@ -540,9 +540,22 @@ function leave_salao(string $dir, array $in): array
 
     return with_lock($dir, function (array $state) use ($id) {
         $state = release_seat_if_any($state, $id);
+        $state = remove_player_chat($state, $id);   // apaga tudo que essa pessoa mandou
         unset($state['players'][$id]);
         return [$state, ['ok' => true]];
     });
+}
+
+// remove do histórico todas as mensagens de um jogador (quando ele sai/cai)
+function remove_player_chat(array $state, string $playerId): array
+{
+    if (!empty($state['chat'])) {
+        $state['chat'] = array_values(array_filter(
+            $state['chat'],
+            fn($m) => ($m['id'] ?? '') !== $playerId
+        ));
+    }
+    return $state;
 }
 
 // ----------------------------------------------------------------------------
@@ -583,6 +596,7 @@ function gc(array $state): array
     foreach ($state['players'] as $id => $p) {
         if (($now - ($p['ts'] ?? 0)) > PLAYER_TTL) {
             $state = release_seat_if_any($state, $id);
+            $state = remove_player_chat($state, $id);   // quem cai some com as mensagens dele
             unset($state['players'][$id]);
         }
     }
@@ -591,6 +605,10 @@ function gc(array $state): array
         if (($m['winner'] ?? null) !== null && ($now - ($m['endedAt'] ?? 0)) > 8) {
             unset($state['matches'][$tid]);
         }
+    }
+    // salão vazio: zera o histórico do chat (mantém o chatSeq crescente pra não confundir clientes)
+    if (count($state['players']) === 0 && !empty($state['chat'])) {
+        $state['chat'] = [];
     }
     return $state;
 }

@@ -136,6 +136,12 @@
       return slot === 0 ? { x: W * 0.93, y: H * 0.5 } : slot === 1 ? { x: W * 0.70, y: H * 0.30 } : { x: W * 0.70, y: H * 0.70 };
     }
     const NUMS = [1, 10, 9];
+    // craques: nome + número por time/lugar (slot 0 = goleiro).
+    // (extras pra quando crescer: Mbappé, Haaland, Vini Jr, De Bruyne, Modric…)
+    const ROSTER = [
+      [ { name: 'Alisson', num: 1 }, { name: 'Messi', num: 10 }, { name: 'Neymar', num: 11 } ],   // time 0 (azul)
+      [ { name: 'Ederson', num: 1 }, { name: 'C. Ronaldo', num: 7 }, { name: 'Casemiro', num: 5 } ], // time 1 (vermelho)
+    ];
     const ALL_SLOTS = [[0, 0], [0, 1], [0, 2], [1, 0], [1, 1], [1, 2]];
     const HUMAN_SLOTS = [[0, 1], [1, 1], [0, 2], [1, 2]];
 
@@ -148,7 +154,8 @@
     function buildPlayers() {
       players = ALL_SLOTS.map(([team, slot], i) => {
         const h = home(team, slot);
-        return { i, team, slot, num: NUMS[slot], x: h.x, y: h.y, vx: 0, vy: 0, face: team === 0 ? 0 : Math.PI, isHuman: false, kickCd: 0, name: '' };
+        const r = (ROSTER[team] && ROSTER[team][slot]) || { name: '', num: NUMS[slot] };
+        return { i, team, slot, num: r.num, x: h.x, y: h.y, vx: 0, vy: 0, face: team === 0 ? 0 : Math.PI, isHuman: false, kickCd: 0, name: r.name };
       });
     }
     function idxOf(team, slot) { return players.findIndex(p => p.team === team && p.slot === slot); }
@@ -381,6 +388,28 @@
       const top = new THREE.Mesh(new THREE.PlaneGeometry(GOAL_H, depth), netMat); top.position.set(gx + side * depth / 2, gh, 0); top.rotation.x = Math.PI / 2; top.rotation.z = Math.PI / 2; g.add(top);
       return g;
     }
+    // plaquinha 3D com o nome do craque (sprite sempre virado pra câmera)
+    function makeNameSprite(text) {
+      const fs = 40, pad = 12;
+      const c = document.createElement('canvas');
+      let g = c.getContext('2d');
+      g.font = '800 ' + fs + 'px Arial';
+      const w = Math.ceil(g.measureText(text).width) + pad * 2, h = fs + pad * 2;
+      c.width = w; c.height = h;
+      g = c.getContext('2d');
+      g.font = '800 ' + fs + 'px Arial'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillStyle = 'rgba(8,14,26,.72)';
+      if (g.roundRect) { g.beginPath(); g.roundRect(0, 0, w, h, 14); g.fill(); } else { g.fillRect(0, 0, w, h); }
+      g.lineWidth = 5; g.strokeStyle = 'rgba(0,0,0,.6)'; g.strokeText(text, w / 2, h / 2 + 2);
+      g.fillStyle = '#fff'; g.fillText(text, w / 2, h / 2 + 2);
+      const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+      const worldH = 30;
+      sp.scale.set(worldH * w / h, worldH, 1);
+      sp.position.y = PR * 3.3;
+      sp.renderOrder = 10;
+      return sp;
+    }
     function makePlayerMesh(team, slot) {
       const g = new THREE.Group();
       const jersey = slot === 0 ? GK_COL : TEAM_COL[team], legc = slot === 0 ? GK_DK : TEAM_DK[team];
@@ -395,6 +424,9 @@
       const legL = new THREE.Mesh(legGeo, legMat); legL.position.set(0, PR * 0.42, PR * 0.24); legL.castShadow = true; g.add(legL);
       const legR = new THREE.Mesh(legGeo, legMat); legR.position.set(0, PR * 0.42, -PR * 0.24); legR.castShadow = true; g.add(legR);
       const botMark = new THREE.Mesh(new THREE.SphereGeometry(PR * 0.16, 10, 8), new THREE.MeshStandardMaterial({ color: 0x9fe0ff, emissive: 0x2a6a88 })); botMark.position.y = PR * 2.7; g.add(botMark);
+      // nome do craque acima da cabeça (deriva do ROSTER -> aparece pra host e guests)
+      const rr = (ROSTER[team] && ROSTER[team][slot]) ? ROSTER[team][slot] : null;
+      if (rr && rr.name) g.add(makeNameSprite(rr.name));
       g.userData = { legL, legR, botMark };
       return g;
     }

@@ -32,6 +32,9 @@
     #stick { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px; border-radius: 50%; background: rgba(120,200,255,.85); }
     #kick { position: fixed; right: 26px; bottom: 42px; width: 104px; height: 104px; border-radius: 50%; z-index: 25;
       background: rgba(60,200,110,.9); color: #06351a; border: none; font-weight: 900; font-size: 18px; }
+    #bdrib, #brast { position: fixed; right: 30px; width: 92px; height: 60px; border-radius: 14px; z-index: 25; border: none; font-weight: 900; font-size: 14px; }
+    #bdrib { bottom: 158px; background: rgba(120,200,255,.93); color: #06243a; }
+    #brast { bottom: 228px; background: rgba(255,176,84,.93); color: #3a1e00; }
     #ui { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; padding: 16px;
       background: rgba(6,12,20,.55); }
     #ui.hidden { display: none; }
@@ -70,6 +73,8 @@
 
   <div class="touch">
     <div id="joy"><div id="stick"></div></div>
+    <button id="brast" type="button">RASTEIRA</button>
+    <button id="bdrib" type="button">DRIBLE</button>
     <button id="kick" type="button">CHUTAR</button>
   </div>
 
@@ -84,7 +89,7 @@
         <button class="btn" id="bJoin">Entrar</button>
       </div>
       <p class="err" id="menuErr"></p>
-      <p class="small">🕹️ Mexa no direcional (ou setas/WASD). ⚽ Encoste pra conduzir e aperte CHUTAR (ou espaço).</p>
+      <p class="small">🕹️ Direcional/WASD pra andar. ⚽ Encoste e CHUTAR (espaço). 🦵 <b>R</b> = rasteira (rouba a bola) · ✨ <b>Q</b> = drible (derruba quem te marca).</p>
     </div>
 
     <div class="card" id="lobby">
@@ -155,19 +160,28 @@
       players = ALL_SLOTS.map(([team, slot], i) => {
         const h = home(team, slot);
         const r = (ROSTER[team] && ROSTER[team][slot]) || { name: '', num: NUMS[slot] };
-        return { i, team, slot, num: r.num, x: h.x, y: h.y, vx: 0, vy: 0, face: team === 0 ? 0 : Math.PI, isHuman: false, kickCd: 0, name: r.name };
+        return { i, team, slot, num: r.num, x: h.x, y: h.y, vx: 0, vy: 0, face: team === 0 ? 0 : Math.PI, isHuman: false, kickCd: 0, fallen: 0, tackle: 0, dribCd: 0, name: r.name };
       });
     }
     function idxOf(team, slot) { return players.findIndex(p => p.team === team && p.slot === slot); }
     function resetPositions() {
-      for (const p of players) { const h = home(p.team, p.slot); p.x = h.x; p.y = h.y; p.vx = p.vy = 0; p.face = p.team === 0 ? 0 : Math.PI; }
+      for (const p of players) { const h = home(p.team, p.slot); p.x = h.x; p.y = h.y; p.vx = p.vy = 0; p.face = p.team === 0 ? 0 : Math.PI; p.fallen = 0; p.tackle = 0; }
       ball = mkBall();
     }
 
     // ---------------- input local ----------------
     const keys = {};
-    let kickEdge = false;
-    addEventListener('keydown', e => { keys[e.code] = true; if (['Space', 'KeyK', 'Enter'].includes(e.code)) { kickEdge = true; e.preventDefault(); } });
+    let kickEdge = false, rastEdge = false, dribEdge = false;
+    // ações expostas pros botões de mobile (a outra IA pode ligar os botões nelas)
+    const doRasteira = () => { rastEdge = true; };
+    const doDrible = () => { dribEdge = true; };
+    window.doRasteira = doRasteira; window.doDrible = doDrible;
+    addEventListener('keydown', e => {
+      keys[e.code] = true;
+      if (['Space', 'KeyK', 'Enter'].includes(e.code)) { kickEdge = true; e.preventDefault(); }
+      if (e.code === 'KeyR') { rastEdge = true; e.preventDefault(); }   // rasteira
+      if (e.code === 'KeyQ') { dribEdge = true; e.preventDefault(); }   // drible
+    });
     addEventListener('keyup', e => { keys[e.code] = false; });
     const joy = { x: 0, y: 0, id: null, cx: 0, cy: 0 };
     const joyEl = document.getElementById('joy'), stickEl = document.getElementById('stick');
@@ -175,6 +189,11 @@
     addEventListener('touchmove', e => { for (const t of e.changedTouches) if (t.identifier === joy.id) { joy.x = clamp((t.clientX - joy.cx) / 52, -1, 1); joy.y = clamp((t.clientY - joy.cy) / 52, -1, 1); stickEl.style.transform = `translate(${joy.x * 34}px,${joy.y * 34}px)`; } }, { passive: false });
     addEventListener('touchend', e => { for (const t of e.changedTouches) if (t.identifier === joy.id) { joy.id = null; joy.x = joy.y = 0; stickEl.style.transform = ''; } });
     document.getElementById('kick').addEventListener('touchstart', e => { kickEdge = true; e.preventDefault(); }, { passive: false });
+    { // botões de rasteira/drible no mobile
+      const bd = document.getElementById('bdrib'), brt = document.getElementById('brast');
+      if (bd) { bd.addEventListener('touchstart', e => { doDrible(); e.preventDefault(); }, { passive: false }); bd.addEventListener('click', doDrible); }
+      if (brt) { brt.addEventListener('touchstart', e => { doRasteira(); e.preventDefault(); }, { passive: false }); brt.addEventListener('click', doRasteira); }
+    }
     function localDir() {
       let dx = (keys['KeyD'] || keys['ArrowRight'] ? 1 : 0) - (keys['KeyA'] || keys['ArrowLeft'] ? 1 : 0) + joy.x;
       let dy = (keys['KeyS'] || keys['ArrowDown'] ? 1 : 0) - (keys['KeyW'] || keys['ArrowUp'] ? 1 : 0) + joy.y;
@@ -200,6 +219,7 @@
       for (const p of mates) if (p.slot > 0 && !p.isHuman) { const d = dist(p, ball); if (d < cd) { cd = d; chaser = p; } }
       for (const p of mates) {
         if (p.isHuman) continue;
+        if (p.fallen > 0) { p.vx = p.vy = 0; continue; }   // bot caído não anda
         let tx, ty;
         if (ball.owner === p.i) { tx = oppGoalX; ty = clamp(ball.y + ((H / 2) - ball.y) * 0.3, 70, H - 70); p.face = Math.atan2(ty - p.y, oppGoalX - p.x); }
         else if (p === chaser) { tx = ball.x; ty = ball.y; p.face = Math.atan2(ball.y - p.y, ball.x - p.x); }
@@ -212,19 +232,49 @@
       }
     }
     function simulate(dt, inputs) {
-      for (const p of players) if (p.kickCd > 0) p.kickCd -= dt;
-      for (const p of players) { if (!p.isHuman) continue; const inp = inputs[p.i] || { dx: 0, dy: 0, l: 0, kick: false }; applyHumanMove(p, inp); if (inp.kick) tryKick(p, p.face, KICK); }
+      for (const p of players) { if (p.kickCd > 0) p.kickCd -= dt; if (p.fallen > 0) p.fallen -= dt; if (p.tackle > 0) p.tackle -= dt; if (p.dribCd > 0) p.dribCd -= dt; }
+      // humanos: mover + chutar + RASTEIRA (arranque deslizando pra roubar)
+      for (const p of players) {
+        if (!p.isHuman) continue;
+        const inp = inputs[p.i] || { dx: 0, dy: 0, l: 0, kick: false };
+        if (p.fallen > 0) { p.vx = p.vy = 0; continue; }   // caído no chão não anda
+        applyHumanMove(p, inp);
+        if (inp.kick) tryKick(p, p.face, KICK);
+        if (inp.rast && p.tackle <= 0 && p.kickCd <= 0) {
+          p.tackle = 0.4; p.kickCd = 0.5;
+          p.vx = Math.cos(p.face) * HUMAN_SPD * 1.9; p.vy = Math.sin(p.face) * HUMAN_SPD * 1.9;
+        }
+      }
+      // DRIBLE: derruba oponentes coladinhos (quem tentou roubar cai) + arranque
+      for (const p of players) {
+        if (!p.isHuman || p.fallen > 0) continue;
+        const inp = inputs[p.i]; if (!inp || !inp.drib || p.dribCd > 0) continue;
+        p.dribCd = 0.8;
+        for (const op of players) {
+          if (op.team === p.team || op.fallen > 0) continue;
+          if (dist(p, op) < PR * 2.6) { op.fallen = 1.2; op.tackle = 0; op.vx = op.vy = 0; }
+        }
+        p.vx += Math.cos(p.face) * HUMAN_SPD * 0.5; p.vy += Math.sin(p.face) * HUMAN_SPD * 0.5;
+      }
       botUpdate(0); botUpdate(1);
       for (const p of players) { p.x = clamp(p.x + p.vx * dt, PR, W - PR); p.y = clamp(p.y + p.vy * dt, PR, H - PR); }
       for (let a = 0; a < players.length; a++) for (let b = a + 1; b < players.length; b++) {
         const pa = players[a], pb = players[b], dx = pb.x - pa.x, dy = pb.y - pa.y, d = Math.hypot(dx, dy), min = PR * 2;
         if (d > 0 && d < min) { const push = (min - d) / 2, nx = dx / d, ny = dy / d; pa.x -= nx * push; pa.y -= ny * push; pb.x += nx * push; pb.y += ny * push; }
       }
+      // RASTEIRA: quem está deslizando e alcança a bola rouba a posse
+      for (const p of players) {
+        if (p.tackle > 0 && dist(p, ball) < PR + BR + 18) {
+          const prev = ball.owner;
+          if (prev == null || players[prev].team !== p.team) { ball.owner = p.i; ball.kickLock = 0; }
+        }
+      }
+      if (ball.owner != null && players[ball.owner].fallen > 0) ball.owner = null;   // caído solta a bola
       // posse de bola (conduzir ao tocar)
       if (ball.kickLock > 0) { ball.kickLock -= dt; ball.owner = null; }
       else {
         const touch = PR + BR + 9; let best = null, bd = 1e9;
-        for (const p of players) { const d = dist(p, ball); if (d < bd) { bd = d; best = p; } }
+        for (const p of players) { if (p.fallen > 0) continue; const d = dist(p, ball); if (d < bd) { bd = d; best = p; } }
         const cur = ball.owner != null ? players[ball.owner] : null;
         if (cur) { if (best !== cur && bd < dist(cur, ball) - 12 && bd < touch) ball.owner = best.i; else if (dist(cur, ball) > touch + 14) ball.owner = null; }
         else if (best && bd < touch) ball.owner = best.i;
@@ -281,7 +331,7 @@
       peer.on('open', () => { document.getElementById('roomCode').textContent = code; refreshLobby(); });
       peer.on('connection', c => {
         if (conns.length >= 3) { c.on('open', () => c.close()); return; }
-        const rec = { conn: c, player: null, input: { dx: 0, dy: 0, l: 0 }, kick: false };
+        const rec = { conn: c, player: null, input: { dx: 0, dy: 0, l: 0 }, kick: false, rast: false, drib: false };
         conns.push(rec);
         c.on('open', refreshLobby); c.on('data', d => onHostData(rec, d)); c.on('close', () => dropConn(rec)); c.on('error', () => dropConn(rec));
       });
@@ -296,7 +346,7 @@
       list.innerHTML = html;
       document.getElementById('lobbyHint').textContent = total + '/4 jogadores · ' + (6 - total) + ' robô(s) completam os times.';
     }
-    function onHostData(rec, d) { if (!d || !d.t) return; if (d.t === 'in') rec.input = { dx: d.dx, dy: d.dy, l: Math.hypot(d.dx, d.dy) }; else if (d.t === 'kick') rec.kick = true; }
+    function onHostData(rec, d) { if (!d || !d.t) return; if (d.t === 'in') rec.input = { dx: d.dx, dy: d.dy, l: Math.hypot(d.dx, d.dy) }; else if (d.t === 'kick') rec.kick = true; else if (d.t === 'rast') rec.rast = true; else if (d.t === 'drib') rec.drib = true; }
     function hostStart() {
       for (const p of players) p.isHuman = false;
       const me = players[idxOf(HUMAN_SLOTS[0][0], HUMAN_SLOTS[0][1])]; me.isHuman = true; me.name = 'Você'; myIndex = me.i;
@@ -477,7 +527,7 @@
       for (let i = 0; i < playerMeshes.length; i++) {
         const p = parr[i], mesh = playerMeshes[i]; if (!p) { mesh.visible = false; continue; }
         mesh.visible = true; const wx = WX(p.x), wz = WZ(p.y);
-        mesh.position.set(wx, 0, wz); mesh.rotation.y = -p.face;
+        mesh.position.set(wx, 0, wz); mesh.rotation.set(p.fallen > 0 ? Math.PI * 0.48 : 0, -p.face, 0);   // caído = deitado no chão
         const a = anim[i] || (anim[i] = { x: wx, y: wz, ph: 0 });
         const moved = Math.hypot(wx - a.x, wz - a.y), moving = moved > 0.4;
         a.ph += moving ? Math.min(moved, 10) * 0.20 + 0.05 : 0; a.x = wx; a.y = wz;
@@ -528,20 +578,22 @@
         else if (phase === 'goal') { phaseTimer -= dt; if (phaseTimer <= 0) { phase = (timeLeft <= 0 ? 'end' : 'kickoff'); phaseTimer = 1.0; } }
         else if (phase === 'play') {
           const inputs = {}, me = players[myIndex];
-          if (me && me.isHuman) { const dir = localDir(); inputs[myIndex] = { dx: dir.dx, dy: dir.dy, l: dir.l, kick: kickEdge }; }
-          for (const r of conns) if (r.player) inputs[r.player.i] = { dx: r.input.dx, dy: r.input.dy, l: r.input.l, kick: r.kick };
+          if (me && me.isHuman) { const dir = localDir(); inputs[myIndex] = { dx: dir.dx, dy: dir.dy, l: dir.l, kick: kickEdge, rast: rastEdge, drib: dribEdge }; }
+          for (const r of conns) if (r.player) inputs[r.player.i] = { dx: r.input.dx, dy: r.input.dy, l: r.input.l, kick: r.kick, rast: r.rast, drib: r.drib };
           simulate(dt, inputs);
           if (kickEdge && me && dist(me, ball) <= PR + BR + 14) sndKick();
-          for (const r of conns) r.kick = false;
+          for (const r of conns) { r.kick = false; r.rast = false; r.drib = false; }
           timeLeft -= dt; if (timeLeft <= 0) { timeLeft = 0; phase = 'end'; }
         }
-        kickEdge = false;
+        kickEdge = rastEdge = dribEdge = false;
         if (mode === 'host') { sendAcc += dt; if (sendAcc >= 0.05) { sendAcc = 0; broadcast(snapshot()); } }
         renderFromSim(dt);
       } else if (mode === 'guest') {
         inAcc += dt;
         if (hostConn && hostConn.open && inAcc >= 0.04) { inAcc = 0; const dir = localDir(); send(hostConn, { t: 'in', dx: dir.dx, dy: dir.dy }); }
         if (kickEdge) { send(hostConn, { t: 'kick' }); kickEdge = false; }
+        if (rastEdge) { send(hostConn, { t: 'rast' }); rastEdge = false; }
+        if (dribEdge) { send(hostConn, { t: 'drib' }); dribEdge = false; }
         interpAndRender(dt);
       }
       if (phase === 'end' && !resultShown) { resultShown = true; showResult(); }

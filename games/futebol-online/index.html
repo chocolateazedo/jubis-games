@@ -349,7 +349,8 @@
     // ================= RENDER 3D (Three.js) =================
     const WX = x => x - W / 2, WZ = y => y - H / 2; // plano do jogo -> mundo 3D
     let renderer, scene, camera, playerMeshes = [], ballMesh, ring;
-    const anim = {}, ballAnim = { x: 0, y: 0 }, _axis = new THREE.Vector3();
+    let followMode = false;                 // em telas estreitas (retrato) a câmera segue o jogador
+    const anim = {}, ballAnim = { x: 0, y: 0 }, _axis = new THREE.Vector3(), camFocus = new THREE.Vector3();
 
     function makePitchTexture() {
       const K = 1.3333, TW = Math.round(W * K), TH = Math.round(H * K);
@@ -455,7 +456,21 @@
       ring = new THREE.Mesh(new THREE.TorusGeometry(PR * 1.15, PR * 0.16, 8, 28), new THREE.MeshStandardMaterial({ color: 0xffe23a, emissive: 0x806000 })); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.6; ring.visible = false; scene.add(ring);
       addEventListener('resize', onResize); onResize();
     }
-    function onResize() { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
+    function onResize() {
+      renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+      followMode = (innerWidth / innerHeight) < 1.25; // retrato/quase-quadrado => seguir o jogador
+    }
+    // câmera: visão geral (paisagem) ou seguindo o jogador (retrato, quando o campo não cabe)
+    function updateCamera(foc, dt) {
+      if (followMode && foc) {
+        const fx = WX(foc.x), fz = WZ(foc.y), a = 1 - Math.pow(0.0001, dt || 0.016);
+        camFocus.x += (fx - camFocus.x) * a; camFocus.z += (fz - camFocus.z) * a;
+        camera.position.set(camFocus.x, 470, camFocus.z + 540);
+        camera.lookAt(camFocus.x, 0, camFocus.z - 50);
+      } else {
+        camera.position.set(0, 640, 690); camera.lookAt(0, 0, -10);
+      }
+    }
 
     function showMeshes(on) { for (const m of playerMeshes) m.visible = on; ballMesh.visible = on; if (!on) ring.visible = false; }
     function updateScene(parr, ballState, my) {
@@ -485,13 +500,14 @@
       else bannerEl.style.display = 'none';
     }
 
-    function renderFromSim() {
-      if (players.length) { updateScene(players, ball, (players[myIndex] && players[myIndex].isHuman) ? myIndex : null); }
-      else showMeshes(false);
+    function renderFromSim(dt) {
+      const my = (players[myIndex] && players[myIndex].isHuman) ? myIndex : null;
+      if (players.length) updateScene(players, ball, my); else showMeshes(false);
+      updateCamera(my != null ? players[my] : null, dt);
       updateBanner(); renderer.render(scene, camera);
     }
     function interpAndRender(dt) {
-      if (!net) { showMeshes(false); updateBanner(); renderer.render(scene, camera); return; }
+      if (!net) { showMeshes(false); updateCamera(null, dt); updateBanner(); renderer.render(scene, camera); return; }
       const a = 1 - Math.pow(0.0001, dt), t = net.target;
       net.ball.x += (t.ball.x - net.ball.x) * a; net.ball.y += (t.ball.y - net.ball.y) * a;
       for (let i = 0; i < t.players.length; i++) {
@@ -500,7 +516,7 @@
         let df = tp.face - np.face; while (df > Math.PI) df -= 2 * Math.PI; while (df < -Math.PI) df += 2 * Math.PI;
         np.face += df * a; np.team = tp.team; np.slot = tp.slot; np.isHuman = tp.isHuman;
       }
-      updateScene(net.players, net.ball, myIndex); updateBanner(); renderer.render(scene, camera);
+      updateScene(net.players, net.ball, myIndex); updateCamera(net.players[myIndex] || null, dt); updateBanner(); renderer.render(scene, camera);
     }
 
     // ---------------- loop ----------------
@@ -521,7 +537,7 @@
         }
         kickEdge = false;
         if (mode === 'host') { sendAcc += dt; if (sendAcc >= 0.05) { sendAcc = 0; broadcast(snapshot()); } }
-        renderFromSim();
+        renderFromSim(dt);
       } else if (mode === 'guest') {
         inAcc += dt;
         if (hostConn && hostConn.open && inAcc >= 0.04) { inAcc = 0; const dir = localDir(); send(hostConn, { t: 'in', dx: dir.dx, dy: dir.dy }); }

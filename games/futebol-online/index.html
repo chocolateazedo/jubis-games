@@ -333,7 +333,7 @@
         if (conns.length >= 3) { c.on('open', () => c.close()); return; }
         const rec = { conn: c, player: null, input: { dx: 0, dy: 0, l: 0 }, kick: false, rast: false, drib: false };
         conns.push(rec);
-        c.on('open', refreshLobby); c.on('data', d => onHostData(rec, d)); c.on('close', () => dropConn(rec)); c.on('error', () => dropConn(rec));
+        c.on('open', () => { refreshLobby(); send(c, snapshot()); }); c.on('data', d => onHostData(rec, d)); c.on('close', () => dropConn(rec)); c.on('error', () => dropConn(rec));
       });
       peer.on('error', e => { show('menu'); setErr('Não deu pra criar a sala (' + e.type + '). Tente de novo.'); });
       phase = 'lobbywait';
@@ -351,7 +351,7 @@
       for (const p of players) p.isHuman = false;
       const me = players[idxOf(HUMAN_SLOTS[0][0], HUMAN_SLOTS[0][1])]; me.isHuman = true; me.name = 'Você'; myIndex = me.i;
       conns.forEach((rec, k) => { const sl = HUMAN_SLOTS[k + 1], p = players[idxOf(sl[0], sl[1])]; p.isHuman = true; rec.player = p; p.name = 'Jogador ' + (k + 2); send(rec.conn, { t: 'go', you: p.i }); });
-      beginMatch(); sndWhistle();
+      beginMatch(); broadcast(snapshot()); sndWhistle();   // manda um snapshot já, pra o convidado sair do "Conectando…"
     }
     function beginMatch() { scoreA = 0; scoreB = 0; timeLeft = MATCH_TIME; resetPositions(); phase = 'kickoff'; phaseTimer = 1.2; goalText = ''; hideUI(); enterPlayingUI(); }
     function startJoin(code) {
@@ -366,7 +366,7 @@
       });
       peer.on('error', e => setErr('Não encontrei a sala (' + e.type + '). Confira o código.'));
     }
-    function onGuestData(d) { if (!d || !d.t) return; if (d.t === 'go') { myIndex = d.you; phase = 'play'; net = null; hideUI(); enterPlayingUI(); } else if (d.t === 'st') applyState(d); }
+    function onGuestData(d) { if (!d || !d.t) return; if (d.t === 'go') { myIndex = d.you; if (phase === 'menu' || phase === 'lobbywait') phase = 'play'; hideUI(); enterPlayingUI(); } else if (d.t === 'st') applyState(d); }
     function send(conn, obj) { try { if (conn && conn.open) conn.send(obj); } catch (e) {} }
     function broadcast(obj) { for (const r of conns) send(r.conn, obj); }
     function snapshot() {

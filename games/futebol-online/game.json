@@ -1,8 +1,8 @@
 {
-  "title": "Futebol Online",
-  "description": "Pelada 3×3 online com os amigos (P2P) — os lugares vazios viram robôs!",
+  "title": "Futebol Online 3D",
+  "description": "Pelada 3×3 em 3D online com os amigos (P2P) — os lugares vazios viram robôs!",
   "emoji": "⚽",
-  "tags": ["futebol", "multiplayer online", "até 4 jogadores", "bots"],
+  "tags": ["futebol", "3D", "multiplayer online", "até 4 jogadores", "bots"],
   "entry": "index.html",
   "cover": "cover.svg",
   "order": 2,

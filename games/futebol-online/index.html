@@ -371,11 +371,11 @@
     function broadcast(obj) { for (const r of conns) send(r.conn, obj); }
     function snapshot() {
       return { t: 'st', b: [Math.round(ball.x), Math.round(ball.y)],
-        p: players.map(p => [Math.round(p.x), Math.round(p.y), Math.round(p.face * 100), p.team, p.slot, p.isHuman ? 1 : 0]),
+        p: players.map(p => [Math.round(p.x), Math.round(p.y), Math.round(p.face * 100), p.team, p.slot, p.isHuman ? 1 : 0, p.fallen > 0 ? 2 : (p.tackle > 0 ? 1 : 0)]),
         s: [scoreA, scoreB], tl: Math.max(0, Math.ceil(timeLeft)), ph: phase, gt: goalText };
     }
     function applyState(d) {
-      const tgt = { ball: { x: d.b[0], y: d.b[1] }, players: d.p.map(a => ({ x: a[0], y: a[1], face: a[2] / 100, team: a[3], slot: a[4], isHuman: !!a[5] })), scoreA: d.s[0], scoreB: d.s[1], timeLeft: d.tl, ph: d.ph, gt: d.gt };
+      const tgt = { ball: { x: d.b[0], y: d.b[1] }, players: d.p.map(a => ({ x: a[0], y: a[1], face: a[2] / 100, team: a[3], slot: a[4], isHuman: !!a[5], fallen: a[6] === 2 ? 1 : 0, tackle: a[6] === 1 ? 1 : 0 })), scoreA: d.s[0], scoreB: d.s[1], timeLeft: d.tl, ph: d.ph, gt: d.gt };
       if (!net) net = JSON.parse(JSON.stringify(tgt));
       net.target = tgt; scoreA = tgt.scoreA; scoreB = tgt.scoreB; timeLeft = tgt.timeLeft; goalText = tgt.gt;
       if (tgt.ph !== phase) { if (tgt.ph === 'goal') sndGoal(); if (tgt.ph === 'end') sndWhistle(); }
@@ -461,20 +461,37 @@
       sp.renderOrder = 10;
       return sp;
     }
+    const HAIR3D = [0x2a1a0a, 0x4a3210, 0x111111, 0x6b4f2a, 0xcdb36a, 0x20140a];
     function makePlayerMesh(team, slot) {
       const g = new THREE.Group();
-      const jersey = slot === 0 ? GK_COL : TEAM_COL[team], legc = slot === 0 ? GK_DK : TEAM_DK[team];
-      const jerseyMat = new THREE.MeshStandardMaterial({ color: jersey, roughness: 0.7 });
-      const skinMat = new THREE.MeshStandardMaterial({ color: 0xf1c27d, roughness: 0.8 });
-      const legMat = new THREE.MeshStandardMaterial({ color: legc, roughness: 0.8 });
-      const body = new THREE.Mesh(new THREE.CapsuleGeometry(PR * 0.52, PR * 0.7, 6, 12), jerseyMat); body.position.y = PR * 1.25; body.castShadow = true; g.add(body);
-      const head = new THREE.Mesh(new THREE.SphereGeometry(PR * 0.42, 16, 12), skinMat); head.position.y = PR * 1.95; head.castShadow = true; g.add(head);
-      const hair = new THREE.Mesh(new THREE.SphereGeometry(PR * 0.44, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.55), new THREE.MeshStandardMaterial({ color: 0x2a1a0a, roughness: 1 })); hair.position.y = PR * 1.95; g.add(hair);
-      const nose = new THREE.Mesh(new THREE.SphereGeometry(PR * 0.12, 8, 6), skinMat); nose.position.set(PR * 0.4, PR * 1.95, 0); g.add(nose);
-      const legGeo = new THREE.CylinderGeometry(PR * 0.2, PR * 0.17, PR * 0.85, 8);
-      const legL = new THREE.Mesh(legGeo, legMat); legL.position.set(0, PR * 0.42, PR * 0.24); legL.castShadow = true; g.add(legL);
-      const legR = new THREE.Mesh(legGeo, legMat); legR.position.set(0, PR * 0.42, -PR * 0.24); legR.castShadow = true; g.add(legR);
-      const botMark = new THREE.Mesh(new THREE.SphereGeometry(PR * 0.16, 10, 8), new THREE.MeshStandardMaterial({ color: 0x9fe0ff, emissive: 0x2a6a88 })); botMark.position.y = PR * 2.7; g.add(botMark);
+      const idx = team * 3 + slot;
+      const jersey = slot === 0 ? GK_COL : TEAM_COL[team], dark = slot === 0 ? GK_DK : TEAM_DK[team];
+      const jerseyMat = new THREE.MeshStandardMaterial({ color: jersey, roughness: 0.65 });
+      const shortMat = new THREE.MeshStandardMaterial({ color: slot === 0 ? 0x1a1d24 : 0xf2f2f2, roughness: 0.8 });
+      const sockMat = new THREE.MeshStandardMaterial({ color: dark, roughness: 0.85 });
+      const skinMat = new THREE.MeshStandardMaterial({ color: 0xf1c27d, roughness: 0.85 });
+      const bootMat = new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.5 });
+      // tronco (camisa) + calção
+      const body = new THREE.Mesh(new THREE.CapsuleGeometry(PR * 0.5, PR * 0.6, 6, 12), jerseyMat); body.position.y = PR * 1.4; body.castShadow = true; g.add(body);
+      const shorts = new THREE.Mesh(new THREE.CylinderGeometry(PR * 0.52, PR * 0.48, PR * 0.42, 12), shortMat); shorts.position.y = PR * 0.98; shorts.castShadow = true; g.add(shorts);
+      // braços
+      const armGeo = new THREE.CapsuleGeometry(PR * 0.14, PR * 0.5, 4, 8);
+      const armL = new THREE.Mesh(armGeo, skinMat); armL.position.set(0, PR * 1.4, PR * 0.6); armL.castShadow = true; g.add(armL);
+      const armR = new THREE.Mesh(armGeo, skinMat); armR.position.set(0, PR * 1.4, -PR * 0.6); armR.castShadow = true; g.add(armR);
+      // cabeça + cabelo + nariz (direção)
+      const head = new THREE.Mesh(new THREE.SphereGeometry(PR * 0.4, 16, 12), skinMat); head.position.y = PR * 2.05; head.castShadow = true; g.add(head);
+      const hair = new THREE.Mesh(new THREE.SphereGeometry(PR * 0.42, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.58), new THREE.MeshStandardMaterial({ color: HAIR3D[idx % HAIR3D.length], roughness: 1 })); hair.position.y = PR * 2.06; g.add(hair);
+      const nose = new THREE.Mesh(new THREE.SphereGeometry(PR * 0.1, 8, 6), skinMat); nose.position.set(PR * 0.36, PR * 2.0, 0); g.add(nose);
+      // pernas: grupo no quadril (coxa pele + meião + chuteira); a animação da outra ai usa legL/legR.position.x
+      function makeLeg(z) {
+        const leg = new THREE.Group(); leg.position.set(0, PR * 0.78, z);
+        const thigh = new THREE.Mesh(new THREE.CylinderGeometry(PR * 0.18, PR * 0.16, PR * 0.46, 8), skinMat); thigh.position.y = -PR * 0.23; thigh.castShadow = true; leg.add(thigh);
+        const sock = new THREE.Mesh(new THREE.CylinderGeometry(PR * 0.16, PR * 0.15, PR * 0.34, 8), sockMat); sock.position.y = -PR * 0.6; leg.add(sock);
+        const boot = new THREE.Mesh(new THREE.BoxGeometry(PR * 0.46, PR * 0.18, PR * 0.32), bootMat); boot.position.set(PR * 0.1, -PR * 0.8, 0); boot.castShadow = true; leg.add(boot);
+        g.add(leg); return leg;
+      }
+      const legL = makeLeg(PR * 0.22), legR = makeLeg(-PR * 0.22);
+      const botMark = new THREE.Mesh(new THREE.SphereGeometry(PR * 0.16, 10, 8), new THREE.MeshStandardMaterial({ color: 0x9fe0ff, emissive: 0x2a6a88 })); botMark.position.y = PR * 2.85; g.add(botMark);
       // nome do craque acima da cabeça (deriva do ROSTER -> aparece pra host e guests)
       const rr = (ROSTER[team] && ROSTER[team][slot]) ? ROSTER[team][slot] : null;
       if (rr && rr.name) g.add(makeNameSprite(rr.name));
@@ -527,7 +544,7 @@
       for (let i = 0; i < playerMeshes.length; i++) {
         const p = parr[i], mesh = playerMeshes[i]; if (!p) { mesh.visible = false; continue; }
         mesh.visible = true; const wx = WX(p.x), wz = WZ(p.y);
-        mesh.position.set(wx, 0, wz); mesh.rotation.set(p.fallen > 0 ? Math.PI * 0.48 : 0, -p.face, 0);   // caído = deitado no chão
+        mesh.position.set(wx, 0, wz); mesh.rotation.set(p.fallen > 0 ? Math.PI * 0.48 : (p.tackle > 0 ? Math.PI * 0.22 : 0), -p.face, 0);   // caído = deitado; rasteira = inclinado pra frente
         const a = anim[i] || (anim[i] = { x: wx, y: wz, ph: 0 });
         const moved = Math.hypot(wx - a.x, wz - a.y), moving = moved > 0.4;
         a.ph += moving ? Math.min(moved, 10) * 0.20 + 0.05 : 0; a.x = wx; a.y = wz;
@@ -564,7 +581,7 @@
         const np = net.players[i], tp = t.players[i];
         np.x += (tp.x - np.x) * a; np.y += (tp.y - np.y) * a;
         let df = tp.face - np.face; while (df > Math.PI) df -= 2 * Math.PI; while (df < -Math.PI) df += 2 * Math.PI;
-        np.face += df * a; np.team = tp.team; np.slot = tp.slot; np.isHuman = tp.isHuman;
+        np.face += df * a; np.team = tp.team; np.slot = tp.slot; np.isHuman = tp.isHuman; np.fallen = tp.fallen; np.tackle = tp.tackle;
       }
       updateScene(net.players, net.ball, myIndex); updateCamera(net.players[myIndex] || null, dt); updateBanner(); renderer.render(scene, camera);
     }

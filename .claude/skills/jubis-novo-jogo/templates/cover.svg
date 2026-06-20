@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  TEMPLATE de capa do Jubis Games — 16:10 (600x375).
+  Adapte: cores, o emoji/ícone grande do meio e o título.
+  Salve como games/<slug>/cover.svg e aponte no game.json: "cover": "cover.svg".
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 375" width="600" height="375" role="img" aria-label="Capa do jogo">
+  <defs>
+    <radialGradient id="bg" cx="30%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#2a3a7a"/>
+      <stop offset="55%" stop-color="#10172a"/>
+      <stop offset="100%" stop-color="#0a0f1d"/>
+    </radialGradient>
+    <linearGradient id="title" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#00f0ff"/>
+      <stop offset="100%" stop-color="#ff2bd6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- fundo -->
+  <rect width="600" height="375" fill="url(#bg)"/>
+
+  <!-- brilhos decorativos -->
+  <circle cx="500" cy="70" r="90" fill="#00f0ff" opacity="0.12"/>
+  <circle cx="90" cy="320" r="120" fill="#ff2bd6" opacity="0.12"/>
+
+  <!-- ícone/emoji grande do jogo (troque o emoji) -->
+  <text x="300" y="175" font-size="130" text-anchor="middle" dominant-baseline="middle">🎮</text>
+
+  <!-- título do jogo (troque o texto) -->
+  <text x="300" y="300" font-family="Arial, sans-serif" font-size="46" font-weight="800"
+        text-anchor="middle" fill="url(#title)">NOME DO JOGO</text>
+</svg>

@@ -4,5 +4,6 @@
   "emoji": "🧓",
   "tags": ["aventura", "cuidado", "1 jogador"],
   "entry": "index.html",
+  "cover": "cover.svg",
   "order": 4
 }

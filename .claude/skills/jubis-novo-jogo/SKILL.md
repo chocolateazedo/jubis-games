@@ -67,7 +67,7 @@ Se faltar `cover`, o cartão mostra o `emoji`.
 | Multiplayer **online** | Veja a seção dedicada — escolha o nível certo | `templates/multiplayer-webrtc.html` |
 
 Regra geral: **comece sempre single-file**. Só divida em arquivos quando o jogo crescer de verdade.
-Single-file é o padrão de 16 dos 17 jogos atuais.
+Single-file é o padrão de 21 dos 22 jogos atuais.
 
 ### Jogo 3D
 
@@ -125,6 +125,23 @@ P2P pode falhar e o jogo não pode virar uma tela morta.
 Dica: copie `templates/game.json` e ajuste. Para `order`, olhe os `order` já usados e escolha um
 valor que posicione o jogo onde você quer (não precisa ser único).
 
+## Capa do jogo (opcional, mas recomendado)
+
+Sem `cover`, o cartão na home mostra só o `emoji`. Com `cover`, fica muito mais atraente.
+
+**Prefira capa em SVG** — é o que o projeto usa de verdade (ex.: `defesa-zumbi-vip/cover2.svg`) e é o
+único formato que dá para criar direto aqui, sem ferramenta de imagem (PNG/JPG exigem binário). O SVG
+é leve, nítido em qualquer tela e fácil de versionar.
+
+- Proporção **16:10** (ex.: `viewBox="0 0 600 375"`).
+- Combine com o tema: fundo `radial-gradient`/cores escuras, título do jogo grande, um ícone/cena
+  simples. Sem texto pequeno demais (o cartão é pequeno no celular).
+- Salve em `games/<slug>/cover.svg` e aponte no `game.json`: `"cover": "cover.svg"`.
+- Copie e adapte `templates/cover.svg`.
+
+PNG/JPG também funcionam (o `includes/games.php` aceita qualquer arquivo existente apontado em
+`cover`), mas só use se o usuário fornecer a imagem.
+
 ## Convenções de UI/estilo (para parecer parte do estúdio)
 
 - Fundo: `radial-gradient` de azul-marinho/roxo para quase-preto, texto branco.
@@ -134,13 +151,55 @@ valor que posicione o jogo onde você quer (não precisa ser único).
 - Botões: cantos arredondados, cor de destaque (ciano/roxo/verde), `cursor: pointer`.
 - Emojis são bem-vindos no título do jogo (`<h1>🟣 Pega Bolinha</h1>`) — combina com o público.
 
+## Cache: como garantir que a atualização apareça na hora
+
+O `.htaccess` da **raiz** já manda `.html`/`.php` nunca serem cacheados — então um jogo **single-file**
+(`index.html`) sempre aparece atualizado no próximo reload. Não precisa fazer nada.
+
+A pegadinha é com jogos que têm **arquivos separados** (`game.js`, `style.css`, `cover.svg`…): a raiz
+cacheia JS/CSS/imagens por **7 dias**. Durante o desenvolvimento, depois de publicar, o jogador (e o
+João) podem ficar vendo a versão velha. Há dois jeitos de resolver, ambos já usados no projeto:
+
+1. **`.htaccess` próprio de no-cache na pasta do jogo** (jeito mais usado em jogos em dev ativo —
+   veja `games/defesa-zumbi-vip/.htaccess` e `games/jubis-fire/.htaccess`). Crie
+   `games/<slug>/.htaccess` desativando o cache dos tipos que o jogo usa:
+
+   ```apache
+   <IfModule mod_headers.c>
+     <FilesMatch "\.(js|css|svg|png|html)$">
+       Header set Cache-Control "no-cache, no-store, must-revalidate"
+       Header set Pragma "no-cache"
+     </FilesMatch>
+   </IfModule>
+   <IfModule mod_expires.c>
+     <FilesMatch "\.(js|css|svg|png|html)$">
+       ExpiresActive On
+       ExpiresDefault "access plus 0 seconds"
+     </FilesMatch>
+   </IfModule>
+   ```
+
+   Quando o jogo estabilizar, dá para remover esse `.htaccess` e voltar ao cache padrão do site.
+
+2. **Versionar a URL com `?v=N`** (jeito que o `.htaccess` da raiz documenta): aponte os assets como
+   `<script src="game.js?v=2">` / `<link href="style.css?v=2">` e **incremente o número** a cada
+   mudança. Aí pode manter o cache longo. Bom quando o jogo já está estável.
+
 ## Testar
 
+O jeito padrão do projeto é o `dev.sh` (sobe um PHP em Docker na porta **8095**, com o repo montado —
+editar arquivo reflete na hora, é só recarregar):
+
 ```bash
-# na raiz do repositório
-php -S localhost:8080
-# home: http://localhost:8080
-# jogo direto: http://localhost:8080/games/<slug>/
+./dev.sh up        # sobe em http://localhost:8095  (./dev.sh stop derruba, ./dev.sh logs acompanha)
+# home: http://localhost:8095
+# jogo direto: http://localhost:8095/games/<slug>/
+```
+
+Sem Docker, dá no mesmo com o PHP embutido:
+
+```bash
+php -S localhost:8080      # na raiz do repositório → http://localhost:8080
 ```
 
 Cheque sempre:
@@ -165,3 +224,5 @@ curl -s -o /dev/null -w "HTTP %{http_code}\n" https://jubis-games.cloud/games/<s
 - `templates/multiplayer-webrtc.html` — esqueleto de multiplayer online 2 jogadores via PeerJS
   (criar sala / entrar com código), com posições sincronizadas e um ponto marcado para plugar a
   lógica do jogo.
+- `templates/cover.svg` — capa 16:10 no tema do estúdio (fundo escuro, emoji grande, título em
+  gradiente). Adapte cores/emoji/título e salve em `games/<slug>/cover.svg`.

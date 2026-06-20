@@ -11,9 +11,11 @@
     canvas { display: block; position: fixed; inset: 0; }
     a.back { position: fixed; top: 10px; left: 10px; z-index: 30; color: #fff; text-decoration: none; font-weight: 800;
              background: rgba(0,0,0,.45); padding: 6px 10px; border-radius: 10px; }
-    #hud { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 20; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
-           font-weight: 800; text-shadow: 0 1px 2px rgba(0,0,0,.6); }
-    #hud span { background: rgba(0,0,0,.4); padding: 5px 11px; border-radius: 10px; }
+    #mute { position: fixed; top: 10px; right: 10px; z-index: 30; border: none; cursor: pointer;
+            background: rgba(0,0,0,.45); color: #fff; font-size: 18px; padding: 6px 10px; border-radius: 10px; }
+    #hud { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 20; display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;
+           font-weight: 800; text-shadow: 0 1px 2px rgba(0,0,0,.6); max-width: calc(100vw - 120px); }
+    #hud span { background: rgba(0,0,0,.4); padding: 5px 10px; border-radius: 10px; white-space: nowrap; }
     /* controles de toque */
     .touch { display: none; }
     @media (hover: none) and (pointer: coarse) { .touch { display: block; } }
@@ -22,20 +24,39 @@
     #stick { position: absolute; left: 50%; top: 50%; width: 50px; height: 50px; margin: -25px; border-radius: 50%; background: rgba(232,133,59,.85); }
     #act { position: fixed; right: 26px; bottom: 40px; width: 96px; height: 96px; border-radius: 50%; z-index: 25;
            background: rgba(56,160,80,.85); color: #fff; border: none; font-weight: 800; font-size: 16px; }
-    #restart { position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%); z-index: 30; display: none;
-               border: none; border-radius: 10px; padding: 12px 18px; font-weight: 800; background: #e8853b; color: #fff; cursor: pointer; font-size: 16px; }
+    /* painel (intro / fim de dia / fim de jogo) */
+    #panel { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center;
+             background: rgba(8,14,10,.74); padding: 16px; }
+    #panel.hidden { display: none; }
+    .card { background: linear-gradient(180deg, #34502f, #233619); color: #fff; border: 2px solid rgba(255,255,255,.18);
+            border-radius: 18px; padding: 22px 22px 24px; width: min(94vw, 470px); text-align: center; box-shadow: 0 18px 50px rgba(0,0,0,.55); }
+    .card h1 { margin: 0 0 6px; font-size: 27px; }
+    .card p { margin: 8px 0; opacity: .96; line-height: 1.45; font-size: 15px; }
+    .help { text-align: left; background: rgba(0,0,0,.22); border-radius: 12px; padding: 12px 14px; margin: 12px 0; font-size: 14px; line-height: 1.7; }
+    .help b { color: #ffd98a; }
+    .bigbtn { margin-top: 14px; border: none; border-radius: 12px; padding: 13px 24px; font-weight: 800; font-size: 18px;
+              background: #e8853b; color: #fff; cursor: pointer; box-shadow: 0 6px 0 #b9652a; }
+    .bigbtn:active { transform: translateY(2px); box-shadow: 0 4px 0 #b9652a; }
   </style>
 </head>
 <body>
   <a class="back" href="../../">← Voltar</a>
+  <button id="mute" type="button" aria-label="Som">🔊</button>
   <div id="hud">
-    <span id="time">⏱ 120</span><span id="score">⭐ 0</span><span id="best">🏆 0</span><span id="carry">🧺 vazio</span>
+    <span id="time">⏱ 80</span><span id="day">📅 Dia 1</span><span id="goal">🎯 0/6</span><span id="score">⭐ 0</span><span id="best">🏆 0</span><span id="carry">🧺 vazio</span>
   </div>
   <canvas id="game"></canvas>
-  <button id="restart" type="button">Reiniciar plantão</button>
   <div class="touch">
     <div id="joy"><div id="stick"></div></div>
     <button id="act" type="button">AGIR</button>
+  </div>
+
+  <div id="panel" class="hidden">
+    <div class="card">
+      <h1 id="pTitle">Plantão dos Vovôs</h1>
+      <div id="pBody"></div>
+      <button id="pBtn" class="bigbtn" type="button">Começar</button>
+    </div>
   </div>
 
   <script>
@@ -45,10 +66,16 @@
     addEventListener('resize', resize); resize();
 
     const BEST_KEY = 'plantao-dos-vovos-best';
-    const SHIFT = 120, PATIENCE = 13, RANGE = 64;
-    const NEED_EMOJI = { pill: '💊', shot: '💉', food: '🍲', water: '💧', bath: '🚿', company: '❤️' };
-    const NEED_NAME = { pill: 'comprimido', shot: 'vacina', food: 'comida', water: 'água', bath: 'banho', company: 'companhia' };
+    const MUTE_KEY = 'plantao-dos-vovos-muted';
+    const DAY_TIME = 80, PATIENCE = 20, RANGE = 78;
+    const NEED_EMOJI = { pill: '💊', shot: '💉', food: '🍲', water: '💧', bath: '🚿', sleep: '😴', company: '❤️' };
+    const NEED_NAME = { pill: 'comprimido', shot: 'vacina', food: 'comida', water: 'água', bath: 'banho', sleep: 'soneca', company: 'companhia' };
     const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+    // dificuldade por dia
+    const dayCount = (d) => Math.min(4 + d, 8);          // dia 1 = 5 idosos, cresce até 8
+    const dayPatience = (d) => Math.max(12, PATIENCE - (d - 1) * 1.0);
+    const dayGoal = (d) => 4 + d * 2;                    // atendimentos para passar de dia
 
     // ---------- mundo em tiles ----------
     const TS = 44, COLS = 48, ROWS = 36;
@@ -109,12 +136,12 @@
     // Cozinha (cima-dir)
     P('fridge', bx + 22, by + 7, 2, 3, true); P('table', bx + 16, by + 8, 3, 2, true); P('plant', bx + 14, by + 8, 1, 2, true);
     P('painting', bx + 18, by + 1, 2, 1, false, true);
-    // Quarto (baixo-esq) com 2 camas
-    P('bed', bx + 2, by + 15, 3, 4, true); P('bed', bx + 8, by + 15, 3, 4, true);
+    // Quarto (baixo-esq) com 2 camas (camas não são sólidas: dá pra deitar o vovô)
+    P('bed', bx + 2, by + 15, 3, 4, false); P('bed', bx + 8, by + 15, 3, 4, false);
     P('nightstand', bx + 5, by + 15, 1, 1, true); P('rug', bx + 2, by + 20, 5, 2, false, true); P('plant', bx + 11, by + 20, 1, 2, true);
     P('painting', bx + 3, by + 12, 2, 1, false, true);
     // Quarto/Banho (baixo-dir)
-    P('bed', bx + 15, by + 15, 3, 4, true); P('bathtub', bx + 21, by + 19, 3, 2, true);
+    P('bed', bx + 15, by + 15, 3, 4, false); P('bathtub', bx + 21, by + 19, 3, 2, true);
     P('toilet', bx + 24, by + 20, 1, 1, true); P('sink', bx + 24, by + 14, 1, 1, true); P('plant', bx + 19, by + 20, 1, 2, true);
     // Jardim
     P('bench', 35, 12, 2, 1, true); P('bench', 39, 18, 2, 1, true); P('fountain', 30, 26, 3, 3, true);
@@ -126,8 +153,11 @@
       { type: 'shot', emoji: '💉', x: px(bx + 9), y: py(by + 3), name: 'Vacinas' },
       { type: 'food', emoji: '🍲', x: px(bx + 16), y: py(by + 3), name: 'Cozinha' },
       { type: 'water', emoji: '🚰', x: px(bx + 22), y: py(by + 3), name: 'Bebedouro' },
-      { type: 'bath', emoji: '🚿', x: px(bx + 22), y: py(midR + 3), name: 'Rouparia' },
+      { type: 'bath', emoji: '🚿', x: px(bx + 22), y: py(by + 18), name: 'Banho' },
     ];
+    const bathStation = stations.find((s) => s.type === 'bath'); // chuveiro = destino do banho
+    // centro de cada cama (destino da soneca)
+    const beds = [[bx + 3, by + 16], [bx + 9, by + 16], [bx + 16, by + 16]].map((b) => ({ x: px(b[0]), y: py(b[1]) + 8 }));
     const PLAYER_PAL = { skin: '#f1c27d', hair: '#5a3a1a', shirt: '#eef4ff', pants: '#3a4a66' };
     const ELDER_PALS = [
       { skin: '#f1c27d', hair: '#dddddd', shirt: '#b85c5c', pants: '#5a5a5a' },
@@ -136,37 +166,120 @@
       { skin: '#ffdbac', hair: '#cccccc', shirt: '#9a6ab8', pants: '#444444' },
       { skin: '#8d5524', hair: '#eeeeee', shirt: '#c2a23a', pants: '#3a3a3a' },
     ];
+    // lugares onde os idosos ficam (nas camas + bancos do jardim). Até 8 por dia.
+    // As camas não são sólidas, então dá pra chegar perto e interagir.
+    const ELDER_SPOTS = [
+      [bx + 3, by + 16], [bx + 9, by + 16], [bx + 16, by + 16], [36, 12], [40, 18],
+      [33, 8], [44, 10], [33, 30],
+    ];
     let elders = [];
-    function makeElders() {
-      const spots = [[bx + 3, by + 16], [bx + 9, by + 16], [bx + 16, by + 16], [36, 12], [40, 18]];
-      elders = spots.map((s, i) => ({ x: px(s[0]), y: py(s[1]), pal: ELDER_PALS[i % ELDER_PALS.length], dir: 0, idle: Math.random() * 6, need: null, patience: 0, cooldown: 2 + i * 0.6, happy: 0, sad: 0 }));
+    function makeElders(count) {
+      elders = ELDER_SPOTS.slice(0, count).map((s, i) => {
+        const x = px(s[0]), y = py(s[1]);
+        return {
+          x, y, homeX: x, homeY: y, pal: ELDER_PALS[i % ELDER_PALS.length], dir: 0,
+          idle: Math.random() * 6, need: null, patience: 0, maxPat: PATIENCE, cooldown: 2 + i * 0.5, happy: 0, sad: 0,
+          escorting: false, busy: 0, busyKind: null, returning: false,
+        };
+      });
     }
 
-    const player = { x: px(bx + 6), y: py(by + 19), r: 16, carry: null, moving: false, dir: 0, walkPhase: 0, pal: PLAYER_PAL };
+    const player = { x: px(bx + 6), y: py(by + 19), r: 16, carry: null, escort: null, moving: false, dir: 0, walkPhase: 0, pal: PLAYER_PAL };
     const cam = { x: 0, y: 0 };
-    let score, timeLeft, running, spawnTimer, served, toastMsg, toastT, time, floaters;
-
-    function reset() {
-      score = 0; timeLeft = SHIFT; running = true; spawnTimer = 3; served = 0;
-      toastMsg = ''; toastT = 0; time = 0; floaters = [];
-      player.x = px(bx + 6); player.y = py(by + 19); player.carry = null; player.dir = 0; player.walkPhase = 0;
-      makeElders(); document.getElementById('restart').style.display = 'none'; updateHud();
-    }
+    let state = 'intro'; // intro | playing | dayclear | over
+    let day, score, timeLeft, spawnTimer, served, dayServed, goal, curPat, toastMsg, toastT, time, floaters, particles;
+    let panelAction = null;
 
     let best = Number(localStorage.getItem(BEST_KEY) || 0);
+    let muted = localStorage.getItem(MUTE_KEY) === '1';
+
+    // ---------- painel ----------
+    const panel = document.getElementById('panel');
+    const pTitle = document.getElementById('pTitle');
+    const pBody = document.getElementById('pBody');
+    const pBtn = document.getElementById('pBtn');
+    function showPanel(title, bodyHTML, btnLabel, action) {
+      pTitle.innerHTML = title; pBody.innerHTML = bodyHTML; pBtn.textContent = btnLabel;
+      panelAction = action; panel.classList.remove('hidden');
+    }
+    function hidePanel() { panel.classList.add('hidden'); }
+    pBtn.addEventListener('click', () => { A(); goFullscreen(); if (panelAction) panelAction(); });
+
+    function showIntro() {
+      state = 'intro';
+      showPanel('🧓 Plantão dos Vovôs',
+        `<p>Você é o <b>cuidador</b> da casa de repouso! Os vovôs vão pedir coisas — leve o certo a tempo.</p>
+         <div class="help">
+           <b>💊</b> remédio &nbsp; <b>💉</b> vacina &nbsp; <b>🍲</b> comida &nbsp; <b>💧</b> água<br>
+           🧺 Esses 4: pegue na <b>estação</b> certa e leve até quem pediu.<br>
+           <b>🚿</b> Banho: <b>leve o vovô até o chuveiro</b>.<br>
+           <b>😴</b> Soneca: <b>leve o vovô até a cama</b>.<br>
+           <b>❤️</b> Companhia: é só chegar perto.<br>
+           🕹️ Mover: <b>setas/WASD</b> ou o direcional.<br>
+           👉 Agir / pegar / soltar: botão <b>AGIR</b>, <b>E</b>, espaço ou Enter.
+         </div>
+         <p>Atenda a meta de atendimentos de cada dia para avançar. Boa sorte! 🌻</p>`,
+        '▶ Começar plantão', startGame);
+    }
+
+    function startGame() { day = 0; score = 0; served = 0; startDay(1); }
+
+    function startDay(d) {
+      day = d; goal = dayGoal(d); curPat = dayPatience(d);
+      timeLeft = DAY_TIME; spawnTimer = 2.5; dayServed = 0;
+      time = 0; toastMsg = ''; toastT = 0; floaters = []; particles = [];
+      player.x = px(bx + 6); player.y = py(by + 19); player.carry = null; player.escort = null; player.dir = 0; player.walkPhase = 0;
+      makeElders(dayCount(d));
+      hidePanel(); state = 'playing';
+      toast('Dia ' + d + ' — atenda ' + goal + ' vovôs!');
+      updateHud();
+    }
+
+    function endDay() {
+      if (score > best) { best = score; localStorage.setItem(BEST_KEY, String(best)); }
+      if (dayServed >= goal) {
+        state = 'dayclear'; sndDayWin();
+        showPanel('Dia ' + day + ' concluído! 🎉',
+          `<p>Atendimentos: <b>${dayServed}</b> (meta: ${goal})</p>
+           <p>⭐ Pontos: <b>${score}</b> &nbsp; 🏆 Recorde: <b>${best}</b></p>
+           <p>O Dia ${day + 1} vai ter mais vovôs e menos paciência. Pronto?</p>`,
+          'Próximo dia →', () => startDay(day + 1));
+      } else {
+        state = 'over'; sndEnd();
+        showPanel('Fim da carreira 😴',
+          `<p>Você não bateu a meta do Dia ${day} (fez ${dayServed} de ${goal}).</p>
+           <p>📅 Chegou ao <b>Dia ${day}</b> &nbsp; ⭐ Pontos: <b>${score}</b></p>
+           <p>🏆 Recorde: <b>${best}</b></p>`,
+          '↻ Jogar de novo', () => startGame());
+      }
+    }
+
     function updateHud() {
-      document.getElementById('time').textContent = '⏱ ' + Math.ceil(timeLeft);
+      const timeEl = document.getElementById('time');
+      timeEl.textContent = '⏱ ' + Math.ceil(timeLeft);
+      timeEl.style.color = (state === 'playing' && timeLeft <= 15) ? '#ffd24a' : '#fff';
+      document.getElementById('day').textContent = '📅 Dia ' + day;
+      const goalEl = document.getElementById('goal');
+      goalEl.textContent = '🎯 ' + dayServed + '/' + goal;
+      goalEl.style.color = dayServed >= goal ? '#7fe39a' : '#fff';
       document.getElementById('score').textContent = '⭐ ' + score;
       document.getElementById('best').textContent = '🏆 ' + best;
       document.getElementById('carry').textContent = player.carry ? ('🧺 ' + NEED_EMOJI[player.carry]) : '🧺 vazio';
     }
-    function toast(m) { toastMsg = m; toastT = 1.4; }
+    function toast(m) { toastMsg = m; toastT = 1.6; }
     function floater(x, y, txt, color) { floaters.push({ x, y, txt, color, life: 1.1 }); }
+    function burst(x, y, color, n) {
+      for (let i = 0; i < (n || 10); i++) {
+        const a = Math.random() * Math.PI * 2, sp = 60 + Math.random() * 120;
+        particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 40, life: 0.5 + Math.random() * 0.4, color });
+      }
+    }
 
     // ---------- som ----------
     let actx;
     function A() { if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } } if (actx.state === 'suspended') actx.resume(); return actx; }
     function beep(freq, dur, type, vol, slideTo) {
+      if (muted) return;
       const c = A(); if (!c) return; const t = c.currentTime;
       const o = c.createOscillator(); o.type = type || 'square'; o.frequency.setValueAtTime(freq, t);
       if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
@@ -177,15 +290,23 @@
     const sndDeliver = () => { beep(660, 0.1, 'triangle', 0.2); setTimeout(() => beep(990, 0.13, 'triangle', 0.2), 90); };
     const sndFail = () => beep(220, 0.28, 'sawtooth', 0.22, 80);
     const sndEnd = () => { beep(523, 0.18, 'triangle', 0.22); setTimeout(() => beep(392, 0.3, 'triangle', 0.22), 160); };
+    const sndDayWin = () => { beep(523, 0.12, 'triangle', 0.22); setTimeout(() => beep(659, 0.12, 'triangle', 0.22), 120); setTimeout(() => beep(784, 0.2, 'triangle', 0.22), 240); };
+
+    const muteBtn = document.getElementById('mute');
+    function paintMute() { muteBtn.textContent = muted ? '🔇' : '🔊'; }
+    paintMute();
+    muteBtn.addEventListener('click', () => { muted = !muted; localStorage.setItem(MUTE_KEY, muted ? '1' : '0'); paintMute(); if (!muted) A(); });
 
     // ---------- input ----------
     const keys = {};
     let fsDone = false;
     function goFullscreen() { if (fsDone) return; fsDone = true; const el = document.documentElement; const fn = el.requestFullscreen || el.webkitRequestFullscreen; if (fn) try { fn.call(el); } catch (e) {} }
     addEventListener('keydown', (e) => {
-      keys[e.code] = true; A(); goFullscreen();
-      if (['KeyE', 'Space', 'Enter'].includes(e.code)) { action(); e.preventDefault(); }
-      if (e.code === 'KeyR' && !running) reset();
+      keys[e.code] = true; A();
+      if (['KeyE', 'Space', 'Enter'].includes(e.code)) {
+        if (state === 'playing') { action(); } else if (panelAction) { goFullscreen(); A(); panelAction(); }
+        e.preventDefault();
+      }
     });
     addEventListener('keyup', (e) => { keys[e.code] = false; });
 
@@ -205,28 +326,69 @@
       for (const t of e.changedTouches) if (t.identifier === joy.id) { joy.id = null; joy.x = joy.y = 0; stickEl.style.transform = ''; }
     });
     document.getElementById('act').addEventListener('touchstart', (e) => { A(); action(); e.preventDefault(); }, { passive: false });
-    document.getElementById('restart').addEventListener('click', reset);
 
     const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
+    function award(x, y) {
+      score += 10; served++; dayServed++;
+      floater(x, y - 42, '+10', '#1e8f3a'); burst(x, y - 20, '#ffe08a', 12); sndDeliver();
+      if (score > best) { best = score; localStorage.setItem(BEST_KEY, String(best)); }
+    }
+    function nearestBed() { let b = null, bd = 1e9; for (const k of beds) { const d = dist(player, k); if (d < bd) { bd = d; b = k; } } return { bed: b, d: bd }; }
+    function dropEscort(e, dx, dy, dur) {
+      e.escorting = false; player.escort = null;
+      e.x = dx; e.y = dy; e.busy = dur; e.busyKind = e.need; e.happy = 1;
+      award(dx, dy); e.need = null; e.cooldown = 3; updateHud();
+    }
+
     function action() {
-      if (!running) return;
-      let target = null, td = 1e9;
-      for (const e of elders) { if (!e.need) continue; const d = dist(player, e); if (d < RANGE && d < td) { td = d; target = e; } }
-      if (target && (target.need === 'company' || player.carry === target.need)) {
-        score += 10; served++; target.happy = 1;
-        if (target.need !== 'company') player.carry = null;
-        floater(target.x, target.y - 42, '+10', '#1e8f3a'); sndDeliver();
-        target.need = null; target.cooldown = 2; updateHud(); return;
+      if (state !== 'playing') return;
+
+      // já está levando um vovô? tenta deixá-lo no destino certo
+      if (player.escort) {
+        const e = player.escort;
+        if (e.need === 'bath') {
+          if (dist(player, bathStation) < RANGE) dropEscort(e, bathStation.x, bathStation.y, 1.8);
+          else toast('Leve o vovô até o chuveiro 🚿');
+          return;
+        }
+        if (e.need === 'sleep') {
+          const nb = nearestBed();
+          if (nb.bed && nb.d < RANGE) dropEscort(e, nb.bed.x, nb.bed.y, 2.2);
+          else toast('Leve o vovô até a cama 🛏️');
+          return;
+        }
       }
+
+      // idoso próximo que está pedindo (e que não esteja já ocupado)
+      let target = null, td = 1e9;
+      for (const e of elders) {
+        if (!e.need || e.escorting || e.busy > 0 || e.returning) continue;
+        const d = dist(player, e); if (d < RANGE && d < td) { td = d; target = e; }
+      }
+      if (target) {
+        if (target.need === 'company') { target.happy = 1; award(target.x, target.y); target.need = null; target.cooldown = 2; updateHud(); return; }
+        if (target.need === 'bath' || target.need === 'sleep') {
+          target.escorting = true; player.escort = target; sndPickup();
+          toast(target.need === 'bath' ? 'Levando ao chuveiro 🚿' : 'Levando para dormir 😴');
+          return;
+        }
+        if (player.carry === target.need) { target.happy = 1; player.carry = null; award(target.x, target.y); target.need = null; target.cooldown = 2; updateHud(); return; }
+      }
+
+      // pegar item numa estação (banho não é item: é destino)
       let st = null, sd = 1e9;
-      for (const s of stations) { const d = dist(player, s); if (d < RANGE && d < sd) { sd = d; st = s; } }
+      for (const s of stations) { if (s.type === 'bath') continue; const d = dist(player, s); if (d < RANGE && d < sd) { sd = d; st = s; } }
       if (st) { player.carry = st.type; sndPickup(); toast('Pegou ' + st.emoji); updateHud(); return; }
+
       if (target) toast('Precisa de ' + NEED_EMOJI[target.need] + ' ' + NEED_NAME[target.need]);
     }
 
-    function spawnInterval() { return 4.6 - (1 - timeLeft / SHIFT) * 2.8; }
-    function randNeed() { const p = ['pill', 'shot', 'food', 'water', 'bath', 'company']; return p[Math.floor(Math.random() * p.length)]; }
+    function spawnInterval() {
+      const base = 4.4 - (1 - timeLeft / DAY_TIME) * 2.4; // acelera ao longo do dia
+      return Math.max(1.1, base - (day - 1) * 0.35);      // e acelera a cada dia
+    }
+    function randNeed() { const p = ['pill', 'shot', 'food', 'water', 'bath', 'sleep', 'company']; return p[Math.floor(Math.random() * p.length)]; }
 
     function collide() {
       const r = player.r;
@@ -261,28 +423,44 @@
       player.x = clamp(player.x + mx * SPEED * dt, 8, WORLD_W - 8); collide();
       player.y = clamp(player.y + my * SPEED * dt, 8, WORLD_H - 8); collide();
 
-      // câmera segue o jogador
-      cam.x = clamp(player.x - cv.width / 2, 0, Math.max(0, WORLD_W - cv.width));
-      cam.y = clamp(player.y - cv.height / 2, 0, Math.max(0, WORLD_H - cv.height));
-
       for (const e of elders) {
         e.idle += dt;
-        // olham pro cuidador quando ele chega perto
+        if (e.happy > 0) e.happy -= dt; if (e.sad > 0) e.sad -= dt;
+        // sendo levado pelo cuidador: segue-o (paciência pausada)
+        if (e.escorting) {
+          const dx = player.x - e.x, dy = player.y - e.y, d = Math.hypot(dx, dy) || 1;
+          if (d > 36) { const step = Math.min(d - 36, 230 * dt); e.x += dx / d * step; e.y += dy / d * step; }
+          e.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 3 : 2) : (dy > 0 ? 0 : 1);
+          continue;
+        }
+        // no chuveiro / deitado na cama
+        if (e.busy > 0) { e.busy -= dt; if (e.busy <= 0) e.returning = true; continue; }
+        // voltando para o lugar de origem
+        if (e.returning) {
+          const dx = e.homeX - e.x, dy = e.homeY - e.y, d = Math.hypot(dx, dy) || 1;
+          if (d > 4) { const step = Math.min(d, 190 * dt); e.x += dx / d * step; e.y += dy / d * step; e.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 3 : 2) : (dy > 0 ? 0 : 1); }
+          else { e.x = e.homeX; e.y = e.homeY; e.returning = false; }
+          continue;
+        }
+        // parado no lugar: olha pro cuidador quando ele chega perto
         const dx = player.x - e.x, dy = player.y - e.y;
         if (dx * dx + dy * dy < 150 * 150) e.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 3 : 2) : (dy > 0 ? 0 : 1);
         if (e.need) { e.patience -= dt; if (e.patience <= 0) { e.need = null; e.cooldown = 3; e.sad = 1.4; score = Math.max(0, score - 5); floater(e.x, e.y - 42, '-5', '#e03b3b'); sndFail(); updateHud(); } }
         else if (e.cooldown > 0) e.cooldown -= dt;
-        if (e.happy > 0) e.happy -= dt; if (e.sad > 0) e.sad -= dt;
       }
       spawnTimer -= dt;
       if (spawnTimer <= 0) {
-        const idle = elders.filter((e) => !e.need && e.cooldown <= 0);
-        if (idle.length) { const e = idle[Math.floor(Math.random() * idle.length)]; e.need = randNeed(); e.patience = PATIENCE; }
+        const idle = elders.filter((e) => !e.need && e.cooldown <= 0 && !e.escorting && e.busy <= 0 && !e.returning);
+        if (idle.length) { const e = idle[Math.floor(Math.random() * idle.length)]; e.need = randNeed(); e.patience = curPat; e.maxPat = curPat; }
         spawnTimer = spawnInterval();
       }
       for (let i = floaters.length - 1; i >= 0; i--) { const f = floaters[i]; f.y -= 34 * dt; f.life -= dt; if (f.life <= 0) floaters.splice(i, 1); }
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i]; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 320 * dt; p.life -= dt;
+        if (p.life <= 0) particles.splice(i, 1);
+      }
       timeLeft -= dt;
-      if (timeLeft <= 0) { timeLeft = 0; running = false; sndEnd(); document.getElementById('restart').style.display = 'block'; if (score > best) { best = score; localStorage.setItem(BEST_KEY, String(best)); } }
+      if (timeLeft <= 0) { timeLeft = 0; endDay(); }
       if (toastT > 0) toastT -= dt;
       updateHud();
     }
@@ -340,6 +518,26 @@
       if (t === T.TREE) { ctx.fillStyle = '#6b4a2a'; ctx.fillRect(sx + TS / 2 - 4, sy + TS - 16, 8, 14); ctx.fillStyle = '#2e8b3a'; ctx.beginPath(); ctx.arc(sx + TS / 2, sy + TS / 2 - 2, 16, 0, 7); ctx.fill(); }
     }
 
+    // seta na borda da tela apontando pra quem precisa de ajuda fora do campo de visão
+    function drawOffscreenArrows() {
+      const ccx = cam.x + cv.width / 2, ccy = cam.y + cv.height / 2, m = 56;
+      for (const e of elders) {
+        if (!e.need || e.escorting) continue;
+        const sx0 = e.x - cam.x, sy0 = e.y - cam.y;
+        if (sx0 > 44 && sx0 < cv.width - 44 && sy0 > 84 && sy0 < cv.height - 44) continue; // já está visível
+        const ang = Math.atan2(e.y - ccy, e.x - ccx);
+        const ex = clamp(sx0, m, cv.width - m), ey = clamp(sy0, m + 30, cv.height - m);
+        const f = clamp(e.patience / e.maxPat, 0, 1);
+        const col = f > 0.5 ? '#41c264' : f > 0.25 ? '#e8b13b' : '#e0533b';
+        ctx.save(); ctx.translate(ex, ey); ctx.rotate(ang);
+        ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(26, 0); ctx.lineTo(10, -10); ctx.lineTo(10, 10); ctx.closePath(); ctx.fill();
+        ctx.restore();
+        ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.beginPath(); ctx.arc(ex, ey, 17, 0, 7); ctx.fill();
+        ctx.lineWidth = 2.5; ctx.strokeStyle = col; ctx.beginPath(); ctx.arc(ex, ey, 17, 0, 7); ctx.stroke();
+        emoji(NEED_EMOJI[e.need], ex, ey, 20);
+      }
+    }
+
     function draw() {
       ctx.clearRect(0, 0, cv.width, cv.height);
       const c0 = Math.floor(cam.x / TS), c1 = Math.ceil((cam.x + cv.width) / TS);
@@ -366,15 +564,21 @@
         if (it.t === 'e') {
           const y = e.y - cam.y;
           shadow(x, y, 15);
-          drawChar(x, y, e.dir, e.idle * 3, e.pal, false);
+          if (e.busy > 0 && e.busyKind === 'sleep') {
+            ctx.save(); ctx.translate(x, y); ctx.rotate(Math.PI / 2); drawChar(0, 0, 0, 0, e.pal, false); ctx.restore();
+            emoji('😴', x + 20, y - 22, 20);
+          } else {
+            drawChar(x, y, e.dir, e.idle * 3, e.pal, e.escorting || e.returning);
+            if (e.busy > 0 && e.busyKind === 'bath') emoji('💦', x, y - 34, 22);
+          }
           if (e.happy > 0) { ctx.globalAlpha = Math.min(1, e.happy); emoji('😊', x + 22, y - 24 - (1 - e.happy) * 10, 22); ctx.globalAlpha = 1; }
           if (e.sad > 0) { ctx.globalAlpha = Math.min(1, e.sad); emoji('💢', x + 22, y - 24 - (1.4 - e.sad) * 10, 22); ctx.globalAlpha = 1; }
-          if (e.need) {
+          if (e.need && !e.escorting) {
             const pulse = 1 + Math.sin(time * 6) * 0.06;
             ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(x - 24, y - 66, 48, 38, 10); ctx.fill();
             ctx.beginPath(); ctx.moveTo(x - 6, y - 30); ctx.lineTo(x + 6, y - 30); ctx.lineTo(x, y - 20); ctx.fill();
             emoji(NEED_EMOJI[e.need], x, y - 48, 26 * pulse);
-            const f = clamp(e.patience / PATIENCE, 0, 1);
+            const f = clamp(e.patience / e.maxPat, 0, 1);
             ctx.fillStyle = '#00000022'; ctx.fillRect(x - 22, y - 74, 44, 6);
             ctx.fillStyle = f > 0.5 ? '#41c264' : f > 0.25 ? '#e8b13b' : '#e0533b'; ctx.fillRect(x - 22, y - 74, 44 * f, 6);
           }
@@ -386,32 +590,38 @@
         }
       }
 
+      // partículas (suco visual ao atender)
+      for (const p of particles) { ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 2)); ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x - cam.x, p.y - cam.y, 3, 0, 7); ctx.fill(); }
+      ctx.globalAlpha = 1;
+
       for (const f of floaters) { ctx.globalAlpha = Math.min(1, f.life); ctx.fillStyle = f.color; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center'; ctx.fillText(f.txt, f.x - cam.x, f.y - cam.y); ctx.globalAlpha = 1; }
+
+      if (state === 'playing') drawOffscreenArrows();
 
       if (toastT > 0) {
         ctx.globalAlpha = Math.min(1, toastT);
-        ctx.fillStyle = 'rgba(0,0,0,.65)'; ctx.beginPath(); ctx.roundRect(cv.width / 2 - 150, 50, 300, 34, 10); ctx.fill();
+        ctx.fillStyle = 'rgba(0,0,0,.65)'; ctx.beginPath(); ctx.roundRect(cv.width / 2 - 170, 50, 340, 34, 10); ctx.fill();
         ctx.fillStyle = '#fff'; ctx.font = 'bold 16px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(toastMsg, cv.width / 2, 67);
         ctx.globalAlpha = 1;
-      }
-
-      if (!running) {
-        ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(0, 0, cv.width, cv.height);
-        ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.font = 'bold 42px Arial'; ctx.fillText('Fim do plantão!', cv.width / 2, cv.height / 2 - 50);
-        ctx.font = 'bold 26px Arial'; ctx.fillText('Pontos: ' + score + '  ·  Atendimentos: ' + served, cv.width / 2, cv.height / 2);
-        ctx.font = '20px Arial'; ctx.fillText('Recorde: ' + best, cv.width / 2, cv.height / 2 + 38);
       }
     }
 
     let last = 0;
     function loop(now) {
       const dt = last ? Math.min((now - last) / 1000, 0.05) : 0; last = now;
-      if (running) update(dt); else { cam.x = clamp(player.x - cv.width / 2, 0, Math.max(0, WORLD_W - cv.width)); cam.y = clamp(player.y - cv.height / 2, 0, Math.max(0, WORLD_H - cv.height)); }
+      if (state === 'playing') update(dt);
+      cam.x = clamp(player.x - cv.width / 2, 0, Math.max(0, WORLD_W - cv.width));
+      cam.y = clamp(player.y - cv.height / 2, 0, Math.max(0, WORLD_H - cv.height));
       draw();
       requestAnimationFrame(loop);
     }
-    reset();
+
+    // cena inicial congelada por trás do painel de abertura
+    day = 1; score = 0; served = 0; dayServed = 0; goal = dayGoal(1); curPat = PATIENCE;
+    timeLeft = DAY_TIME; time = 0; toastT = 0; floaters = []; particles = [];
+    makeElders(dayCount(1));
+    updateHud();
+    showIntro();
     requestAnimationFrame(loop);
   </script>
 </body>

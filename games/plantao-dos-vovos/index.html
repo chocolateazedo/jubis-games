@@ -68,8 +68,8 @@
     const BEST_KEY = 'plantao-dos-vovos-best';
     const MUTE_KEY = 'plantao-dos-vovos-muted';
     const DAY_TIME = 80, PATIENCE = 20, RANGE = 78;
-    const NEED_EMOJI = { pill: '💊', shot: '💉', food: '🍲', water: '💧', bath: '🚿', sleep: '😴', company: '❤️' };
-    const NEED_NAME = { pill: 'comprimido', shot: 'vacina', food: 'comida', water: 'água', bath: 'banho', sleep: 'soneca', company: 'companhia' };
+    const NEED_EMOJI = { pill: '💊', shot: '💉', food: '🍲', water: '💧', bath: '🚿', sleep: '😴', walk: '🚶', company: '❤️' };
+    const NEED_NAME = { pill: 'comprimido', shot: 'vacina', food: 'comida', water: 'água', bath: 'banho', sleep: 'soneca', walk: 'passeio', company: 'companhia' };
     const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
     // dificuldade por dia
@@ -106,9 +106,12 @@
       door(by + 5, midC); door(midR + 5, midC);            // verticais
       door(midR, bx + 6); door(midR, bx + 19);             // horizontais
       door(by + bh - 1, midC); door(by + bh - 1, midC - 1); // entrada sul
+      door(by + 8, bx + bw - 1); door(by + 9, bx + bw - 1); // porta lateral leste (saída rápida pro jardim)
       // caminho da entrada até o jardim (à direita)
       for (let r = by + bh; r < by + bh + 4; r++) for (let c = midC - 1; c <= midC; c++) map[r][c] = T.PATH;
       for (let c = midC; c < bx + bw + 14; c++) { map[by + bh + 3][c] = T.PATH; map[by + bh + 4][c] = T.PATH; }
+      // caminho curto saindo da porta lateral até os bancos
+      for (let c = bx + bw; c <= bx + bw + 6; c++) { map[by + 8][c] = T.PATH; map[by + 9][c] = T.PATH; }
       // lago no jardim
       for (let r = 22; r <= 26; r++) for (let c = 36; c <= 41; c++) map[r][c] = T.WATER;
       // árvores e flores espalhadas (determinístico, fora do prédio/lago)
@@ -158,6 +161,23 @@
     const bathStation = stations.find((s) => s.type === 'bath'); // chuveiro = destino do banho
     // centro de cada cama (destino da soneca)
     const beds = [[bx + 3, by + 16], [bx + 9, by + 16], [bx + 16, by + 16]].map((b) => ({ x: px(b[0]), y: py(b[1]) + 8 }));
+    // destinos de "passear": em frente aos bancos do jardim e à fonte
+    const walkSpots = [
+      { x: px(36), y: py(13), kind: 'bench' },
+      { x: px(40), y: py(19), kind: 'bench' },
+      { x: px(31), y: py(29), kind: 'fountain' },
+    ];
+    // pombos em frente aos bancos (decorativos; os vovôs os alimentam)
+    const pigeons = [];
+    function makePigeons() {
+      pigeons.length = 0;
+      const areas = [{ x: px(36), y: py(14) }, { x: px(40), y: py(20) }];
+      for (const a of areas) for (let i = 0; i < 3; i++) {
+        const hx = a.x + (i - 1) * 26, hy = a.y + (i % 2) * 12;
+        pigeons.push({ hx, hy, x: hx, y: hy, phase: i * 1.7, off: (i - 1) * 16 });
+      }
+    }
+    makePigeons();
     const PLAYER_PAL = { skin: '#f1c27d', hair: '#5a3a1a', shirt: '#eef4ff', pants: '#3a4a66' };
     const ELDER_PALS = [
       { skin: '#f1c27d', hair: '#dddddd', shirt: '#b85c5c', pants: '#5a5a5a' },
@@ -179,7 +199,7 @@
         return {
           x, y, homeX: x, homeY: y, pal: ELDER_PALS[i % ELDER_PALS.length], dir: 0,
           idle: Math.random() * 6, need: null, patience: 0, maxPat: PATIENCE, cooldown: 2 + i * 0.5, happy: 0, sad: 0,
-          escorting: false, busy: 0, busyKind: null, returning: false,
+          escorting: false, busy: 0, busyKind: null, walkKind: null, feedTimer: 0, returning: false,
         };
       });
     }
@@ -214,7 +234,9 @@
            🧺 Esses 4: pegue na <b>estação</b> certa e leve até quem pediu.<br>
            <b>🚿</b> Banho: <b>leve o vovô até o chuveiro</b>.<br>
            <b>😴</b> Soneca: <b>leve o vovô até a cama</b>.<br>
+           <b>🚶</b> Passeio: <b>leve o vovô lá fora</b> (banco ou fonte) — no banco ele dá comida aos pombos! 🐦<br>
            <b>❤️</b> Companhia: é só chegar perto.<br>
+           🚪 Dica: a <b>porta lateral</b> é um atalho pro jardim.<br>
            🕹️ Mover: <b>setas/WASD</b> ou o direcional.<br>
            👉 Agir / pegar / soltar: botão <b>AGIR</b>, <b>E</b>, espaço ou Enter.
          </div>
@@ -335,9 +357,10 @@
       if (score > best) { best = score; localStorage.setItem(BEST_KEY, String(best)); }
     }
     function nearestBed() { let b = null, bd = 1e9; for (const k of beds) { const d = dist(player, k); if (d < bd) { bd = d; b = k; } } return { bed: b, d: bd }; }
-    function dropEscort(e, dx, dy, dur) {
+    function nearestWalk() { let s = null, sd = 1e9; for (const k of walkSpots) { const d = dist(player, k); if (d < sd) { sd = d; s = k; } } return { spot: s, d: sd }; }
+    function dropEscort(e, dx, dy, dur, walkKind) {
       e.escorting = false; player.escort = null;
-      e.x = dx; e.y = dy; e.busy = dur; e.busyKind = e.need; e.happy = 1;
+      e.x = dx; e.y = dy; e.busy = dur; e.busyKind = e.need; e.walkKind = walkKind || null; e.feedTimer = 0; e.happy = 1;
       award(dx, dy); e.need = null; e.cooldown = 3; updateHud();
     }
 
@@ -358,6 +381,12 @@
           else toast('Leve o vovô até a cama 🛏️');
           return;
         }
+        if (e.need === 'walk') {
+          const nw = nearestWalk();
+          if (nw.spot && nw.d < RANGE) dropEscort(e, nw.spot.x, nw.spot.y, 4.5, nw.spot.kind);
+          else toast('Leve pra passear: um banco ou a fonte lá fora 🚶');
+          return;
+        }
       }
 
       // idoso próximo que está pedindo (e que não esteja já ocupado)
@@ -368,9 +397,9 @@
       }
       if (target) {
         if (target.need === 'company') { target.happy = 1; award(target.x, target.y); target.need = null; target.cooldown = 2; updateHud(); return; }
-        if (target.need === 'bath' || target.need === 'sleep') {
+        if (target.need === 'bath' || target.need === 'sleep' || target.need === 'walk') {
           target.escorting = true; player.escort = target; sndPickup();
-          toast(target.need === 'bath' ? 'Levando ao chuveiro 🚿' : 'Levando para dormir 😴');
+          toast(target.need === 'bath' ? 'Levando ao chuveiro 🚿' : target.need === 'sleep' ? 'Levando para dormir 😴' : 'Levando pra passear 🚶');
           return;
         }
         if (player.carry === target.need) { target.happy = 1; player.carry = null; award(target.x, target.y); target.need = null; target.cooldown = 2; updateHud(); return; }
@@ -388,7 +417,7 @@
       const base = 4.4 - (1 - timeLeft / DAY_TIME) * 2.4; // acelera ao longo do dia
       return Math.max(1.1, base - (day - 1) * 0.35);      // e acelera a cada dia
     }
-    function randNeed() { const p = ['pill', 'shot', 'food', 'water', 'bath', 'sleep', 'company']; return p[Math.floor(Math.random() * p.length)]; }
+    function randNeed() { const p = ['pill', 'shot', 'food', 'water', 'bath', 'sleep', 'walk', 'company']; return p[Math.floor(Math.random() * p.length)]; }
 
     function collide() {
       const r = player.r;
@@ -433,8 +462,16 @@
           e.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 3 : 2) : (dy > 0 ? 0 : 1);
           continue;
         }
-        // no chuveiro / deitado na cama
-        if (e.busy > 0) { e.busy -= dt; if (e.busy <= 0) e.returning = true; continue; }
+        // no chuveiro / deitado na cama / passeando (no banco joga comida pros pombos)
+        if (e.busy > 0) {
+          e.busy -= dt;
+          if (e.busyKind === 'walk' && e.walkKind === 'bench') {
+            e.feedTimer -= dt;
+            if (e.feedTimer <= 0) { e.feedTimer = 0.5; particles.push({ x: e.x + 10, y: e.y - 8, vx: 30 + Math.random() * 40, vy: -70 - Math.random() * 30, life: 1.0, color: '#caa46a' }); }
+          }
+          if (e.busy <= 0) e.returning = true;
+          continue;
+        }
         // voltando para o lugar de origem
         if (e.returning) {
           const dx = e.homeX - e.x, dy = e.homeY - e.y, d = Math.hypot(dx, dy) || 1;
@@ -450,14 +487,29 @@
       }
       spawnTimer -= dt;
       if (spawnTimer <= 0) {
-        const idle = elders.filter((e) => !e.need && e.cooldown <= 0 && !e.escorting && e.busy <= 0 && !e.returning);
-        if (idle.length) { const e = idle[Math.floor(Math.random() * idle.length)]; e.need = randNeed(); e.patience = curPat; e.maxPat = curPat; }
+        const active = elders.filter((e) => e.need).length; // no máximo 2 pedidos ao mesmo tempo
+        if (active < 2) {
+          const idle = elders.filter((e) => !e.need && e.cooldown <= 0 && !e.escorting && e.busy <= 0 && !e.returning);
+          if (idle.length) { const e = idle[Math.floor(Math.random() * idle.length)]; e.need = randNeed(); e.patience = curPat; e.maxPat = curPat; }
+        }
         spawnTimer = spawnInterval();
       }
       for (let i = floaters.length - 1; i >= 0; i--) { const f = floaters[i]; f.y -= 34 * dt; f.life -= dt; if (f.life <= 0) floaters.splice(i, 1); }
       for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i]; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 320 * dt; p.life -= dt;
         if (p.life <= 0) particles.splice(i, 1);
+      }
+      // pombos: aproximam-se de quem alimenta no banco; senão voltam ao lugar
+      for (const p of pigeons) {
+        let feeder = null, fd = 1e9;
+        for (const e of elders) if (e.busy > 0 && e.busyKind === 'walk' && e.walkKind === 'bench') {
+          const d = Math.hypot(p.hx - e.x, p.hy - e.y); if (d < 150 && d < fd) { fd = d; feeder = e; }
+        }
+        const tx = feeder ? feeder.x + p.off : p.hx;
+        const ty = feeder ? feeder.y + 26 : p.hy;
+        p.x += (tx - p.x) * Math.min(1, dt * 3);
+        p.y += (ty - p.y) * Math.min(1, dt * 3);
+        p.phase += dt * (feeder ? 9 : 3);
       }
       timeLeft -= dt;
       if (timeLeft <= 0) { timeLeft = 0; endDay(); }
@@ -518,6 +570,15 @@
       if (t === T.TREE) { ctx.fillStyle = '#6b4a2a'; ctx.fillRect(sx + TS / 2 - 4, sy + TS - 16, 8, 14); ctx.fillStyle = '#2e8b3a'; ctx.beginPath(); ctx.arc(sx + TS / 2, sy + TS / 2 - 2, 16, 0, 7); ctx.fill(); }
     }
 
+    function drawPigeon(p) {
+      const x = p.x - cam.x, y = p.y - cam.y;
+      const peck = Math.sin(p.phase) > 0.5 ? 3 : 0; // abaixa a cabeça pra bicar
+      ctx.fillStyle = 'rgba(0,0,0,.15)'; ctx.beginPath(); ctx.ellipse(x, y + 5, 7, 3, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = '#8a93a3'; ctx.beginPath(); ctx.ellipse(x, y, 7, 5, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = '#9aa3b3'; ctx.beginPath(); ctx.arc(x + 6, y - 4 + peck, 3.2, 0, 7); ctx.fill();
+      ctx.fillStyle = '#e0a050'; ctx.beginPath(); ctx.moveTo(x + 9, y - 4 + peck); ctx.lineTo(x + 12, y - 3 + peck); ctx.lineTo(x + 9, y - 2 + peck); ctx.fill();
+    }
+
     // seta na borda da tela apontando pra quem precisa de ajuda fora do campo de visão
     function drawOffscreenArrows() {
       const ccx = cam.x + cv.width / 2, ccy = cam.y + cv.height / 2, m = 56;
@@ -558,9 +619,10 @@
         ctx.fillStyle = '#5b4327'; ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center'; ctx.fillText(s.name, x, y + 22);
       }
 
-      const drawn = [...elders.map((e) => ({ o: e, t: 'e' })), { o: player, t: 'p' }].sort((a, b) => a.o.y - b.o.y);
+      const drawn = [...elders.map((e) => ({ o: e, t: 'e' })), ...pigeons.map((p) => ({ o: p, t: 'g' })), { o: player, t: 'p' }].sort((a, b) => a.o.y - b.o.y);
       for (const it of drawn) {
         const e = it.o, x = e.x - cam.x;
+        if (it.t === 'g') { drawPigeon(it.o); continue; }
         if (it.t === 'e') {
           const y = e.y - cam.y;
           shadow(x, y, 15);
@@ -570,6 +632,7 @@
           } else {
             drawChar(x, y, e.dir, e.idle * 3, e.pal, e.escorting || e.returning);
             if (e.busy > 0 && e.busyKind === 'bath') emoji('💦', x, y - 34, 22);
+            if (e.busy > 0 && e.busyKind === 'walk' && e.walkKind === 'bench') emoji('🍞', x, y - 34, 20);
           }
           if (e.happy > 0) { ctx.globalAlpha = Math.min(1, e.happy); emoji('😊', x + 22, y - 24 - (1 - e.happy) * 10, 22); ctx.globalAlpha = 1; }
           if (e.sad > 0) { ctx.globalAlpha = Math.min(1, e.sad); emoji('💢', x + 22, y - 24 - (1.4 - e.sad) * 10, 22); ctx.globalAlpha = 1; }

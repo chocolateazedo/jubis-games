@@ -1,2 +1,9 @@
 # Configurações locais do Claude Code (por máquina) — não versionar
 .claude/settings.local.json
+
+# Credenciais do banco — NUNCA versionar (tem senha)
+includes/db_config.local.php
+includes/db_config.php
+
+# Dados de runtime da área logada (se algum dia usar arquivos)
+data/users/

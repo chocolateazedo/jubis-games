@@ -6,6 +6,15 @@ require __DIR__ . '/includes/games.php';
 $games = jubis_load_games(__DIR__ . '/games');
 $year  = date('Y');
 
+// área logada (degrada com elegância se o banco estiver fora)
+$me = null; $myCoins = 0;
+try {
+    require_once __DIR__ . '/includes/auth.php';
+    jubis_session_start();
+    $me = jubis_current_username();
+    if ($me) { $u = jubis_load_user($me); $myCoins = $u ? jubis_coins($u) : 0; }
+} catch (Throwable $e) { $me = null; }
+
 function e(string $s): string {
     return htmlspecialchars($s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
@@ -64,6 +73,12 @@ function e(string $s): string {
     <nav class="nav">
       <a href="#jogos">Jogos</a>
       <a href="#sobre">Sobre</a>
+      <?php if ($me): ?>
+        <a href="conta.php" title="Minha conta">🪙 <?= (int)$myCoins ?></a>
+        <a href="sair.php">Sair</a>
+      <?php else: ?>
+        <a href="entrar.php">Entrar</a>
+      <?php endif; ?>
     </nav>
   </header>
 

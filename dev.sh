@@ -13,11 +13,12 @@ set -e
 
 NAME=jubis-games-dev
 PORT=8095
-IMAGE=php:8.2-cli
+IMAGE=jubis-games-dev:php82      # imagem própria com pdo_pgsql (ver dev/Dockerfile)
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
 case "${1:-up}" in
   up|start)
+    docker build -t "$IMAGE" "$DIR/dev" >/dev/null
     docker rm -f "$NAME" >/dev/null 2>&1 || true
     docker run -d --name "$NAME" --restart unless-stopped \
       -p "$PORT:$PORT" -v "$DIR:/app" -w /app \

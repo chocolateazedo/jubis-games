@@ -75,10 +75,30 @@ Pronto! Faz upload e o jogo aparece automaticamente na página inicial. Não pre
 - Futebol Online 3D (`games/futebol-online`) — pelada 3×3 em **3D** (Three.js) multiplayer online (WebRTC/PeerJS, host-autoritativo) com até 4 jogadores; os lugares vazios viram bots. Condução de bola ao tocar e chute (espaço/CHUTAR). Tem modo "jogar sozinho"
 - Salão de Damas (`games/salao-de-damas`) — salão 3D multiplayer online onde os jogadores andam de cartola, sentam nas mesas e jogam damas (com regra do **sopro**), conversam por **chat de texto** (balões 3D) e por **chat de voz** com proximidade (WebRTC/PeerJS). Tem **2º andar** que abre quando o térreo lota
 
+## Área logada (contas + Jubis Coin)
+
+O site tem uma **área logada** com cadastro próprio (self signup), login e a moeda
+**Jubis Coin** (o mecanismo de ganhar/gastar vem depois; o saldo e os helpers já existem).
+
+- Páginas: `cadastro.php`, `entrar.php`, `conta.php`, `sair.php`.
+- Lógica: `includes/auth.php` (sessão, CSRF, signup/login, moeda) + `includes/db.php`.
+- Banco: **PostgreSQL** no schema próprio **`jubis`** (tabelas `jubis.users` e
+  `jubis.coin_ledger`) — isolado de outros projetos no mesmo banco. Schema em
+  `includes/schema.sql` (idempotente).
+- Senhas com `password_hash` (bcrypt); formulários com token CSRF.
+
+**Configuração do banco (não versionada):** defina a env var `JUBIS_DATABASE_URL`
+no servidor **ou** crie `includes/db_config.local.php` a partir de
+`includes/db_config.example.php` (esse arquivo é gitignored — nunca suba a senha).
+Formato: `postgresql://usuario:senha@host:porta/banco`.
+
 ## Requisitos do servidor
 
-- PHP 7.4+ (qualquer hospedagem compartilhada já tem)
+- PHP 7.4+ com a extensão **`pdo_pgsql`** (necessária para a área logada)
+- Acesso de rede ao servidor PostgreSQL configurado em `JUBIS_DATABASE_URL`
 - Apache com `mod_rewrite` (opcional, mas recomendado)
+
+> Dev local: `./dev.sh up` já constrói uma imagem com `pdo_pgsql` (ver `dev/Dockerfile`).
 
 ## Rodando localmente
 

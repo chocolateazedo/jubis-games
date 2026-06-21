@@ -74,7 +74,6 @@
     import { VRButton } from 'three/addons/webxr/VRButton.js';
     import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-    import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
 
     const SPEED = 3.2;                 // metros por segundo
     const WORLD_R = 178;               // raio andável
@@ -153,7 +152,7 @@
     shore.rotation.x = -Math.PI / 2; shore.position.set(LAKE.x, LAKE_Y + 0.12, LAKE.z); scene.add(shore);
 
     // ---------- árvores e pedras: modelos 3D CC0 (Quaternius), instanciados ----------
-    const TREES = 240, DEER_FIX = Math.PI; // ajuste de "frente" do veado (Quaternius olha +Z)
+    const TREES = 240;
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), scl = new THREE.Vector3(), ID = new THREE.Quaternion();
     // sombra "blob" no chão sob cada árvore (some na hora, antes dos GLBs carregarem)
     const blobGeo = new THREE.CircleGeometry(1.5, 14); blobGeo.rotateX(-Math.PI / 2);
@@ -226,25 +225,12 @@
     }
     gltfLoader.load('models/rocks.glb', g => buildInstanced(extractVariants(g), rockPlace, 1.4));
 
-    // ---------- veado animado (CC0, SkinnedMesh — sem instancing) ----------
-    const deers = [];
-    gltfLoader.load('models/deer.glb', g => {
-      const bb = new THREE.Box3().setFromObject(g.scene), h = (bb.max.y - bb.min.y) || 1, sc = 1.7 / h;
-      let clip = THREE.AnimationClip.findByName(g.animations, 'Walk') || g.animations.find(a => /walk/i.test(a.name)) || g.animations[0];
-      if (clip) { clip = clip.clone(); clip.tracks = clip.tracks.filter(tr => !tr.name.endsWith('.position')); } // "no lugar" (sem root motion); o wrap é quem move
-      for (let i = 0; i < 2; i++) {
-        const model = i === 0 ? g.scene : skeletonClone(g.scene);
-        model.position.y = -bb.min.y; // pés no y=0 (unidades nativas; quem escala é o wrap)
-        model.traverse(o => { if (o.isMesh || o.isSkinnedMesh) o.frustumCulled = false; }); // skinned tem bounding em bind-pose: evita sumir ao animar/mover
-        const wrap = new THREE.Group(); wrap.add(model); wrap.scale.setScalar(sc); scene.add(wrap); // escala no wrap mantém o skinning estável
-        const mixer = new THREE.AnimationMixer(model); if (clip) mixer.clipAction(clip).play();
-        let cx, cz, r, gg = 0;
-        do { const a = Math.random() * 6.28, d = 20 + Math.random() * 90; cx = Math.cos(a) * d; cz = Math.sin(a) * d; r = 14 + Math.random() * 20; gg++; }
-        while (gg < 50 && (Math.hypot(cx - LAKE.x, cz - LAKE.z) < LAKE.r + r + 8 || Math.hypot(cx, cz) + r > WORLD_R - 8));
-        wrap.userData = { mixer, cx, cz, r, sp: 0.05 + Math.random() * 0.05, ph: Math.random() * 6.28 };
-        deers.push(wrap);
-      }
-    });
+    // ---------- obstáculos (tronco das árvores + base das pedras): não dá pra atravessar ----------
+    // raio de colisão pequeno (o tronco/base, não a copa) — as posições já são conhecidas, não esperam o GLB
+    const obstacles = [];
+    for (const p of broad) obstacles.push({ x: p.x, z: p.z, r: 0.5 + p.s * 0.28 });
+    for (const p of pine)  obstacles.push({ x: p.x, z: p.z, r: 0.45 + p.s * 0.25 });
+    for (const p of rockPlace) obstacles.push({ x: p.x, z: p.z, r: 0.4 + p.s * 0.5 });
 
     // ---------- pássaros (modelo voltado para -Z, pra usar lookAt) ----------
     const birds = [];
@@ -252,13 +238,16 @@
     function makeBird(c) {
       const g = new THREE.Group();
       const skin = new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 });
-      const body = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 9), skin); body.scale.set(0.8, 0.8, 1.7); g.add(body);
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), skin); head.position.set(0, 0.14, -0.5); g.add(head);
-      const beak = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.24, 6), new THREE.MeshStandardMaterial({ color: 0xe6a52e })); beak.rotation.x = -Math.PI / 2; beak.position.set(0, 0.12, -0.74); g.add(beak);
-      const tail = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.55, 4), skin); tail.rotation.x = Math.PI / 2; tail.scale.set(1, 1, 0.35); tail.position.set(0, 0.06, 0.62); g.add(tail);
-      const wgeo = new THREE.PlaneGeometry(1.25, 0.5); const wmat = new THREE.MeshStandardMaterial({ color: c, roughness: 0.85, side: THREE.DoubleSide });
+      // corpo fino e alongado (fuselado), não uma bola
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.26, 12, 9), skin); body.scale.set(0.6, 0.58, 2.4); g.add(body);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 8), skin); head.position.set(0, 0.08, -0.52); g.add(head);
+      const beak = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.22, 6), new THREE.MeshStandardMaterial({ color: 0xe6a52e })); beak.rotation.x = -Math.PI / 2; beak.position.set(0, 0.06, -0.72); g.add(beak);
+      const tail = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.62, 4), skin); tail.rotation.x = Math.PI / 2; tail.scale.set(1, 1, 0.22); tail.position.set(0, 0.02, 0.68); g.add(tail);
+      // asas compridas e estreitas (silhueta de ave planando)
+      const wgeo = new THREE.PlaneGeometry(1.55, 0.4); const wmat = new THREE.MeshStandardMaterial({ color: c, roughness: 0.85, side: THREE.DoubleSide });
       const wl = new THREE.Mesh(wgeo, wmat), wr = wl.clone();
-      wl.position.set(0.62, 0.08, 0.05); wr.position.set(-0.62, 0.08, 0.05); g.add(wl, wr);
+      wl.position.set(0.77, 0.05, 0.06); wr.position.set(-0.77, 0.05, 0.06); g.add(wl, wr);
+      g.scale.setScalar(0.82);
       g.userData = { wl, wr };
       return g;
     }
@@ -332,7 +321,7 @@
       if (len > 0.01) {
         if (len > 1) { mx /= len; mz /= len; }
         camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize();
-        right.set(fwd.z, 0, -fwd.x);
+        right.set(-fwd.z, 0, fwd.x); // vetor "direita" do jogador (estava invertido)
         const spd = SPEED * dt * (keys['ShiftLeft'] || keys['ShiftRight'] ? 1.9 : 1);
         mv.set(0, 0, 0).addScaledVector(fwd, -mz * spd).addScaledVector(right, mx * spd);
         dolly.position.x += mv.x; dolly.position.z += mv.z;
@@ -341,6 +330,12 @@
         if (r > WORLD_R) { p.x *= WORLD_R / r; p.z *= WORLD_R / r; }
         const dx = p.x - LAKE.x, dz2 = p.z - LAKE.z, ld = Math.hypot(dx, dz2), min = LAKE.r + 0.8;
         if (ld < min) { const k = min / (ld || 1); p.x = LAKE.x + dx * k; p.z = LAKE.z + dz2 * k; }
+        // colisão: não atravessar troncos de árvore nem pedras
+        const PR = 0.4;
+        for (const o of obstacles) {
+          const ox = p.x - o.x, oz = p.z - o.z, od = Math.hypot(ox, oz), md = o.r + PR;
+          if (od < md) { const k = md / (od || 1); p.x = o.x + ox * k; p.z = o.z + oz * k; }
+        }
         stepDist += Math.hypot(mv.x, mv.z); if (stepDist > 1.7) { stepDist = 0; step(); }
       }
       // segue o relevo do terreno
@@ -354,13 +349,6 @@
         birdAhead.set(u.cx + Math.cos(a2) * u.r, u.h + Math.sin(a2 * 2) * 1.4, u.cz + Math.sin(a2) * u.r); b.lookAt(birdAhead);
         const flap = Math.sin(t * 0.016 + u.ph) * 0.7; u.wl.rotation.z = -flap; u.wr.rotation.z = flap;
       }
-      // veados: animam (walk) e perambulam pelo gramado
-      for (const dr of deers) {
-        const u = dr.userData; u.mixer.update(dt);
-        const a = t * 0.001 * u.sp + u.ph, x = u.cx + Math.cos(a) * u.r, z = u.cz + Math.sin(a) * u.r, y = heightAt(x, z);
-        dr.position.set(x, y, z);
-        const a2 = a + 0.05; dr.lookAt(u.cx + Math.cos(a2) * u.r, y, u.cz + Math.sin(a2) * u.r); dr.rotateY(DEER_FIX);
-      }
       renderer.render(scene, camera);
     }
     renderer.setAnimationLoop(frame);
@@ -368,7 +356,7 @@
     addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
 
     // ---------- som ambiente (vento + pássaros + passos, procedural) ----------
-    let actx = null, stepBuf = null, stepDist = 0;
+    let actx = null, stepDist = 0;
     function startAudio() {
       if (actx) { actx.resume(); return; }
       try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
@@ -379,19 +367,27 @@
       const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420;
       const wg = actx.createGain(); wg.gain.value = 0.05;
       wind.connect(lp).connect(wg).connect(actx.destination); wind.start();
-      // buffer curto de "crunch" pros passos na grama
-      stepBuf = actx.createBuffer(1, (actx.sampleRate * 0.18) | 0, actx.sampleRate);
-      const sd = stepBuf.getChannelData(0);
-      for (let i = 0; i < sd.length; i++) sd[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / sd.length, 2.2);
       scheduleBird();
     }
-    // passo na grama: ruído curto filtrado (varia um pouco a cada passo)
+    // passo na grama: folhagem (ruído curto filtrado, decaimento natural) + baque grave leve do pé
     function step() {
-      if (!actx || !stepBuf) return;
-      const s = actx.createBufferSource(); s.buffer = stepBuf;
-      const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 850 + Math.random() * 600; bp.Q.value = 0.7;
-      const g = actx.createGain(); g.gain.value = 0.09 + Math.random() * 0.05;
-      s.connect(bp).connect(g).connect(actx.destination); s.start();
+      if (!actx) return;
+      const t = actx.currentTime;
+      // 1) farfalhar da grama
+      const dur = 0.12 + Math.random() * 0.05, len = (actx.sampleRate * dur) | 0;
+      const nb = actx.createBuffer(1, len, actx.sampleRate), nd = nb.getChannelData(0);
+      for (let i = 0; i < len; i++) nd[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.6);
+      const src = actx.createBufferSource(); src.buffer = nb;
+      const hp = actx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 320;
+      const lp2 = actx.createBiquadFilter(); lp2.type = 'lowpass'; lp2.frequency.value = 1500 + Math.random() * 900;
+      const g = actx.createGain(); g.gain.value = 0.07 + Math.random() * 0.03;
+      src.connect(hp).connect(lp2).connect(g).connect(actx.destination); src.start(t);
+      // 2) baque grave do pé (curto)
+      const o = actx.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(150 + Math.random() * 30, t); o.frequency.exponentialRampToValueAtTime(68, t + 0.11);
+      const og = actx.createGain();
+      og.gain.setValueAtTime(0.0001, t); og.gain.exponentialRampToValueAtTime(0.06, t + 0.012); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+      o.connect(og).connect(actx.destination); o.start(t); o.stop(t + 0.16);
     }
     function chirp(t, base) {
       const o = actx.createOscillator(), g = actx.createGain(); o.type = 'sine';

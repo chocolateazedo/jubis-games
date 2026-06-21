@@ -51,7 +51,7 @@
     #buildMenu h3 { margin: 2px 4px 10px; font-size: 16px; }
     #buildGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
     #buildGrid button { text-align: left; border: 1px solid rgba(160,230,180,.25); background: rgba(255,255,255,.06); color: #eaffee;
-      border-radius: 9px; padding: 8px 9px; font-size: 12px; cursor: pointer; text-transform: capitalize; }
+      border-radius: 9px; padding: 8px 9px; font-size: 12px; cursor: pointer; }
     #buildGrid button:active { background: rgba(120,220,150,.3); }
     #buildBar { position: fixed; z-index: 35; left: 50%; transform: translateX(-50%); bottom: max(16px, env(safe-area-inset-bottom));
       display: flex; gap: 8px; }
@@ -97,7 +97,7 @@
       <p>Um lugar tranquilo pra <b>passear</b>: floresta, lago e sol. Coloque o óculos <b>Meta</b> e entre no VR, ou explore aqui mesmo.</p>
       <div class="keys">
         🥽 <b>VR (óculos Meta):</b> ande com a <b>alavanca</b>; <b>gatilho esquerdo</b> = correr, <b>lateral/grip</b> = pular.<br>
-        &nbsp;&nbsp;&nbsp;🔨 <b>Y</b> abre o menu de construção · aponte e use o <b>gatilho</b> pra escolher, colocar e conversar · <b>A</b> gira a peça.<br>
+        &nbsp;&nbsp;&nbsp;🔨 <b>Y</b> abre o menu de construção · aponte e use o <b>gatilho</b> pra escolher, colocar e conversar · <b>A</b> ou <b>analógico direito</b> giram a peça.<br>
         🖥️ <b>PC:</b> mouse pra olhar, <b>W A S D</b> (Shift = correr, Espaço = pular), <b>E</b> conversa, <b>🔨</b> constrói (<b>R</b> gira).<br>
         📱 <b>Celular:</b> <b>arraste</b> pra olhar, <b>direcional</b> anda, toque na dica pra conversar.
       </div>
@@ -425,6 +425,28 @@
 
     // ---------- construção (Kenney Building Kit, CC0) ----------
     const BUILD_PIECES = ['barricade-doorway-a','barricade-doorway-b','barricade-doorway-c','barricade-window-a','barricade-window-b','barricade-window-c','border-corner-diagonal','border-corner','border-corner-round','border-corner-small','border','border-high-corner-diagonal','border-high-corner','border-high-corner-round','border-high-corner-small','border-high','column','column-thin','column-wide','detail-pipe','door-rotate-round-a','door-rotate-round-b','door-rotate-round-c','door-rotate-round-d','door-rotate-square-a','door-rotate-square-b','door-rotate-square-c','door-rotate-square-d','floor-corner-diagonal','floor-corner-round','floor','floor-half','floor-quarter','gutter-vertical-bottom','gutter-vertical','gutter-vertical-short','gutter-vertical-top','gutter-vertical-wall','plating-detailed','plating-detailed-wide','plating','plating-wide','roof-flat-center','roof-flat-corner','roof-flat-corner-inner','roof-flat-patch','roof-flat-patch-large','roof-flat-side','roof-flat-square','stairs-center','stairs-center-short','stairs-closed','stairs-closed-short','stairs-open','stairs-open-short','stairs-sides','stairs-sides-short','wall-corner-column-bottom','wall-corner-column','wall-corner-column-small-bottom','wall-corner-column-small','wall-corner-diagonal','wall-corner','wall-corner-round','wall-doorway-round','wall-doorway-square','wall-doorway-wide-round','wall-doorway-wide-square','wall','wall-half','wall-low','wall-window-round-detailed','wall-window-round','wall-window-square-detailed','wall-window-square','wall-window-wide-round-detailed','wall-window-wide-round','wall-window-wide-square-detailed','wall-window-wide-square'];
+    // nomes em PT-BR (o nome interno/arquivo continua em inglês)
+    const BUILD_PT = {
+      'barricade-doorway-a': 'Barricada de porta A', 'barricade-doorway-b': 'Barricada de porta B', 'barricade-doorway-c': 'Barricada de porta C',
+      'barricade-window-a': 'Barricada de janela A', 'barricade-window-b': 'Barricada de janela B', 'barricade-window-c': 'Barricada de janela C',
+      'border-corner-diagonal': 'Beirada canto diagonal', 'border-corner': 'Beirada de canto', 'border-corner-round': 'Beirada canto arredondado', 'border-corner-small': 'Beirada canto pequeno', 'border': 'Beirada',
+      'border-high-corner-diagonal': 'Beirada alta canto diagonal', 'border-high-corner': 'Beirada alta de canto', 'border-high-corner-round': 'Beirada alta canto arredondado', 'border-high-corner-small': 'Beirada alta canto pequeno', 'border-high': 'Beirada alta',
+      'column': 'Coluna', 'column-thin': 'Coluna fina', 'column-wide': 'Coluna larga', 'detail-pipe': 'Cano',
+      'door-rotate-round-a': 'Porta redonda A', 'door-rotate-round-b': 'Porta redonda B', 'door-rotate-round-c': 'Porta redonda C', 'door-rotate-round-d': 'Porta redonda D',
+      'door-rotate-square-a': 'Porta quadrada A', 'door-rotate-square-b': 'Porta quadrada B', 'door-rotate-square-c': 'Porta quadrada C', 'door-rotate-square-d': 'Porta quadrada D',
+      'floor-corner-diagonal': 'Piso canto diagonal', 'floor-corner-round': 'Piso canto arredondado', 'floor': 'Piso', 'floor-half': 'Meio piso', 'floor-quarter': 'Piso pequeno',
+      'gutter-vertical-bottom': 'Calha vertical base', 'gutter-vertical': 'Calha vertical', 'gutter-vertical-short': 'Calha vertical curta', 'gutter-vertical-top': 'Calha vertical topo', 'gutter-vertical-wall': 'Calha vertical parede',
+      'plating-detailed': 'Chapa detalhada', 'plating-detailed-wide': 'Chapa detalhada larga', 'plating': 'Chapa', 'plating-wide': 'Chapa larga',
+      'roof-flat-center': 'Telhado centro', 'roof-flat-corner': 'Telhado canto', 'roof-flat-corner-inner': 'Telhado canto interno', 'roof-flat-patch': 'Telhado remendo', 'roof-flat-patch-large': 'Telhado remendo grande', 'roof-flat-side': 'Telhado lateral', 'roof-flat-square': 'Telhado quadrado',
+      'stairs-center': 'Escada central', 'stairs-center-short': 'Escada central curta', 'stairs-closed': 'Escada fechada', 'stairs-closed-short': 'Escada fechada curta', 'stairs-open': 'Escada aberta', 'stairs-open-short': 'Escada aberta curta', 'stairs-sides': 'Escada com laterais', 'stairs-sides-short': 'Escada laterais curta',
+      'wall-corner-column-bottom': 'Parede canto coluna base', 'wall-corner-column': 'Parede canto com coluna', 'wall-corner-column-small-bottom': 'Parede canto coluna pequena base', 'wall-corner-column-small': 'Parede canto coluna pequena',
+      'wall-corner-diagonal': 'Parede canto diagonal', 'wall-corner': 'Parede de canto', 'wall-corner-round': 'Parede canto arredondado',
+      'wall-doorway-round': 'Parede com porta redonda', 'wall-doorway-square': 'Parede com porta quadrada', 'wall-doorway-wide-round': 'Parede porta larga redonda', 'wall-doorway-wide-square': 'Parede porta larga quadrada',
+      'wall': 'Parede', 'wall-half': 'Meia parede', 'wall-low': 'Parede baixa',
+      'wall-window-round-detailed': 'Parede janela redonda detalhada', 'wall-window-round': 'Parede com janela redonda', 'wall-window-square-detailed': 'Parede janela quadrada detalhada', 'wall-window-square': 'Parede com janela quadrada',
+      'wall-window-wide-round-detailed': 'Parede janela larga redonda detalhada', 'wall-window-wide-round': 'Parede janela larga redonda', 'wall-window-wide-square-detailed': 'Parede janela larga quadrada detalhada', 'wall-window-wide-square': 'Parede janela larga quadrada',
+    };
+    const piecePT = n => BUILD_PT[n] || n.replace(/-/g, ' ');
     const BUILD_SCALE = 2.4, BUILD_DIST = 4.5; // tamanho das peças e distância do fantasma à frente do jogador
     const placedGroup = new THREE.Group(); scene.add(placedGroup);
     let buildPiece = null, ghost = null, ghostRY = 0;
@@ -432,11 +454,24 @@
     const raycaster = new THREE.Raycaster();
     const rcPos = new THREE.Vector3(), rcDir = new THREE.Vector3(), rcQuat = new THREE.Quaternion();
 
+    // colisão das peças: aproxima a base por um ou mais círculos ao longo do lado maior
+    // (peças baixas, tipo piso/beirada, não bloqueiam — dá pra pisar nelas)
+    const _bb = new THREE.Box3(), _dir = new THREE.Vector3();
+    function addBuildingCollision(gltf, x, z, ry) {
+      _bb.setFromObject(gltf.scene);
+      const w = (_bb.max.x - _bb.min.x) * BUILD_SCALE, d = (_bb.max.z - _bb.min.z) * BUILD_SCALE, h = (_bb.max.y - _bb.min.y) * BUILD_SCALE;
+      if (h < 0.8) return; // chão/beirada baixa: não bloqueia
+      const long = Math.max(w, d), short = Math.min(w, d), r = Math.max(0.4, short * 0.5);
+      _dir.set(w >= d ? 1 : 0, 0, w >= d ? 0 : 1).applyAxisAngle(UP, ry);
+      const span = Math.max(0, long - short), n = Math.max(1, Math.round(span / (r * 1.2)) + 1);
+      for (let i = 0; i < n; i++) { const tt = n === 1 ? 0 : (i / (n - 1) - 0.5) * span; obstacles.push({ x: x + _dir.x * tt, z: z + _dir.z * tt, r }); }
+    }
     function addPiece(name, x, y, z, ry, asGhost) {
       return getGLB(`build/${name}.glb`).then(gltf => {
         const o = gltf.scene.clone(true); o.scale.setScalar(BUILD_SCALE);
         o.position.set(x, y, z); o.rotation.y = ry;
         if (asGhost) o.traverse(m => { if (m.isMesh) { m.material = new THREE.MeshBasicMaterial({ color: 0x86ff9d, transparent: true, opacity: 0.45, depthWrite: false }); } });
+        else addBuildingCollision(gltf, x, z, ry);
         (asGhost ? scene : placedGroup).add(o);
         return o;
       });
@@ -523,7 +558,7 @@
         c.fillStyle = menuHover === cell ? 'rgba(120,220,150,0.45)' : 'rgba(255,255,255,0.06)';
         rr(c, x + 6, y + 6, cw - 12, ch - 12, 12); c.fill();
         c.fillStyle = '#eaffee'; c.font = '23px Arial';
-        wrapCenter(c, BUILD_PIECES[pieceIdx].replace(/-/g, ' '), x + cw / 2, y + ch / 2, cw - 24, 26);
+        wrapCenter(c, piecePT(BUILD_PIECES[pieceIdx]), x + cw / 2, y + ch / 2, cw - 24, 26);
       }
       c.textAlign = 'left'; c.textBaseline = 'alphabetic'; mTex.needsUpdate = true;
     }
@@ -639,7 +674,11 @@
         interactWas = !!s.interact;
         // botão A (dir) gira a peça
         if (s.rot && !rotWas && buildPiece) ghostRY += Math.PI / 4; rotWas = !!s.rot;
-        if (!menuOpen && Math.abs(s.tx) > 0.7 && !turned) { dolly.rotation.y -= Math.sign(s.tx) * Math.PI / 6; turned = true; }
+        if (!menuOpen && Math.abs(s.tx) > 0.7 && !turned) {
+          if (buildPiece) ghostRY -= Math.sign(s.tx) * Math.PI / 4; // construindo: analógico gira a peça
+          else dolly.rotation.y -= Math.sign(s.tx) * Math.PI / 6;   // senão: gira o jogador
+          turned = true;
+        }
         if (Math.abs(s.tx) < 0.3) turned = false;
       } else {
         dolly.rotation.y = yaw; camera.rotation.x = pitch;
@@ -759,7 +798,7 @@
 
     // ---------- UI de construção ----------
     const buildMenu = document.getElementById('buildMenu'), buildGrid = document.getElementById('buildGrid');
-    BUILD_PIECES.forEach(name => { const b = document.createElement('button'); b.textContent = name.replace(/-/g, ' '); b.addEventListener('click', () => selectPiece(name)); buildGrid.appendChild(b); });
+    BUILD_PIECES.forEach(name => { const b = document.createElement('button'); b.textContent = piecePT(name); b.addEventListener('click', () => selectPiece(name)); buildGrid.appendChild(b); });
     document.getElementById('buildBtn').addEventListener('click', () => buildMenu.classList.toggle('hidden'));
     document.getElementById('bRot').addEventListener('click', () => { ghostRY += Math.PI / 4; });
     document.getElementById('bPlace').addEventListener('click', doPlace);

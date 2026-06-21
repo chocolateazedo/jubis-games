@@ -454,27 +454,41 @@
     const raycaster = new THREE.Raycaster();
     const rcPos = new THREE.Vector3(), rcDir = new THREE.Vector3(), rcQuat = new THREE.Quaternion();
 
-    // colisão das peças: aproxima a base por um ou mais círculos ao longo do lado maior
-    // (peças baixas, tipo piso/beirada, não bloqueiam — dá pra pisar nelas)
-    const _bb = new THREE.Box3(), _dir = new THREE.Vector3();
-    function addBuildingCollision(gltf, x, z, ry) {
-      _bb.setFromObject(gltf.scene);
-      const w = (_bb.max.x - _bb.min.x) * BUILD_SCALE, d = (_bb.max.z - _bb.min.z) * BUILD_SCALE, h = (_bb.max.y - _bb.min.y) * BUILD_SCALE;
-      if (h < 0.8) return; // chão/beirada baixa: não bloqueia
-      const long = Math.max(w, d), short = Math.min(w, d), r = Math.max(0.4, short * 0.5);
-      _dir.set(w >= d ? 1 : 0, 0, w >= d ? 0 : 1).applyAxisAngle(UP, ry);
-      const span = Math.max(0, long - short), n = Math.max(1, Math.round(span / (r * 1.2)) + 1);
-      for (let i = 0; i < n; i++) { const tt = n === 1 ? 0 : (i / (n - 1) - 0.5) * span; obstacles.push({ x: x + _dir.x * tt, z: z + _dir.z * tt, r }); }
-    }
     function addPiece(name, x, y, z, ry, asGhost) {
       return getGLB(`build/${name}.glb`).then(gltf => {
         const o = gltf.scene.clone(true); o.scale.setScalar(BUILD_SCALE);
         o.position.set(x, y, z); o.rotation.y = ry;
         if (asGhost) o.traverse(m => { if (m.isMesh) { m.material = new THREE.MeshBasicMaterial({ color: 0x86ff9d, transparent: true, opacity: 0.45, depthWrite: false }); } });
-        else addBuildingCollision(gltf, x, z, ry);
+        else { o.updateMatrixWorld(true); buildSolids.push(o); } // entra na lista pra colisão por raycast
         (asGhost ? scene : placedGroup).add(o);
         return o;
       });
+    }
+    // ---------- colisão das construções por raycast na geometria real ----------
+    const buildSolids = []; // peças colocadas (pra raycast de parede e de piso)
+    const downRay = new THREE.Raycaster(), fwdRay = new THREE.Raycaster();
+    const vDown = new THREE.Vector3(0, -1, 0), vTmp = new THREE.Vector3(), vDir = new THREE.Vector3();
+    const PRW = 0.4; // "raio" do jogador
+    // altura da superfície (terreno ou piso/escada de construção) sob o jogador
+    function floorHeightAt(x, z, feetY) {
+      let h = heightAt(x, z);
+      if (buildSolids.length) {
+        downRay.set(vTmp.set(x, feetY + 1.3, z), vDown); downRay.far = 6;
+        const hit = downRay.intersectObjects(buildSolids, true)[0];
+        if (hit && hit.point.y > h) h = hit.point.y; // sobe pro piso (até 1,3 m de degrau)
+      }
+      return h;
+    }
+    // tenta mover num eixo; se tiver parede à frente, para antes dela (permite deslizar)
+    function sweep(p, dx, dz) {
+      const dist = Math.hypot(dx, dz); if (dist < 1e-5) return;
+      if (buildSolids.length) {
+        vDir.set(dx, 0, dz).normalize();
+        fwdRay.set(vTmp.set(p.x, p.y + 0.9, p.z), vDir); fwdRay.far = dist + PRW;
+        const hit = fwdRay.intersectObjects(buildSolids, true)[0];
+        if (hit && hit.distance < dist + PRW) { const allow = Math.max(0, hit.distance - PRW); p.x += vDir.x * allow; p.z += vDir.z * allow; return; }
+      }
+      p.x += dx; p.z += dz;
     }
     function selectPiece(name) {
       buildPiece = name; ghostRY = 0;
@@ -692,9 +706,10 @@
         right.set(-fwd.z, 0, fwd.x); // vetor "direita" do jogador (estava invertido)
         const spd = SPEED * dt * (run ? 1.9 : 1);
         mv.set(0, 0, 0).addScaledVector(fwd, -mz * spd).addScaledVector(right, mx * spd);
-        dolly.position.x += mv.x; dolly.position.z += mv.z;
+        const p = dolly.position;
+        sweep(p, mv.x, 0); sweep(p, 0, mv.z); // colisão com paredes (raycast nos eixos, pra deslizar)
         // limites: mundo + lago
-        const p = dolly.position, r = Math.hypot(p.x, p.z);
+        const r = Math.hypot(p.x, p.z);
         if (r > WORLD_R) { p.x *= WORLD_R / r; p.z *= WORLD_R / r; }
         const dx = p.x - LAKE.x, dz2 = p.z - LAKE.z, ld = Math.hypot(dx, dz2), min = LAKE.r + 0.8;
         if (ld < min) { const k = min / (ld || 1); p.x = LAKE.x + dx * k; p.z = LAKE.z + dz2 * k; }
@@ -713,8 +728,8 @@
         jumpOff += jumpVel * dt; jumpVel -= 11 * dt;
         if (jumpOff < 0) { jumpOff = 0; jumpVel = 0; }
       }
-      // segue o relevo do terreno (+ altura do pulo)
-      dolly.position.y = heightAt(dolly.position.x, dolly.position.z) + jumpOff;
+      // segue o relevo do terreno OU o piso/escada de construção (+ altura do pulo)
+      dolly.position.y = floorHeightAt(dolly.position.x, dolly.position.z, dolly.position.y) + jumpOff;
       // brilho leve do lago
       lake.material.opacity = 0.8 + Math.sin(t * 0.001) * 0.06;
       // animações de todos os bichos/NPCs

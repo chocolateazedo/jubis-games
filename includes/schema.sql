@@ -27,3 +27,17 @@ create table if not exists jubis.coin_ledger (
 );
 
 create index if not exists idx_coin_ledger_user on jubis.coin_ledger (user_id, created_at desc);
+
+-- Construções colocadas no Bosque VR (mundo compartilhado).
+-- Também é criada sob demanda por games/bosque-vr/buildings.php (idempotente).
+create table if not exists jubis.buildings (
+  id         bigserial   primary key,
+  user_id    bigint      references jubis.users(id) on delete set null,
+  username   text        not null default '',
+  piece      text        not null,                 -- nome da peça do Kenney Building Kit
+  x          real        not null,
+  y          real        not null,
+  z          real        not null,
+  ry         real        not null default 0,       -- rotação no eixo Y (radianos)
+  created_at timestamptz not null default now()
+);

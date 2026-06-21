@@ -41,12 +41,47 @@
     .go:active { transform: translateY(1px); }
     #hint { position: fixed; bottom: max(14px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); z-index: 20;
       color: #eaffee; opacity: .8; font-size: 13px; text-align: center; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,.6); display: none; }
+    /* botão de construir + menu */
+    .uibtn { position: fixed; z-index: 28; border: none; border-radius: 14px; cursor: pointer; font-weight: 800; color: #06321b;
+      background: linear-gradient(90deg, #ffd56b, #ff9f43); box-shadow: 0 8px 22px -8px rgba(0,0,0,.6); }
+    #buildBtn { top: max(12px, env(safe-area-inset-top)); right: 12px; padding: 10px 14px; font-size: 16px; }
+    #buildMenu { position: fixed; z-index: 35; inset: auto 10px max(10px, env(safe-area-inset-bottom)) auto; right: 10px; bottom: 10px;
+      width: min(94vw, 360px); max-height: 64vh; overflow-y: auto; background: linear-gradient(180deg, rgba(20,46,32,.97), rgba(8,22,16,.97));
+      border: 1px solid rgba(160,230,180,.4); border-radius: 16px; padding: 12px; box-shadow: 0 18px 50px rgba(0,0,0,.5); }
+    #buildMenu h3 { margin: 2px 4px 10px; font-size: 16px; }
+    #buildGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    #buildGrid button { text-align: left; border: 1px solid rgba(160,230,180,.25); background: rgba(255,255,255,.06); color: #eaffee;
+      border-radius: 9px; padding: 8px 9px; font-size: 12px; cursor: pointer; text-transform: capitalize; }
+    #buildGrid button:active { background: rgba(120,220,150,.3); }
+    #buildBar { position: fixed; z-index: 35; left: 50%; transform: translateX(-50%); bottom: max(16px, env(safe-area-inset-bottom));
+      display: flex; gap: 8px; }
+    #buildBar button { border: none; border-radius: 12px; padding: 12px 16px; font-weight: 800; font-size: 15px; cursor: pointer; color: #06321b; }
+    #bPlace { background: linear-gradient(90deg, #7be88f, #43d977); } #bRot { background: #cfe9ff; } #bCancel { background: #ffd0d0; }
+    .hidden { display: none !important; }
+    #talkHint { position: fixed; z-index: 26; left: 50%; bottom: 22%; transform: translateX(-50%); display: none;
+      background: rgba(8,24,16,.78); color: #eaffee; border: 1px solid rgba(160,230,180,.5); border-radius: 14px;
+      padding: 10px 16px; font-weight: 700; font-size: 15px; cursor: pointer; }
+    #toast { position: fixed; z-index: 36; left: 50%; top: 16%; transform: translateX(-50%); opacity: 0; transition: opacity .3s;
+      background: rgba(8,24,16,.92); color: #fff; border: 1px solid rgba(160,230,180,.5); border-radius: 12px; padding: 10px 16px; font-size: 14px; max-width: 86vw; text-align: center; }
   </style>
 </head>
 <body>
   <a class="back" href="../../">← Voltar</a>
   <div class="touch"><div id="joy"><div id="stick"></div></div></div>
   <p id="hint">Arraste/mouse para olhar · WASD ou direcional para andar</p>
+
+  <button class="uibtn hidden" id="buildBtn">🔨 Construir</button>
+  <div id="buildMenu" class="hidden">
+    <h3>🔨 Escolha o que construir</h3>
+    <div id="buildGrid"></div>
+  </div>
+  <div id="buildBar" class="hidden">
+    <button id="bRot">⟳ Girar</button>
+    <button id="bPlace">✓ Colocar</button>
+    <button id="bCancel">✕ Sair</button>
+  </div>
+  <div id="talkHint">💬 Conversar (E / gatilho)</div>
+  <div id="toast"></div>
 
   <div id="intro">
     <div class="card">
@@ -84,7 +119,7 @@
       let h = Math.sin(x * 0.020) * Math.cos(z * 0.022) * 3.4
             + Math.sin(x * 0.05 + 1.7) * 1.2 + Math.cos(z * 0.045 + 0.6) * 1.1;
       const ld = Math.hypot(x - LAKE.x, z - LAKE.z);
-      if (ld < LAKE.r + 12) { const k = Math.max(0, Math.min(1, (ld - LAKE.r) / 12)); h = (LAKE_Y + 0.45) + (h - (LAKE_Y + 0.45)) * k; }
+      if (ld < LAKE.r + 12) { const floor = LAKE_Y - 0.5; const k = Math.max(0, Math.min(1, (ld - LAKE.r) / 12)); h = floor + (h - floor) * k; } // fundo abaixo da água, senão o terreno cobre o lago
       return h;
     }
     const UP = new THREE.Vector3(0, 1, 0);
@@ -232,31 +267,195 @@
     for (const p of pine)  obstacles.push({ x: p.x, z: p.z, r: 0.45 + p.s * 0.25 });
     for (const p of rockPlace) obstacles.push({ x: p.x, z: p.z, r: 0.4 + p.s * 0.5 });
 
-    // ---------- pássaros (modelo voltado para -Z, pra usar lookAt) ----------
-    const birds = [];
-    const birdCols = [0x3a3a44, 0x5a4632, 0x2c4a6a, 0x6a3030, 0x3b3b3b];
-    function makeBird(c) {
-      const g = new THREE.Group();
-      const skin = new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 });
-      // corpo fino e alongado (fuselado), não uma bola
-      const body = new THREE.Mesh(new THREE.SphereGeometry(0.26, 12, 9), skin); body.scale.set(0.6, 0.58, 2.4); g.add(body);
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 8), skin); head.position.set(0, 0.08, -0.52); g.add(head);
-      const beak = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.22, 6), new THREE.MeshStandardMaterial({ color: 0xe6a52e })); beak.rotation.x = -Math.PI / 2; beak.position.set(0, 0.06, -0.72); g.add(beak);
-      const tail = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.62, 4), skin); tail.rotation.x = Math.PI / 2; tail.scale.set(1, 1, 0.22); tail.position.set(0, 0.02, 0.68); g.add(tail);
-      // asas compridas e estreitas (silhueta de ave planando)
-      const wgeo = new THREE.PlaneGeometry(1.55, 0.4); const wmat = new THREE.MeshStandardMaterial({ color: c, roughness: 0.85, side: THREE.DoubleSide });
-      const wl = new THREE.Mesh(wgeo, wmat), wr = wl.clone();
-      wl.position.set(0.77, 0.05, 0.06); wr.position.set(-0.77, 0.05, 0.06); g.add(wl, wr);
-      g.scale.setScalar(0.82);
-      g.userData = { wl, wr };
-      return g;
+    // ---------- modelos animados CC0 (Kenney Cube Pets + Blocky Characters) ----------
+    // carregador com cache (cada GLB baixa 1x; depois é clonado por instância)
+    const _glbCache = {};
+    function getGLB(url) { return _glbCache[url] || (_glbCache[url] = gltfLoader.loadAsync(url)); }
+    const mixers = []; // todos os AnimationMixers, atualizados no loop
+    function bestClip(gltf, name) {
+      return THREE.AnimationClip.findByName(gltf.animations || [], name)
+        || (gltf.animations || []).find(a => new RegExp(name, 'i').test(a.name))
+        || (gltf.animations || []).find(a => /idle/i.test(a.name)) || (gltf.animations || [])[0] || null;
     }
-    for (let i = 0; i < 11; i++) {
-      const b = makeBird(birdCols[i % birdCols.length]);
-      b.userData = Object.assign(b.userData, { cx: (Math.random() - 0.5) * 230, cz: (Math.random() - 0.5) * 230, r: 14 + Math.random() * 36, h: 16 + Math.random() * 24, sp: 0.16 + Math.random() * 0.26, ph: Math.random() * 6.28 });
-      scene.add(b); birds.push(b);
+    // cria uma instância (clone) de um gltf, escalada por altura-alvo, tocando um clipe; pés no y=0 do wrap
+    function spawnActor(gltf, clipName, targetH) {
+      const model = gltf.scene.clone(true);
+      const bb = new THREE.Box3().setFromObject(model), h = (bb.max.y - bb.min.y) || 1, sc = targetH / h;
+      model.position.y = -bb.min.y;
+      const wrap = new THREE.Group(); wrap.add(model); wrap.scale.setScalar(sc); scene.add(wrap);
+      const mixer = new THREE.AnimationMixer(model); mixers.push(mixer);
+      const clip = bestClip(gltf, clipName); let action = null;
+      if (clip) { action = mixer.clipAction(clip); action.play(); }
+      return { wrap, model, mixer, gltf, action };
     }
-    const birdAhead = new THREE.Vector3();
+    // troca o clipe tocado de um ator (fade suave)
+    function playClip(actor, name) {
+      const clip = bestClip(actor.gltf, name); if (!clip) return;
+      const next = actor.mixer.clipAction(clip);
+      if (actor.action === next) return;
+      next.reset().fadeIn(0.2).play(); if (actor.action) actor.action.fadeOut(0.2);
+      actor.action = next;
+    }
+    // ponto aleatório em terra firme (fora do lago e do mundo)
+    function landPoint(maxR) {
+      for (let i = 0; i < 40; i++) {
+        const a = Math.random() * 6.2832, d = 6 + Math.random() * (maxR - 6), x = Math.cos(a) * d, z = Math.sin(a) * d;
+        if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 2) continue;
+        return { x, z };
+      }
+      return { x: 0, z: 12 };
+    }
+
+    // ---------- PETS (cube pets): um de cada tipo, vagando pelo bosque ----------
+    const PETS = ['beaver','bee','bunny','caterpillar','cat','chick','cow','crab','deer','dog','elephant','fish','fox','giraffe','hog','koala','lion','monkey','panda','parrot','penguin','pig','polar','tiger'];
+    const pets = [];
+    PETS.forEach((name, i) => {
+      getGLB(`pets/animal-${name}.glb`).then(gltf => {
+        const a = spawnActor(gltf, 'walk', 0.85);
+        const p = landPoint(WORLD_R - 12), tgt = landPoint(WORLD_R - 12);
+        a.wrap.position.set(p.x, heightAt(p.x, p.z), p.z);
+        a.wrap.userData = { tx: tgt.x, tz: tgt.z, sp: 0.7 + Math.random() * 0.7, wait: 0 };
+        pets.push(a);
+      }).catch(() => {});
+    });
+
+    // ---------- AVES voando (modelos de papagaio/passarinho do mesmo pack, em círculos) ----------
+    const flyers = [];
+    ['parrot','chick','parrot','bee'].forEach((name, i) => {
+      getGLB(`pets/animal-${name}.glb`).then(gltf => {
+        for (let k = 0; k < 3; k++) {
+          const a = spawnActor(gltf, 'idle', 0.55);
+          a.wrap.userData = { cx: (Math.random() - 0.5) * 200, cz: (Math.random() - 0.5) * 200, r: 12 + Math.random() * 34, h: 12 + Math.random() * 20, sp: 0.16 + Math.random() * 0.24, ph: Math.random() * 6.28 };
+          flyers.push(a);
+        }
+      }).catch(() => {});
+    });
+    const flyAhead = new THREE.Vector3();
+
+    // ---------- NPCs (blocky characters): bots com quem dá pra conversar ----------
+    const NPC_DATA = [
+      { f: 'a', nome: 'Dona Bené',   falas: ['Oi, criança! Bem-vindo ao Bosque.', 'Dizem que tem um lago lindo por aqui.', 'Cuide bem dos bichinhos, tá?'] },
+      { f: 'b', nome: 'Seu Joaquim', falas: ['Bom dia! Eu cuido das árvores daqui.', 'Já viu quantos pinheiros temos?'] },
+      { f: 'c', nome: 'Tião',        falas: ['E aí! Bora explorar?', 'Aperte o botão pra correr e o de pular!'] },
+      { f: 'd', nome: 'Lila',        falas: ['Que dia bonito pra um passeio!', 'Os passarinhos cantam a manhã toda.'] },
+      { f: 'e', nome: 'Capitã Aurora', falas: ['Em posição de sentido, recruta!', 'Sua missão: fazer amigos no bosque.', 'Boa sorte!'] },
+      { f: 'f', nome: 'Nina',        falas: ['Você viu o coelhinho passar?', 'Ele é rapidinho!'] },
+      { f: 'g', nome: 'Téo',         falas: ['Adoro construir cabanas.', 'Toca no martelo 🔨 e constrói também!'] },
+      { f: 'h', nome: 'Vó Cigana',   falas: ['Vejo um grande explorador em você...', 'O bosque guarda muitos segredos.'] },
+      { f: 'i', nome: 'Chico',       falas: ['Tô pescando no lago.', 'Já tem peixe nadando por lá!'] },
+      { f: 'j', nome: 'Mel',         falas: ['Zzzz... oi! Eu cuido das abelhas.', 'Olha pro céu, tem abelha voando!'] },
+      { f: 'k', nome: 'Bento',       falas: ['Os veados são tímidos.', 'Anda devagar que você vê todos os bichos.'] },
+      { f: 'l', nome: 'Dora',        falas: ['Quer ouvir uma história?', 'Era uma vez um bosque mágico...'] },
+      { f: 'm', nome: 'Gaspar',      falas: ['Grrr... brincadeira! Sou gente boa.', 'Vem cá bater um papo.'] },
+      { f: 'n', nome: 'Pituca',      falas: ['Eu colecciono pedrinhas!', 'Tem pedras espalhadas pelo bosque.'] },
+      { f: 'o', nome: 'Rui',         falas: ['Corre comigo até aquela árvore!', 'Quem chega primeiro ganha.'] },
+      { f: 'p', nome: 'Sofia',       falas: ['Os bichinhos adoram carinho.', 'Chega perto devagarinho deles.'] },
+      { f: 'q', nome: 'Vavá',        falas: ['Já deu uma volta no lago?', 'A água fica brilhando ao sol.'] },
+      { f: 'r', nome: 'Zeca',        falas: ['Esse bosque vai virar uma cidade!', 'Constrói umas casinhas com a gente.'] },
+    ];
+    const npcs = [];
+    NPC_DATA.forEach((d, i) => {
+      getGLB(`npcs/character-${d.f}.glb`).then(gltf => {
+        const a = spawnActor(gltf, 'idle', 1.5);
+        const ang = (i / NPC_DATA.length) * 6.2832, dist = 9 + (i % 3) * 5;
+        let x = Math.cos(ang) * dist, z = 40 + Math.sin(ang) * dist; // vila logo à frente de quem nasce
+        if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 3) { x = Math.cos(ang) * (dist + LAKE.r); z = Math.sin(ang) * (dist + LAKE.r); }
+        a.wrap.position.set(x, heightAt(x, z), z);
+        a.wrap.rotation.y = ang + Math.PI;
+        a.wrap.userData = { nome: d.nome, falas: d.falas, homeY: a.wrap.rotation.y };
+        obstacles.push({ x, z, r: 0.5 }); // dá pra esbarrar no NPC
+        npcs.push(a);
+      }).catch(() => {});
+    });
+
+    // balão de diálogo 3D (canvas → textura): aparece sobre o NPC, funciona em VR/PC/celular
+    const dlgCanvas = document.createElement('canvas'); dlgCanvas.width = 1024; dlgCanvas.height = 320;
+    const dlgCtx = dlgCanvas.getContext('2d');
+    const dlgTex = new THREE.CanvasTexture(dlgCanvas); dlgTex.colorSpace = THREE.SRGBColorSpace;
+    const dlgPlane = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.81),
+      new THREE.MeshBasicMaterial({ map: dlgTex, transparent: true, depthTest: false }));
+    dlgPlane.renderOrder = 999; dlgPlane.visible = false; scene.add(dlgPlane);
+    function rr(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+    function drawDialogue(nome, texto) {
+      const c = dlgCtx; c.clearRect(0, 0, 1024, 320);
+      c.fillStyle = 'rgba(8,22,16,0.92)'; rr(c, 8, 8, 1008, 304, 36); c.fill();
+      c.strokeStyle = 'rgba(160,230,180,0.6)'; c.lineWidth = 5; c.stroke();
+      c.fillStyle = '#bdf5c8'; c.font = 'bold 52px Arial'; c.fillText(nome, 44, 86);
+      c.fillStyle = '#fff'; c.font = '42px Arial';
+      const words = texto.split(' '); let line = '', y = 156;
+      for (const w of words) { if (c.measureText(line + w).width > 940) { c.fillText(line, 44, y); line = w + ' '; y += 56; } else line += w + ' '; }
+      c.fillText(line, 44, y);
+      c.fillStyle = '#8fdfa0'; c.font = '30px Arial'; c.fillText('▶ continuar', 44, 286);
+      dlgTex.needsUpdate = true;
+    }
+    let activeNPC = null, talkIdx = 0;
+    function startTalk(a) { activeNPC = a; talkIdx = 0; drawDialogue(a.wrap.userData.nome, a.wrap.userData.falas[0]); dlgPlane.visible = true; playClip(a, 'emote-yes'); }
+    function advanceTalk() {
+      if (!activeNPC) return;
+      talkIdx++;
+      const f = activeNPC.wrap.userData.falas;
+      if (talkIdx >= f.length) { dlgPlane.visible = false; playClip(activeNPC, 'idle'); activeNPC = null; return; }
+      drawDialogue(activeNPC.wrap.userData.nome, f[talkIdx]);
+    }
+    const npcTmp = new THREE.Vector3(), camTmp = new THREE.Vector3();
+    function nearestNPC() {
+      let best = null, bd = 3.2; const px = dolly.position.x, pz = dolly.position.z;
+      for (const a of npcs) { const d = Math.hypot(a.wrap.position.x - px, a.wrap.position.z - pz); if (d < bd) { bd = d; best = a; } }
+      return best;
+    }
+
+    // ---------- construção (Kenney Building Kit, CC0) ----------
+    const BUILD_PIECES = ['barricade-doorway-a','barricade-doorway-b','barricade-doorway-c','barricade-window-a','barricade-window-b','barricade-window-c','border-corner-diagonal','border-corner','border-corner-round','border-corner-small','border','border-high-corner-diagonal','border-high-corner','border-high-corner-round','border-high-corner-small','border-high','column','column-thin','column-wide','detail-pipe','door-rotate-round-a','door-rotate-round-b','door-rotate-round-c','door-rotate-round-d','door-rotate-square-a','door-rotate-square-b','door-rotate-square-c','door-rotate-square-d','floor-corner-diagonal','floor-corner-round','floor','floor-half','floor-quarter','gutter-vertical-bottom','gutter-vertical','gutter-vertical-short','gutter-vertical-top','gutter-vertical-wall','plating-detailed','plating-detailed-wide','plating','plating-wide','roof-flat-center','roof-flat-corner','roof-flat-corner-inner','roof-flat-patch','roof-flat-patch-large','roof-flat-side','roof-flat-square','stairs-center','stairs-center-short','stairs-closed','stairs-closed-short','stairs-open','stairs-open-short','stairs-sides','stairs-sides-short','wall-corner-column-bottom','wall-corner-column','wall-corner-column-small-bottom','wall-corner-column-small','wall-corner-diagonal','wall-corner','wall-corner-round','wall-doorway-round','wall-doorway-square','wall-doorway-wide-round','wall-doorway-wide-square','wall','wall-half','wall-low','wall-window-round-detailed','wall-window-round','wall-window-square-detailed','wall-window-square','wall-window-wide-round-detailed','wall-window-wide-round','wall-window-wide-square-detailed','wall-window-wide-square'];
+    const BUILD_SCALE = 2.4, BUILD_DIST = 4.5; // tamanho das peças e distância do fantasma à frente do jogador
+    const placedGroup = new THREE.Group(); scene.add(placedGroup);
+    let buildPiece = null, ghost = null, ghostRY = 0;
+    const server = { user: null, csrf: null };
+
+    function addPiece(name, x, y, z, ry, asGhost) {
+      return getGLB(`build/${name}.glb`).then(gltf => {
+        const o = gltf.scene.clone(true); o.scale.setScalar(BUILD_SCALE);
+        o.position.set(x, y, z); o.rotation.y = ry;
+        if (asGhost) o.traverse(m => { if (m.isMesh) { m.material = new THREE.MeshBasicMaterial({ color: 0x86ff9d, transparent: true, opacity: 0.45, depthWrite: false }); } });
+        (asGhost ? scene : placedGroup).add(o);
+        return o;
+      });
+    }
+    function selectPiece(name) {
+      buildPiece = name; ghostRY = 0;
+      if (ghost) { scene.remove(ghost); ghost = null; }
+      addPiece(name, 0, -999, 0, 0, true).then(o => { ghost = o; });
+      document.getElementById('buildMenu').classList.add('hidden');
+      document.getElementById('buildBar').classList.remove('hidden');
+    }
+    function updateGhost() {
+      if (!ghost) return;
+      camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize();
+      const gx = dolly.position.x + fwd.x * BUILD_DIST, gz = dolly.position.z + fwd.z * BUILD_DIST;
+      ghost.position.set(gx, heightAt(gx, gz), gz); ghost.rotation.y = ghostRY;
+    }
+    function doPlace() {
+      if (!ghost || !buildPiece) return;
+      const x = ghost.position.x, y = ghost.position.y, z = ghost.position.z, ry = ghostRY;
+      addPiece(buildPiece, x, y, z, ry, false);
+      saveBuilding(buildPiece, x, y, z, ry);
+    }
+    function cancelBuild() {
+      buildPiece = null; if (ghost) { scene.remove(ghost); ghost = null; }
+      document.getElementById('buildBar').classList.add('hidden');
+    }
+    function saveBuilding(piece, x, y, z, ry) {
+      if (!server.user) { flash('Entre na sua conta no site pra salvar as construções 🙂'); return; }
+      fetch('buildings.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF': server.csrf || '' },
+        body: JSON.stringify({ piece, x, y, z, ry }) }).catch(() => {});
+    }
+    function loadBuildings() {
+      fetch('buildings.php').then(r => r.json()).then(d => {
+        if (!d || !d.ok) return;
+        server.user = d.user || null; server.csrf = d.csrf || null;
+        (d.buildings || []).forEach(b => addPiece(b.piece, +b.x, +b.y, +b.z, +b.ry, false));
+      }).catch(() => {});
+    }
+    loadBuildings();
 
     // ---------- entrada VR ----------
     renderer.xr.setReferenceSpaceType('local-floor');
@@ -291,25 +490,43 @@
     // ---------- thumbstick do VR ----------
     let turned = false;
     function readSticks() {
-      const s = { x: 0, y: 0, tx: 0 }, sess = renderer.xr.getSession(); if (!sess) return s;
+      const s = { x: 0, y: 0, tx: 0, run: false, jump: false }, sess = renderer.xr.getSession(); if (!sess) return s;
       for (const src of sess.inputSources) {
-        const gp = src.gamepad; if (!gp) continue; const ax = gp.axes;
+        const gp = src.gamepad; if (!gp) continue; const ax = gp.axes, bt = gp.buttons;
         const sx = ax[2] !== undefined ? ax[2] : (ax[0] || 0), sy = ax[3] !== undefined ? ax[3] : (ax[1] || 0);
-        if (src.handedness === 'right') { s.tx = sx; } else { s.x = sx; s.y = sy; }
+        if (src.handedness === 'right') { s.tx = sx; if (bt[0] && bt[0].pressed) s.interact = true; } // gatilho direito = conversar
+        else {
+          s.x = sx; s.y = sy;
+          if (bt[4] && bt[4].pressed) s.run = true;  // botão X (controle esquerdo) = correr
+          if (bt[1] && bt[1].pressed) s.jump = true; // botão lateral/grip (controle esquerdo) = pular
+        }
       }
       return s;
     }
 
+    // ---------- interação (conversar com NPC) e avisos ----------
+    const talkHint = document.getElementById('talkHint');
+    function interact() { if (activeNPC) advanceTalk(); else { const n = nearestNPC(); if (n) startTalk(n); } }
+    addEventListener('keydown', e => { if (e.code === 'KeyE' && !e.repeat) interact(); });
+    talkHint.addEventListener('click', interact);
+    let interactWas = false;
+    let toastT = 0;
+    function flash(msg) { const el = document.getElementById('toast'); el.textContent = msg; el.style.opacity = '1'; clearTimeout(toastT); toastT = setTimeout(() => el.style.opacity = '0', 2800); }
+
     // ---------- loop ----------
     const fwd = new THREE.Vector3(), right = new THREE.Vector3(), mv = new THREE.Vector3();
-    let last = 0;
+    let last = 0, jumpOff = 0, jumpVel = 0, jumpHeld = false;
     function frame(t) {
       const dt = last ? Math.min((t - last) / 1000, 0.05) : 0; last = t;
       const vr = renderer.xr.isPresenting;
       let mx = 0, mz = 0;
+      let run = !!(keys['ShiftLeft'] || keys['ShiftRight']);   // correr: Shift no PC, botão X no VR
+      let wantJump = !!keys['Space'];                          // pular: Espaço no PC, grip esquerdo no VR
       if (vr) {
         const s = readSticks(); const dz = v => Math.abs(v) < 0.15 ? 0 : v;
         mx = dz(s.x); mz = dz(s.y);
+        run = run || s.run; wantJump = wantJump || s.jump;
+        if (s.interact && !interactWas) interact(); interactWas = !!s.interact;
         if (Math.abs(s.tx) > 0.7 && !turned) { dolly.rotation.y -= Math.sign(s.tx) * Math.PI / 6; turned = true; }
         if (Math.abs(s.tx) < 0.3) turned = false;
       } else {
@@ -322,7 +539,7 @@
         if (len > 1) { mx /= len; mz /= len; }
         camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize();
         right.set(-fwd.z, 0, fwd.x); // vetor "direita" do jogador (estava invertido)
-        const spd = SPEED * dt * (keys['ShiftLeft'] || keys['ShiftRight'] ? 1.9 : 1);
+        const spd = SPEED * dt * (run ? 1.9 : 1);
         mv.set(0, 0, 0).addScaledVector(fwd, -mz * spd).addScaledVector(right, mx * spd);
         dolly.position.x += mv.x; dolly.position.z += mv.z;
         // limites: mundo + lago
@@ -336,27 +553,56 @@
           const ox = p.x - o.x, oz = p.z - o.z, od = Math.hypot(ox, oz), md = o.r + PR;
           if (od < md) { const k = md / (od || 1); p.x = o.x + ox * k; p.z = o.z + oz * k; }
         }
-        stepDist += Math.hypot(mv.x, mv.z); if (stepDist > 1.7) { stepDist = 0; step(); }
+        stepDist += Math.hypot(mv.x, mv.z); if (stepDist > 1.7 && jumpOff <= 0.001) { stepDist = 0; step(); }
       }
-      // segue o relevo do terreno
-      dolly.position.y = heightAt(dolly.position.x, dolly.position.z);
+      // pulo: dispara na borda (não repete enquanto segura) e cai com gravidade
+      if (wantJump && !jumpHeld && jumpOff <= 0.001) { jumpVel = 3.7; }
+      jumpHeld = wantJump;
+      if (jumpVel !== 0 || jumpOff > 0) {
+        jumpOff += jumpVel * dt; jumpVel -= 11 * dt;
+        if (jumpOff < 0) { jumpOff = 0; jumpVel = 0; }
+      }
+      // segue o relevo do terreno (+ altura do pulo)
+      dolly.position.y = heightAt(dolly.position.x, dolly.position.z) + jumpOff;
       // brilho leve do lago
       lake.material.opacity = 0.8 + Math.sin(t * 0.001) * 0.06;
-      // pássaros: voam em círculos, viram pra onde vão e batem as asas
-      for (const b of birds) {
-        const u = b.userData, a = t * 0.001 * u.sp + u.ph, a2 = a + 0.05;
-        b.position.set(u.cx + Math.cos(a) * u.r, u.h + Math.sin(a * 2) * 1.4, u.cz + Math.sin(a) * u.r);
-        birdAhead.set(u.cx + Math.cos(a2) * u.r, u.h + Math.sin(a2 * 2) * 1.4, u.cz + Math.sin(a2) * u.r); b.lookAt(birdAhead);
-        const flap = Math.sin(t * 0.016 + u.ph) * 0.7; u.wl.rotation.z = -flap; u.wr.rotation.z = flap;
+      // animações de todos os bichos/NPCs
+      for (const mx of mixers) mx.update(dt);
+      // aves voando em círculos
+      for (const b of flyers) {
+        const u = b.wrap.userData, a = t * 0.001 * u.sp + u.ph, a2 = a + 0.05;
+        b.wrap.position.set(u.cx + Math.cos(a) * u.r, u.h + Math.sin(a * 2) * 1.4, u.cz + Math.sin(a) * u.r);
+        flyAhead.set(u.cx + Math.cos(a2) * u.r, u.h + Math.sin(a2 * 2) * 1.4, u.cz + Math.sin(a2) * u.r); b.wrap.lookAt(flyAhead);
       }
+      // pets vagando pelo bosque
+      for (const p of pets) {
+        const u = p.wrap.userData, pos = p.wrap.position;
+        if (u.wait > 0) { u.wait -= dt; }
+        else {
+          const dx = u.tx - pos.x, dz = u.tz - pos.z, dd = Math.hypot(dx, dz);
+          if (dd < 0.6) { const np = landPoint(WORLD_R - 12); u.tx = np.x; u.tz = np.z; u.wait = 0.5 + Math.random() * 2.5; }
+          else { const step2 = Math.min(dd, u.sp * dt); pos.x += dx / dd * step2; pos.z += dz / dd * step2; p.wrap.rotation.y = Math.atan2(dx, dz); }
+        }
+        pos.y = heightAt(pos.x, pos.z);
+      }
+      // balão de diálogo: sobe acima do NPC ativo e olha pra câmera
+      if (activeNPC) {
+        camera.getWorldPosition(camTmp); activeNPC.wrap.getWorldPosition(npcTmp);
+        dlgPlane.position.set(npcTmp.x, npcTmp.y + 2.2, npcTmp.z); dlgPlane.lookAt(camTmp);
+      }
+      // construção: fantasma segue a frente do jogador
+      if (ghost) updateGhost();
+      // dica de "conversar" quando perto de um NPC
+      const near = activeNPC ? null : nearestNPC();
+      talkHint.style.display = near ? 'block' : 'none';
       renderer.render(scene, camera);
     }
     renderer.setAnimationLoop(frame);
 
     addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
 
-    // ---------- som ambiente (vento + pássaros + passos, procedural) ----------
-    let actx = null, stepDist = 0;
+    // ---------- som ambiente (vento + pássaros + passos) ----------
+    let actx = null, stepDist = 0, stepBufs = [];
     function startAudio() {
       if (actx) { actx.resume(); return; }
       try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
@@ -367,27 +613,19 @@
       const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420;
       const wg = actx.createGain(); wg.gain.value = 0.05;
       wind.connect(lp).connect(wg).connect(actx.destination); wind.start();
+      // passos: amostras reais CC0 (Kenney RPG Audio), carregadas e tocadas aleatoriamente
+      if (!stepBufs.length) for (let n = 0; n < 10; n++) {
+        fetch(`sounds/footstep0${n}.ogg`).then(r => r.arrayBuffer()).then(b => actx.decodeAudioData(b)).then(b => stepBufs.push(b)).catch(() => {});
+      }
       scheduleBird();
     }
-    // passo na grama: folhagem (ruído curto filtrado, decaimento natural) + baque grave leve do pé
+    // passo na grama: toca uma amostra real aleatória, com leve variação de tom/volume
     function step() {
-      if (!actx) return;
-      const t = actx.currentTime;
-      // 1) farfalhar da grama
-      const dur = 0.12 + Math.random() * 0.05, len = (actx.sampleRate * dur) | 0;
-      const nb = actx.createBuffer(1, len, actx.sampleRate), nd = nb.getChannelData(0);
-      for (let i = 0; i < len; i++) nd[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.6);
-      const src = actx.createBufferSource(); src.buffer = nb;
-      const hp = actx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 320;
-      const lp2 = actx.createBiquadFilter(); lp2.type = 'lowpass'; lp2.frequency.value = 1500 + Math.random() * 900;
-      const g = actx.createGain(); g.gain.value = 0.07 + Math.random() * 0.03;
-      src.connect(hp).connect(lp2).connect(g).connect(actx.destination); src.start(t);
-      // 2) baque grave do pé (curto)
-      const o = actx.createOscillator(); o.type = 'sine';
-      o.frequency.setValueAtTime(150 + Math.random() * 30, t); o.frequency.exponentialRampToValueAtTime(68, t + 0.11);
-      const og = actx.createGain();
-      og.gain.setValueAtTime(0.0001, t); og.gain.exponentialRampToValueAtTime(0.06, t + 0.012); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
-      o.connect(og).connect(actx.destination); o.start(t); o.stop(t + 0.16);
+      if (!actx || !stepBufs.length) return;
+      const src = actx.createBufferSource(); src.buffer = stepBufs[(Math.random() * stepBufs.length) | 0];
+      src.playbackRate.value = 0.88 + Math.random() * 0.24;
+      const g = actx.createGain(); g.gain.value = 0.45 + Math.random() * 0.25;
+      src.connect(g).connect(actx.destination); src.start();
     }
     function chirp(t, base) {
       const o = actx.createOscillator(), g = actx.createGain(); o.type = 'sine';
@@ -403,11 +641,20 @@
     }
     renderer.xr.addEventListener('sessionstart', startAudio);
 
+    // ---------- UI de construção ----------
+    const buildMenu = document.getElementById('buildMenu'), buildGrid = document.getElementById('buildGrid');
+    BUILD_PIECES.forEach(name => { const b = document.createElement('button'); b.textContent = name.replace(/-/g, ' '); b.addEventListener('click', () => selectPiece(name)); buildGrid.appendChild(b); });
+    document.getElementById('buildBtn').addEventListener('click', () => buildMenu.classList.toggle('hidden'));
+    document.getElementById('bRot').addEventListener('click', () => { ghostRY += Math.PI / 4; });
+    document.getElementById('bPlace').addEventListener('click', doPlace);
+    document.getElementById('bCancel').addEventListener('click', cancelBuild);
+
     // ---------- intro ----------
     document.getElementById('goBtn').addEventListener('click', () => {
       startAudio();
       document.getElementById('intro').classList.add('hidden');
       document.getElementById('hint').style.display = 'block';
+      document.getElementById('buildBtn').classList.remove('hidden');
       if (!renderer.xr.isPresenting && cv.requestPointerLock && !('ontouchstart' in window)) cv.requestPointerLock();
       setTimeout(() => { document.getElementById('hint').style.display = 'none'; }, 6000);
     });

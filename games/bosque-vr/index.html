@@ -454,37 +454,58 @@
     };
     const piecePT = n => BUILD_PT[n] || n.replace(/-/g, ' ');
     const BUILD_SCALE = 2.4, BUILD_DIST = 4.5; // tamanho das peças e distância do fantasma à frente do jogador
-    const GX = 2 * BUILD_SCALE, GY = 2.4 * BUILD_SCALE; // grid 3D: célula de 4,8 m na horizontal, 5,76 m por nível
     const placedGroup = new THREE.Group(); scene.add(placedGroup);
-    let buildPiece = null, ghost = null, ghostRY = 0, buildLevel = 0; // buildLevel = nível vertical (passos de GY)
+    let buildPiece = null, ghost = null, ghostRY = 0, buildLevel = 0, curFoot = null; // curFoot = tamanho da peça atual
     let removeMode = false, removeTarget = null;
-    const occupied = new Set();   // chaves "ix,iz,nivel" já ocupadas (sem sobrepor)
-    const placedByKey = {};       // chave -> objeto colocado (pra remover/sincronizar)
+    const placedBoxes = [];   // caixas (AABB) das peças colocadas, pra impedir sobreposição
+    const placedByKey = {};   // chave de posição -> objeto (remover/sincronizar)
+    const _footCache = {};    // tamanho real (footprint) por peça, em metros
     const ghostMat = new THREE.MeshBasicMaterial({ color: 0x86ff9d, transparent: true, opacity: 0.5, depthWrite: false });
     const server = { user: null, csrf: null };
-    // chave da célula a partir de uma posição do mundo (deriva o nível pelo terreno da coluna)
-    function pieceKey(x, y, z) {
-      const ix = Math.round(x / GX), iz = Math.round(z / GX);
-      const level = Math.round((y - heightAt(ix * GX, iz * GX)) / GY);
-      return ix + ',' + iz + ',' + level;
+    // tamanho real da peça no mundo: largura (X), profundidade (Z), altura (Y) e base
+    function footprintOf(name, gltf) {
+      if (_footCache[name]) return _footCache[name];
+      const bb = new THREE.Box3().setFromObject(gltf.scene);
+      return (_footCache[name] = {
+        fw: (bb.max.x - bb.min.x) * BUILD_SCALE, fd: (bb.max.z - bb.min.z) * BUILD_SCALE,
+        fh: (bb.max.y - bb.min.y) * BUILD_SCALE, base: bb.min.y * BUILD_SCALE,
+      });
     }
-    // posição encaixada no grid (x,z na célula; y = chão da coluna + nível*GY)
-    function snapPlacement(rawx, rawz, level) {
-      const ix = Math.round(rawx / GX), iz = Math.round(rawz / GX);
-      const x = ix * GX, z = iz * GX, y = heightAt(x, z) + level * GY;
-      return { x, y, z, key: ix + ',' + iz + ',' + level };
+    // passo do grid = TAMANHO da peça (com a rotação) → peças do mesmo tipo encaixam coladas, sem buracos
+    function stepFor(foot, ry) {
+      const c = Math.abs(Math.cos(ry)), s = Math.abs(Math.sin(ry));
+      return { sx: Math.max(0.3, c * foot.fw + s * foot.fd), sz: Math.max(0.3, s * foot.fw + c * foot.fd) };
+    }
+    function posKey(x, y, z) { return Math.round(x * 10) + ',' + Math.round(y * 10) + ',' + Math.round(z * 10); }
+    function boxAt(x, y, z, foot, ry) {
+      const st = stepFor(foot, ry), hx = st.sx / 2, hz = st.sz / 2;
+      return { minx: x - hx, maxx: x + hx, miny: y, maxy: y + foot.fh, minz: z - hz, maxz: z + hz };
+    }
+    function overlapsAny(b) {
+      const m = 0.2; // encostar não conta como sobrepor
+      for (const o of placedBoxes)
+        if (b.minx < o.maxx - m && b.maxx > o.minx + m && b.minz < o.maxz - m && b.maxz > o.minz + m && b.miny < o.maxy - m && b.maxy > o.miny + m) return true;
+      return false;
+    }
+    // encaixa a posição no grid do tamanho da peça; y = chão da coluna + nível*altura
+    function snapPlacement(rawx, rawz, level, foot, ry) {
+      const st = stepFor(foot, ry);
+      const x = Math.round(rawx / st.sx) * st.sx, z = Math.round(rawz / st.sz) * st.sz;
+      return { x, y: heightAt(x, z) + level * foot.fh - foot.base, z };
     }
     const raycaster = new THREE.Raycaster();
     const rcPos = new THREE.Vector3(), rcDir = new THREE.Vector3(), rcQuat = new THREE.Quaternion();
 
     function addPiece(name, x, y, z, ry, asGhost) {
       return getGLB(`build/${name}.glb`).then(gltf => {
+        const foot = footprintOf(name, gltf);
         const o = gltf.scene.clone(true); o.scale.setScalar(BUILD_SCALE);
         o.position.set(x, y, z); o.rotation.y = ry;
         if (asGhost) { o.traverse(m => { if (m.isMesh) m.material = ghostMat; }); } // material único pra recolorir (verde/vermelho)
         else {
           o.updateMatrixWorld(true); buildSolids.push(o); // colisão por raycast
-          const key = pieceKey(x, y, z); o.userData.key = key; o.userData.piece = name; occupied.add(key); placedByKey[key] = o; // ocupa a célula
+          const box = boxAt(x, y, z, foot, ry); box.obj = o; placedBoxes.push(box); // caixa pra anti-sobreposição
+          const key = posKey(x, y, z); o.userData.key = key; o.userData.piece = name; placedByKey[key] = o;
         }
         (asGhost ? scene : placedGroup).add(o);
         return o;
@@ -517,8 +538,9 @@
       p.x += dx; p.z += dz;
     }
     function selectPiece(name) {
-      buildPiece = name; ghostRY = 0; buildLevel = 0; removeMode = false; removeBox.visible = false;
+      buildPiece = name; ghostRY = 0; buildLevel = 0; removeMode = false; removeBox.visible = false; curFoot = null;
       if (ghost) { scene.remove(ghost); ghost = null; }
+      getGLB(`build/${name}.glb`).then(g => { curFoot = footprintOf(name, g); }); // tamanho pro encaixe
       addPiece(name, 0, -999, 0, 0, true).then(o => { ghost = o; });
       document.getElementById('buildMenu').classList.add('hidden');
       document.getElementById('buildBar').classList.remove('hidden');
@@ -540,15 +562,15 @@
       let rx, rz;
       if (hit && hit.distance < 80) { rx = hit.point.x; rz = hit.point.z; }
       else { rx = rcPos.x + rcDir.x * BUILD_DIST; rz = rcPos.z + rcDir.z * BUILD_DIST; }
-      const s = snapPlacement(rx, rz, buildLevel); // encaixa no grid 3D
+      if (!curFoot) return;
+      const s = snapPlacement(rx, rz, buildLevel, curFoot, ghostRY); // encaixa no grid do tamanho da peça
       ghost.position.set(s.x, s.y, s.z); ghost.rotation.y = ghostRY;
-      ghostMat.color.set(occupied.has(s.key) ? 0xff6b6b : 0x86ff9d); // vermelho = célula ocupada
+      ghostMat.color.set(overlapsAny(boxAt(s.x, s.y, s.z, curFoot, ghostRY)) ? 0xff6b6b : 0x86ff9d); // vermelho = sobrepõe
     }
     function doPlace() {
-      if (!ghost || !buildPiece) return;
+      if (!ghost || !buildPiece || !curFoot) return;
       const x = ghost.position.x, y = ghost.position.y, z = ghost.position.z, ry = ghostRY;
-      const key = pieceKey(x, y, z);
-      if (occupied.has(key)) { flash('Já tem uma peça aqui 🙂'); return; } // sem sobrepor
+      if (overlapsAny(boxAt(x, y, z, curFoot, ry))) { flash('Já tem uma peça aqui 🙂'); return; } // sem sobrepor
       addPiece(buildPiece, x, y, z, ry, false).then(o => { saveBuilding(buildPiece, x, y, z, ry).then(id => { if (id && o) o.userData.id = id; }); });
       netSendBuild(buildPiece, x, y, z, ry); // mostra pra todo mundo na sala na hora
     }
@@ -568,9 +590,10 @@
     const _rb = new THREE.Box3(), _rbc = new THREE.Vector3(), _rbs = new THREE.Vector3();
     function removePieceLocal(o) {
       if (!o) return;
-      const i = buildSolids.indexOf(o); if (i >= 0) buildSolids.splice(i, 1);
+      let i = buildSolids.indexOf(o); if (i >= 0) buildSolids.splice(i, 1);
+      i = placedBoxes.findIndex(b => b.obj === o); if (i >= 0) placedBoxes.splice(i, 1);
       if (o.parent) o.parent.remove(o);
-      if (o.userData.key) { occupied.delete(o.userData.key); delete placedByKey[o.userData.key]; }
+      if (o.userData.key) delete placedByKey[o.userData.key];
     }
     function doRemove(o) {
       if (!o) return;

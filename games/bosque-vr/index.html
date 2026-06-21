@@ -63,6 +63,14 @@
       padding: 10px 16px; font-weight: 700; font-size: 15px; cursor: pointer; }
     #toast { position: fixed; z-index: 36; left: 50%; top: 16%; transform: translateX(-50%); opacity: 0; transition: opacity .3s;
       background: rgba(8,24,16,.92); color: #fff; border: 1px solid rgba(160,230,180,.5); border-radius: 12px; padding: 10px 16px; font-size: 14px; max-width: 86vw; text-align: center; }
+    /* multiplayer */
+    .mp { background: rgba(0,0,0,.22); border-radius: 12px; padding: 12px; margin: 12px 0 4px; text-align: left; }
+    .mp .row { display: flex; gap: 6px; margin-top: 8px; }
+    .mp input { flex: 1; min-width: 0; border-radius: 9px; border: 1px solid rgba(160,230,180,.3); background: rgba(255,255,255,.08); color: #fff; padding: 9px 10px; font-size: 14px; }
+    .mp button { border: none; border-radius: 9px; padding: 9px 12px; font-weight: 800; font-size: 14px; cursor: pointer; color: #06321b; background: linear-gradient(90deg,#8fd0ff,#5aa0ff); white-space: nowrap; }
+    .mp .lbl { font-size: 12px; opacity: .8; }
+    #roomCode { position: fixed; z-index: 28; top: max(12px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); display: none;
+      background: rgba(8,24,16,.8); color: #eaffee; border: 1px solid rgba(160,230,180,.5); border-radius: 12px; padding: 8px 14px; font-weight: 800; font-size: 15px; }
   </style>
 </head>
 <body>
@@ -93,10 +101,17 @@
         🖥️ <b>PC:</b> mouse pra olhar, <b>W A S D</b> (Shift = correr, Espaço = pular), <b>E</b> conversa, <b>🔨</b> constrói (<b>R</b> gira).<br>
         📱 <b>Celular:</b> <b>arraste</b> pra olhar, <b>direcional</b> anda, toque na dica pra conversar.
       </div>
-      <button class="go" id="goBtn">▶ Começar a passear</button>
+      <button class="go" id="goBtn">▶ Passear sozinho</button>
+      <div class="mp">
+        <div class="lbl">🌐 Multiplayer — até 5 aparelhos no mesmo bosque (VR, PC ou celular):</div>
+        <div class="row"><input id="mpName" placeholder="Seu nome" maxlength="12"></div>
+        <div class="row"><button id="mpCreate">Criar sala</button><input id="mpCode" placeholder="Código da sala" maxlength="8"><button id="mpJoin">Entrar</button></div>
+      </div>
     </div>
   </div>
+  <div id="roomCode"></div>
 
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <script type="importmap">
   {
     "imports": {
@@ -455,6 +470,7 @@
       const x = ghost.position.x, y = ghost.position.y, z = ghost.position.z, ry = ghostRY;
       addPiece(buildPiece, x, y, z, ry, false);
       saveBuilding(buildPiece, x, y, z, ry);
+      netSendBuild(buildPiece, x, y, z, ry); // mostra pra todo mundo na sala na hora
     }
     function cancelBuild() {
       buildPiece = null; if (ghost) { scene.remove(ghost); ghost = null; }
@@ -693,6 +709,8 @@
       // dica de "conversar" quando perto de um NPC
       const near = activeNPC ? null : nearestNPC();
       talkHint.style.display = near ? 'block' : 'none';
+      // multiplayer: sincroniza jogadores remotos e envia meu estado
+      netTick(t, dt);
       renderer.render(scene, camera);
     }
     renderer.setAnimationLoop(frame);
@@ -747,15 +765,118 @@
     document.getElementById('bPlace').addEventListener('click', doPlace);
     document.getElementById('bCancel').addEventListener('click', cancelBuild);
 
-    // ---------- intro ----------
-    document.getElementById('goBtn').addEventListener('click', () => {
+    // ---------- multiplayer (P2P via PeerJS, estrela host-autoritativa, até 5) ----------
+    const ROOM_PREFIX = 'jubis-bosque-';
+    const net = { mode: 'solo', peer: null, conns: [], hostConn: null, id: Math.random().toString(36).slice(2, 8), name: 'Jogador', avatar: (Math.random() * 18) | 0, peerStates: {}, acc: 0 };
+    const remotes = {};
+    function rndCode() { const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s = ''; for (let i = 0; i < 4; i++) s += a[(Math.random() * a.length) | 0]; return s; }
+    function makeNameTag(name) {
+      const cv2 = document.createElement('canvas'); cv2.width = 256; cv2.height = 64; const x = cv2.getContext('2d');
+      x.fillStyle = 'rgba(8,22,16,0.82)'; rr(x, 2, 2, 252, 60, 16); x.fill();
+      x.fillStyle = '#bdf5c8'; x.font = 'bold 30px Arial'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText((name || 'Jogador').slice(0, 12), 128, 33);
+      const tex = new THREE.CanvasTexture(cv2); tex.colorSpace = THREE.SRGBColorSpace;
+      const sp = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 0.33), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false }));
+      sp.renderOrder = 998; scene.add(sp); return sp;
+    }
+    function ensureRemote(p) {
+      let r = remotes[p.id]; if (r) return r;
+      r = remotes[p.id] = { tx: p.x, tz: p.z, tyaw: p.yaw || 0, lastx: p.x, lastz: p.z, wrap: null, actor: null, tag: makeNameTag(p.name) };
+      const ch = String.fromCharCode(97 + ((p.avatar || 0) % 18));
+      getGLB(`npcs/character-${ch}.glb`).then(g => {
+        if (!remotes[p.id]) return;
+        const a = spawnActor(g, 'idle', 1.6); a.wrap.position.set(p.x, heightAt(p.x, p.z), p.z);
+        r.actor = a; r.wrap = a.wrap;
+      }).catch(() => {});
+      return r;
+    }
+    function removeRemote(id) {
+      const r = remotes[id]; if (!r) return;
+      if (r.wrap) scene.remove(r.wrap);
+      if (r.actor) { const i = mixers.indexOf(r.actor.mixer); if (i >= 0) mixers.splice(i, 1); }
+      if (r.tag) scene.remove(r.tag);
+      delete remotes[id];
+    }
+    function applyPlayers(players) {
+      const seen = {};
+      for (const p of players) { if (p.id === net.id) continue; seen[p.id] = 1; const r = ensureRemote(p); r.tx = p.x; r.tz = p.z; r.tyaw = p.yaw || 0; }
+      for (const id in remotes) if (!seen[id]) removeRemote(id);
+    }
+    function netSendBuild(piece, x, y, z, ry) {
+      if (net.mode === 'solo') return;
+      const msg = { t: 'build', piece, x, y, z, ry };
+      if (net.mode === 'guest') { if (net.hostConn && net.hostConn.open) net.hostConn.send(msg); }
+      else for (const c of net.conns) if (c.open) c.send(msg);
+    }
+    function onHostData(c, d) {
+      if (!d || !d.t) return;
+      if (d.t === 'state') { d.id = d.id || c.peer; net.peerStates[d.id] = d; c._pid = d.id; }
+      else if (d.t === 'build') { addPiece(d.piece, +d.x, +d.y, +d.z, +d.ry, false); for (const o of net.conns) if (o !== c && o.open) o.send(d); }
+    }
+    function onGuestData(d) {
+      if (!d || !d.t) return;
+      if (d.t === 'all') applyPlayers(d.players || []);
+      else if (d.t === 'build') addPiece(d.piece, +d.x, +d.y, +d.z, +d.ry, false);
+    }
+    function createRoom() {
+      net.mode = 'host';
+      const code = rndCode(); net.peer = new Peer(ROOM_PREFIX + code);
+      net.peer.on('open', () => { const el = document.getElementById('roomCode'); el.textContent = '🌐 Sala: ' + code; el.style.display = 'block'; });
+      net.peer.on('error', () => flash('Falha ao criar sala. Recarregue e tente de novo.'));
+      net.peer.on('connection', c => {
+        if (net.conns.length >= 4) { c.on('open', () => c.close()); return; }
+        net.conns.push(c);
+        c.on('data', d => onHostData(c, d));
+        c.on('close', () => { net.conns = net.conns.filter(x => x !== c); if (c._pid) { removeRemote(c._pid); delete net.peerStates[c._pid]; } });
+        c.on('error', () => {});
+      });
+    }
+    function joinRoom(code) {
+      net.mode = 'guest'; net.peer = new Peer();
+      net.peer.on('open', () => {
+        net.hostConn = net.peer.connect(ROOM_PREFIX + code.toUpperCase().trim(), { reliable: true });
+        net.hostConn.on('open', () => flash('Conectado ao bosque! 🌳'));
+        net.hostConn.on('data', onGuestData);
+        net.hostConn.on('close', () => { flash('A sala foi encerrada.'); for (const id of Object.keys(remotes)) removeRemote(id); });
+        net.hostConn.on('error', () => flash('Não achei a sala. Confira o código.'));
+      });
+      net.peer.on('error', () => flash('Não achei a sala. Confira o código.'));
+    }
+    function netTick(t, dt) {
+      if (net.mode === 'solo' || !net.peer) return;
+      const k = Math.min(1, dt * 10);
+      for (const id in remotes) {
+        const r = remotes[id]; if (!r.wrap) continue;
+        r.wrap.position.x += (r.tx - r.wrap.position.x) * k;
+        r.wrap.position.z += (r.tz - r.wrap.position.z) * k;
+        r.wrap.position.y = heightAt(r.wrap.position.x, r.wrap.position.z);
+        let dy = r.tyaw - r.wrap.rotation.y; while (dy > Math.PI) dy -= 6.2832; while (dy < -Math.PI) dy += 6.2832;
+        r.wrap.rotation.y += dy * k;
+        const moving = Math.hypot(r.tx - r.lastx, r.tz - r.lastz) > 0.008; if (r.actor) playClip(r.actor, moving ? 'walk' : 'idle');
+        r.lastx = r.tx; r.lastz = r.tz;
+        if (r.tag) { r.tag.position.set(r.wrap.position.x, r.wrap.position.y + 2.4, r.wrap.position.z); camera.getWorldPosition(camTmp); r.tag.lookAt(camTmp); }
+      }
+      net.acc += dt;
+      if (net.acc >= 0.1) {
+        net.acc = 0;
+        const me = { t: 'state', id: net.id, name: net.name, avatar: net.avatar, x: dolly.position.x, z: dolly.position.z, yaw: dolly.rotation.y };
+        if (net.mode === 'guest') { if (net.hostConn && net.hostConn.open) net.hostConn.send(me); }
+        else { net.peerStates[net.id] = me; const players = Object.values(net.peerStates); const msg = { t: 'all', players }; for (const c of net.conns) if (c.open) c.send(msg); applyPlayers(players); }
+      }
+    }
+
+    // ---------- início (solo ou multiplayer) ----------
+    function startGame() {
       startAudio();
       document.getElementById('intro').classList.add('hidden');
       document.getElementById('hint').style.display = 'block';
       document.getElementById('buildBtn').classList.remove('hidden');
       if (!renderer.xr.isPresenting && cv.requestPointerLock && !('ontouchstart' in window)) cv.requestPointerLock();
       setTimeout(() => { document.getElementById('hint').style.display = 'none'; }, 6000);
-    });
+    }
+    function readName() { const v = (document.getElementById('mpName').value || '').trim(); net.name = v || ('Jogador' + ((Math.random() * 90 + 10) | 0)); }
+    document.getElementById('goBtn').addEventListener('click', startGame);
+    document.getElementById('mpCreate').addEventListener('click', () => { readName(); createRoom(); startGame(); });
+    document.getElementById('mpJoin').addEventListener('click', () => { const code = document.getElementById('mpCode').value; if (!code.trim()) { flash('Digite o código da sala.'); return; } readName(); joinRoom(code); startGame(); });
   </script>
 </body>
 </html>

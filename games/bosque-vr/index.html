@@ -72,6 +72,7 @@
   <script type="module">
     import * as THREE from 'three';
     import { VRButton } from 'three/addons/webxr/VRButton.js';
+    import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 
     const SPEED = 3.2;                 // metros por segundo
     const WORLD_R = 178;               // raio andável
@@ -107,45 +108,26 @@
     }
 
     // ---------- luz / céu / sol ----------
-    scene.add(new THREE.HemisphereLight(0xcfeaff, 0x4a6b3a, 0.95));
-    const sun = new THREE.DirectionalLight(0xfff4d6, 1.5);
+    scene.add(new THREE.HemisphereLight(0xdfeeff, 0x5a6b40, 0.4));
+    const sun = new THREE.DirectionalLight(0xfff4d6, 1.4);
     sun.position.set(80, 120, 40);
     scene.add(sun);
 
-    // céu (domo com gradiente)
-    function skyTexture() {
-      const c = document.createElement('canvas'); c.width = 16; c.height = 256; const x = c.getContext('2d');
-      const g = x.createLinearGradient(0, 0, 0, 256);
-      g.addColorStop(0, '#3f8fd6'); g.addColorStop(0.5, '#88c4ee'); g.addColorStop(1, '#dff0fb');
-      x.fillStyle = g; x.fillRect(0, 0, 16, 256);
-      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
-    }
-    const sky = new THREE.Mesh(new THREE.SphereGeometry(400, 24, 16), new THREE.MeshBasicMaterial({ map: skyTexture(), side: THREE.BackSide, fog: false }));
-    scene.add(sky);
-    // sol visível
-    const sunBall = new THREE.Mesh(new THREE.SphereGeometry(14, 20, 16), new THREE.MeshBasicMaterial({ color: 0xfff3b0, fog: false }));
-    sunBall.position.copy(sun.position).multiplyScalar(2.6); scene.add(sunBall);
-    const sunGlow = new THREE.Mesh(new THREE.SphereGeometry(26, 20, 16), new THREE.MeshBasicMaterial({ color: 0xfff0a0, transparent: true, opacity: 0.25, fog: false }));
-    sunGlow.position.copy(sunBall.position); scene.add(sunGlow);
-    // nuvens
-    for (let i = 0; i < 14; i++) {
-      const cl = new THREE.Group();
-      for (let j = 0; j < 4; j++) {
-        const b = new THREE.Mesh(new THREE.SphereGeometry(6 + Math.random() * 6, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, fog: false }));
-        b.position.set((Math.random() - 0.5) * 18, (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 10); b.scale.y = 0.6; cl.add(b);
-      }
-      const a = Math.random() * Math.PI * 2, d = 120 + Math.random() * 200;
-      cl.position.set(Math.cos(a) * d, 70 + Math.random() * 40, Math.sin(a) * d); scene.add(cl);
-    }
+    // céu + iluminação por imagem (HDRI CC0 do Poly Haven)
+    scene.background = new THREE.Color(SKY); // enquanto o HDRI carrega
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    new RGBELoader().load('sky.hdr?v=1', tex => {
+      tex.mapping = THREE.EquirectangularReflectionMapping;
+      const env = pmrem.fromEquirectangular(tex).texture;
+      scene.environment = env; scene.background = env;
+      tex.dispose(); pmrem.dispose();
+    }, undefined, () => { /* fallback: mantém o céu sólido */ });
 
-    // ---------- chão (grama) ----------
-    function grassTexture() {
-      const s = 256, c = document.createElement('canvas'); c.width = c.height = s; const x = c.getContext('2d');
-      x.fillStyle = '#3f8a3d'; x.fillRect(0, 0, s, s);
-      for (let i = 0; i < 2600; i++) { const g = 60 + Math.random() * 90; x.fillStyle = `rgba(${30 + Math.random() * 30},${g | 0},${30 + Math.random() * 30},.6)`; x.fillRect(Math.random() * s, Math.random() * s, 2, 3); }
-      const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(60, 60); t.colorSpace = THREE.SRGBColorSpace; return t;
-    }
-    const ground = new THREE.Mesh(new THREE.CircleGeometry(WORLD_R + 30, 48), new THREE.MeshStandardMaterial({ map: grassTexture(), roughness: 1 }));
+    // ---------- chão (grama com textura PBR CC0) ----------
+    const grassTex = new THREE.TextureLoader().load('grass.jpg?v=1');
+    grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping; grassTex.repeat.set(70, 70);
+    grassTex.colorSpace = THREE.SRGBColorSpace; grassTex.anisotropy = 4;
+    const ground = new THREE.Mesh(new THREE.CircleGeometry(WORLD_R + 30, 48), new THREE.MeshStandardMaterial({ map: grassTex, roughness: 1 }));
     ground.rotation.x = -Math.PI / 2; scene.add(ground);
 
     // ---------- lago ----------
@@ -194,6 +176,30 @@
       if (Math.hypot(x - dolly.position.x, z - dolly.position.z) < 9) continue; // longe do spawn
       const r = new THREE.Mesh(new THREE.DodecahedronGeometry(0.5 + Math.random() * 0.9, 0), new THREE.MeshStandardMaterial({ color: 0x8a8f96, roughness: 1, flatShading: true }));
       r.position.set(x, 0.3, z); r.rotation.set(Math.random(), Math.random(), Math.random()); scene.add(r);
+    }
+
+    // ---------- flores coloridas (instanced) ----------
+    const flowerMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(0.16, 6, 5), new THREE.MeshStandardMaterial({ flatShading: true }), 110);
+    const fcol = [0xff5d7f, 0xffd24a, 0xffffff, 0xb06bff, 0xff8a3d];
+    let fp = 0, fg = 0;
+    while (fp < 110 && fg < 110 * 8) {
+      fg++; const a = Math.random() * Math.PI * 2, d = 6 + Math.random() * (WORLD_R - 6), x = Math.cos(a) * d, z = Math.sin(a) * d;
+      if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 3) continue;
+      m.compose(pos.set(x, 0.16, z), new THREE.Quaternion(), scl.set(1, 1.7, 1)); flowerMesh.setMatrixAt(fp, m);
+      flowerMesh.setColorAt(fp, new THREE.Color(fcol[(Math.random() * fcol.length) | 0])); fp++;
+    }
+    flowerMesh.count = fp; flowerMesh.instanceColor.needsUpdate = true; scene.add(flowerMesh);
+
+    // ---------- pássaros voando ----------
+    const birds = [];
+    const wingMat = new THREE.MeshStandardMaterial({ color: 0x3a3a44, side: THREE.DoubleSide, flatShading: true });
+    for (let i = 0; i < 10; i++) {
+      const b = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.9, 5), new THREE.MeshStandardMaterial({ color: 0x2a2a32, flatShading: true })); body.rotation.x = Math.PI / 2; b.add(body);
+      const wl = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.42), wingMat), wr = wl.clone();
+      wl.position.x = 0.5; wr.position.x = -0.5; b.add(wl, wr);
+      b.userData = { wl, wr, cx: (Math.random() - 0.5) * 230, cz: (Math.random() - 0.5) * 230, r: 12 + Math.random() * 34, h: 14 + Math.random() * 24, sp: 0.18 + Math.random() * 0.3, ph: Math.random() * 6.28 };
+      scene.add(b); birds.push(b);
     }
 
     // ---------- entrada VR ----------
@@ -271,14 +277,50 @@
       }
       // brilho leve do lago
       lake.material.opacity = 0.8 + Math.sin(t * 0.001) * 0.06;
+      // pássaros: voam em círculos e batem as asas
+      for (const b of birds) {
+        const u = b.userData, a = t * 0.001 * u.sp + u.ph;
+        b.position.set(u.cx + Math.cos(a) * u.r, u.h + Math.sin(a * 2) * 1.6, u.cz + Math.sin(a) * u.r);
+        b.rotation.y = -a;
+        const flap = Math.sin(t * 0.018 + u.ph) * 0.7; u.wl.rotation.y = flap; u.wr.rotation.y = -flap;
+      }
       renderer.render(scene, camera);
     }
     renderer.setAnimationLoop(frame);
 
     addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
 
+    // ---------- som ambiente (vento + pássaros, procedural) ----------
+    let actx = null;
+    function startAudio() {
+      if (actx) { actx.resume(); return; }
+      try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+      // vento: ruído filtrado, bem suave
+      const buf = actx.createBuffer(1, actx.sampleRate * 2, actx.sampleRate), d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      const wind = actx.createBufferSource(); wind.buffer = buf; wind.loop = true;
+      const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420;
+      const wg = actx.createGain(); wg.gain.value = 0.05;
+      wind.connect(lp).connect(wg).connect(actx.destination); wind.start();
+      scheduleBird();
+    }
+    function chirp(t, base) {
+      const o = actx.createOscillator(), g = actx.createGain(); o.type = 'sine';
+      o.frequency.setValueAtTime(base, t); o.frequency.linearRampToValueAtTime(base * 1.5, t + 0.07); o.frequency.linearRampToValueAtTime(base * 0.85, t + 0.16);
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.05, t + 0.02); g.gain.linearRampToValueAtTime(0, t + 0.19);
+      o.connect(g).connect(actx.destination); o.start(t); o.stop(t + 0.22);
+    }
+    function scheduleBird() {
+      if (!actx) return;
+      const t0 = actx.currentTime + 0.1, n = 2 + (Math.random() * 3 | 0), base = 1500 + Math.random() * 1500;
+      for (let k = 0; k < n; k++) chirp(t0 + k * 0.12, base * (1 + (Math.random() * 0.12 - 0.06)));
+      setTimeout(scheduleBird, 1800 + Math.random() * 4500);
+    }
+    renderer.xr.addEventListener('sessionstart', startAudio);
+
     // ---------- intro ----------
     document.getElementById('goBtn').addEventListener('click', () => {
+      startAudio();
       document.getElementById('intro').classList.add('hidden');
       document.getElementById('hint').style.display = 'block';
       if (!renderer.xr.isPresenting && cv.requestPointerLock && !('ontouchstart' in window)) cv.requestPointerLock();

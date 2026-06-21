@@ -73,10 +73,22 @@
     import * as THREE from 'three';
     import { VRButton } from 'three/addons/webxr/VRButton.js';
     import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
 
     const SPEED = 3.2;                 // metros por segundo
     const WORLD_R = 178;               // raio andável
     const LAKE = { x: 34, z: -26, r: 26 };
+    const LAKE_Y = -0.9;              // superfície da água (o terreno afunda perto dela)
+    // relevo suave do terreno; perto do lago vira uma bacia rasa
+    function heightAt(x, z) {
+      let h = Math.sin(x * 0.020) * Math.cos(z * 0.022) * 3.4
+            + Math.sin(x * 0.05 + 1.7) * 1.2 + Math.cos(z * 0.045 + 0.6) * 1.1;
+      const ld = Math.hypot(x - LAKE.x, z - LAKE.z);
+      if (ld < LAKE.r + 12) { const k = Math.max(0, Math.min(1, (ld - LAKE.r) / 12)); h = (LAKE_Y + 0.45) + (h - (LAKE_Y + 0.45)) * k; }
+      return h;
+    }
+    const UP = new THREE.Vector3(0, 1, 0);
 
     // ---------- renderer / cena ----------
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -95,7 +107,7 @@
     const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 600);
     camera.position.set(0, 1.6, 0);   // altura dos olhos (no VR vira 0 no floor)
     dolly.add(camera);
-    dolly.position.set(10, 0, 64);
+    dolly.position.set(10, heightAt(10, 64), 64);
     dolly.rotation.y = 0;              // olhando pro centro/lago (-z)
     scene.add(dolly);
 
@@ -127,80 +139,135 @@
     const grassTex = new THREE.TextureLoader().load('grass.jpg?v=1');
     grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping; grassTex.repeat.set(70, 70);
     grassTex.colorSpace = THREE.SRGBColorSpace; grassTex.anisotropy = 4;
-    const ground = new THREE.Mesh(new THREE.CircleGeometry(WORLD_R + 30, 48), new THREE.MeshStandardMaterial({ map: grassTex, roughness: 1 }));
+    const G = (WORLD_R + 30) * 2;
+    const groundGeo = new THREE.PlaneGeometry(G, G, 110, 110);
+    { const p = groundGeo.attributes.position; for (let i = 0; i < p.count; i++) p.setZ(i, heightAt(p.getX(i), -p.getY(i))); groundGeo.computeVertexNormals(); }
+    const ground = new THREE.Mesh(groundGeo, new THREE.MeshStandardMaterial({ map: grassTex, roughness: 1 }));
     ground.rotation.x = -Math.PI / 2; scene.add(ground);
 
-    // ---------- lago ----------
-    const lake = new THREE.Mesh(new THREE.CircleGeometry(LAKE.r, 40), new THREE.MeshStandardMaterial({ color: 0x2f7fc4, transparent: true, opacity: 0.86, roughness: 0.15, metalness: 0.4 }));
-    lake.rotation.x = -Math.PI / 2; lake.position.set(LAKE.x, 0.04, LAKE.z); scene.add(lake);
+    // ---------- lago (numa bacia) ----------
+    const lake = new THREE.Mesh(new THREE.CircleGeometry(LAKE.r, 48), new THREE.MeshStandardMaterial({ color: 0x2f7fc4, transparent: true, opacity: 0.86, roughness: 0.12, metalness: 0.45 }));
+    lake.rotation.x = -Math.PI / 2; lake.position.set(LAKE.x, LAKE_Y + 0.05, LAKE.z); scene.add(lake);
     // margem de areia
-    const shore = new THREE.Mesh(new THREE.RingGeometry(LAKE.r, LAKE.r + 3.2, 40), new THREE.MeshStandardMaterial({ color: 0xd9c48b, roughness: 1 }));
-    shore.rotation.x = -Math.PI / 2; shore.position.set(LAKE.x, 0.03, LAKE.z); scene.add(shore);
+    const shore = new THREE.Mesh(new THREE.RingGeometry(LAKE.r - 0.5, LAKE.r + 3.5, 48), new THREE.MeshStandardMaterial({ color: 0xd9c48b, roughness: 1 }));
+    shore.rotation.x = -Math.PI / 2; shore.position.set(LAKE.x, LAKE_Y + 0.12, LAKE.z); scene.add(shore);
 
-    // ---------- árvores (instanced) + sombras "blob" ----------
-    const TREES = 230;
-    const trunkGeo = new THREE.CylinderGeometry(0.22, 0.32, 2.4, 6); trunkGeo.translate(0, 1.2, 0);
-    const foliGeo = new THREE.IcosahedronGeometry(1.7, 0);
-    const trunkMesh = new THREE.InstancedMesh(trunkGeo, new THREE.MeshStandardMaterial({ color: 0x7a5230, roughness: 1 }), TREES);
-    const foliMesh = new THREE.InstancedMesh(foliGeo, new THREE.MeshStandardMaterial({ roughness: 1, flatShading: true }), TREES);
-    const blobGeo = new THREE.CircleGeometry(1.7, 12); blobGeo.rotateX(-Math.PI / 2);
-    const blobMesh = new THREE.InstancedMesh(blobGeo, new THREE.MeshBasicMaterial({ color: 0x123018, transparent: true, opacity: 0.32 }), TREES);
-    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), scl = new THREE.Vector3();
-    const greens = [0x4caf50, 0x3d9140, 0x6abf4f, 0x2f7d3a, 0x86c95a];
-    let placed = 0, guard = 0;
-    while (placed < TREES && guard < TREES * 30) {
-      guard++;
-      const a = Math.random() * Math.PI * 2, d = 8 + Math.random() * (WORLD_R - 6);
-      const x = Math.cos(a) * d, z = Math.sin(a) * d;
-      if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 5) continue;       // não na água
-      if (Math.hypot(x - dolly.position.x, z - dolly.position.z) < 6) continue; // clareira de spawn
-      const s = 0.7 + Math.random() * 1.5, yaw = Math.random() * Math.PI * 2;
-      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
-      // tronco
-      scl.set(s, s, s); m.compose(pos.set(x, 0, z), q, scl); trunkMesh.setMatrixAt(placed, m);
-      // folhagem (em cima do tronco)
-      const fy = 2.4 * s + 1.1 * s; m.compose(pos.set(x, fy, z), q, scl.set(s, s * (0.9 + Math.random() * 0.4), s)); foliMesh.setMatrixAt(placed, m);
-      foliMesh.setColorAt(placed, new THREE.Color(greens[(Math.random() * greens.length) | 0]));
-      // sombra
-      m.compose(pos.set(x, 0.05, z), new THREE.Quaternion(), scl.set(s * 1.1, 1, s * 1.1)); blobMesh.setMatrixAt(placed, m);
-      placed++;
-    }
-    trunkMesh.count = foliMesh.count = blobMesh.count = placed;
-    foliMesh.instanceColor.needsUpdate = true;
-    scene.add(blobMesh, trunkMesh, foliMesh);
+    // ---------- árvores e pedras: modelos 3D CC0 (Quaternius), instanciados ----------
+    const TREES = 240, DEER_FIX = Math.PI; // ajuste de "frente" do veado (Quaternius olha +Z)
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), scl = new THREE.Vector3(), ID = new THREE.Quaternion();
+    // sombra "blob" no chão sob cada árvore (some na hora, antes dos GLBs carregarem)
+    const blobGeo = new THREE.CircleGeometry(1.5, 14); blobGeo.rotateX(-Math.PI / 2);
+    const blobMesh = new THREE.InstancedMesh(blobGeo, new THREE.MeshBasicMaterial({ color: 0x10280f, transparent: true, opacity: 0.3 }), TREES);
+    blobMesh.count = 0; scene.add(blobMesh);
 
-    // algumas pedras
-    for (let i = 0; i < 22; i++) {
-      const a = Math.random() * Math.PI * 2, d = 10 + Math.random() * (WORLD_R - 10);
-      const x = Math.cos(a) * d, z = Math.sin(a) * d; if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 4) continue;
-      if (Math.hypot(x - dolly.position.x, z - dolly.position.z) < 9) continue; // longe do spawn
-      const r = new THREE.Mesh(new THREE.DodecahedronGeometry(0.5 + Math.random() * 0.9, 0), new THREE.MeshStandardMaterial({ color: 0x8a8f96, roughness: 1, flatShading: true }));
-      r.position.set(x, 0.3, z); r.rotation.set(Math.random(), Math.random(), Math.random()); scene.add(r);
+    // posições das árvores (folhosas + pinheiros), fora do lago e da clareira de spawn
+    const broad = [], pine = [];
+    { let placed = 0, guard = 0;
+      while (placed < TREES && guard < TREES * 30) {
+        guard++;
+        const a = Math.random() * Math.PI * 2, d = 8 + Math.random() * (WORLD_R - 6), x = Math.cos(a) * d, z = Math.sin(a) * d;
+        if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 5) continue;
+        if (Math.hypot(x - dolly.position.x, z - dolly.position.z) < 7) continue;
+        const y = heightAt(x, z), s = 0.8 + Math.random() * 0.7, yaw = Math.random() * Math.PI * 2, vi = (Math.random() * 5) | 0;
+        (Math.random() < 0.38 ? pine : broad).push({ x, y, z, s, yaw, vi });
+        m.compose(pos.set(x, y + 0.06, z), ID, scl.set(s * 2.2, 1, s * 2.2)); blobMesh.setMatrixAt(placed, m);
+        placed++;
+      }
+      blobMesh.count = placed; blobMesh.instanceMatrix.needsUpdate = true;
     }
 
-    // ---------- flores coloridas (instanced) ----------
-    const flowerMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(0.16, 6, 5), new THREE.MeshStandardMaterial({ flatShading: true }), 110);
-    const fcol = [0xff5d7f, 0xffd24a, 0xffffff, 0xb06bff, 0xff8a3d];
-    let fp = 0, fg = 0;
-    while (fp < 110 && fg < 110 * 8) {
-      fg++; const a = Math.random() * Math.PI * 2, d = 6 + Math.random() * (WORLD_R - 6), x = Math.cos(a) * d, z = Math.sin(a) * d;
+    // extrai as variações de um GLB (cada filho do RootNode): geometria centralizada
+    // na origem e a altura medida, pra normalizar a escala depois
+    function extractVariants(gltf) {
+      const out = []; gltf.scene.updateMatrixWorld(true);
+      // desce até o nó que tem várias variações como filhos (ex.: Scene -> RootNode)
+      let parent = gltf.scene;
+      while (parent.children.length === 1 && !parent.children[0].isMesh && parent.children[0].children.length) parent = parent.children[0];
+      const wp = new THREE.Vector3();
+      for (const vn of [...parent.children]) {
+        vn.getWorldPosition(wp);                    // remove o deslocamento (modelos vêm lado a lado em +X)
+        const parts = [], bb = new THREE.Box3();
+        vn.traverse(o => {
+          if (!o.isMesh) return;
+          const g = o.geometry.clone(); g.applyMatrix4(o.matrixWorld); g.translate(-wp.x, -wp.y, -wp.z);
+          g.computeBoundingBox(); bb.union(g.boundingBox); parts.push({ geo: g, mat: o.material });
+        });
+        if (parts.length) out.push({ parts, h: Math.max(0.01, bb.max.y - bb.min.y) });
+      }
+      return out;
+    }
+    // cria um InstancedMesh por (variação × material), normalizando pra altura-alvo
+    function buildInstanced(variants, places, targetH) {
+      if (!variants.length) return;
+      const byV = variants.map(() => []);
+      for (const p of places) byV[p.vi % variants.length].push(p);
+      variants.forEach((v, vi) => {
+        const list = byV[vi]; if (!list.length) return;
+        const base = targetH / v.h;
+        for (const part of v.parts) {
+          const im = new THREE.InstancedMesh(part.geo, part.mat, list.length);
+          list.forEach((p, k) => { q.setFromAxisAngle(UP, p.yaw); const s = p.s * base; m.compose(pos.set(p.x, p.y, p.z), q, scl.set(s, s, s)); im.setMatrixAt(k, m); });
+          im.instanceMatrix.needsUpdate = true; scene.add(im);
+        }
+      });
+    }
+
+    const gltfLoader = new GLTFLoader();
+    gltfLoader.load('models/trees.glb', g => buildInstanced(extractVariants(g), broad, 6.5));
+    gltfLoader.load('models/pines.glb', g => buildInstanced(extractVariants(g), pine, 8.5));
+
+    // pedras (modelo CC0), também instanced
+    const rockPlace = [];
+    for (let i = 0; i < 26; i++) {
+      const a = Math.random() * Math.PI * 2, d = 10 + Math.random() * (WORLD_R - 10), x = Math.cos(a) * d, z = Math.sin(a) * d;
       if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 3) continue;
-      m.compose(pos.set(x, 0.16, z), new THREE.Quaternion(), scl.set(1, 1.7, 1)); flowerMesh.setMatrixAt(fp, m);
-      flowerMesh.setColorAt(fp, new THREE.Color(fcol[(Math.random() * fcol.length) | 0])); fp++;
+      if (Math.hypot(x - dolly.position.x, z - dolly.position.z) < 9) continue;
+      rockPlace.push({ x, y: heightAt(x, z), z, s: 0.6 + Math.random() * 1.4, yaw: Math.random() * Math.PI * 2, vi: (Math.random() * 5) | 0 });
     }
-    flowerMesh.count = fp; flowerMesh.instanceColor.needsUpdate = true; scene.add(flowerMesh);
+    gltfLoader.load('models/rocks.glb', g => buildInstanced(extractVariants(g), rockPlace, 1.4));
 
-    // ---------- pássaros voando ----------
+    // ---------- veado animado (CC0, SkinnedMesh — sem instancing) ----------
+    const deers = [];
+    gltfLoader.load('models/deer.glb', g => {
+      const bb = new THREE.Box3().setFromObject(g.scene), h = (bb.max.y - bb.min.y) || 1, sc = 1.7 / h;
+      let clip = THREE.AnimationClip.findByName(g.animations, 'Walk') || g.animations.find(a => /walk/i.test(a.name)) || g.animations[0];
+      if (clip) { clip = clip.clone(); clip.tracks = clip.tracks.filter(tr => !tr.name.endsWith('.position')); } // "no lugar" (sem root motion); o wrap é quem move
+      for (let i = 0; i < 2; i++) {
+        const model = i === 0 ? g.scene : skeletonClone(g.scene);
+        model.position.y = -bb.min.y; // pés no y=0 (unidades nativas; quem escala é o wrap)
+        model.traverse(o => { if (o.isMesh || o.isSkinnedMesh) o.frustumCulled = false; }); // skinned tem bounding em bind-pose: evita sumir ao animar/mover
+        const wrap = new THREE.Group(); wrap.add(model); wrap.scale.setScalar(sc); scene.add(wrap); // escala no wrap mantém o skinning estável
+        const mixer = new THREE.AnimationMixer(model); if (clip) mixer.clipAction(clip).play();
+        let cx, cz, r, gg = 0;
+        do { const a = Math.random() * 6.28, d = 20 + Math.random() * 90; cx = Math.cos(a) * d; cz = Math.sin(a) * d; r = 14 + Math.random() * 20; gg++; }
+        while (gg < 50 && (Math.hypot(cx - LAKE.x, cz - LAKE.z) < LAKE.r + r + 8 || Math.hypot(cx, cz) + r > WORLD_R - 8));
+        wrap.userData = { mixer, cx, cz, r, sp: 0.05 + Math.random() * 0.05, ph: Math.random() * 6.28 };
+        deers.push(wrap);
+      }
+    });
+
+    // ---------- pássaros (modelo voltado para -Z, pra usar lookAt) ----------
     const birds = [];
-    const wingMat = new THREE.MeshStandardMaterial({ color: 0x3a3a44, side: THREE.DoubleSide, flatShading: true });
-    for (let i = 0; i < 10; i++) {
-      const b = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.9, 5), new THREE.MeshStandardMaterial({ color: 0x2a2a32, flatShading: true })); body.rotation.x = Math.PI / 2; b.add(body);
-      const wl = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.42), wingMat), wr = wl.clone();
-      wl.position.x = 0.5; wr.position.x = -0.5; b.add(wl, wr);
-      b.userData = { wl, wr, cx: (Math.random() - 0.5) * 230, cz: (Math.random() - 0.5) * 230, r: 12 + Math.random() * 34, h: 14 + Math.random() * 24, sp: 0.18 + Math.random() * 0.3, ph: Math.random() * 6.28 };
+    const birdCols = [0x3a3a44, 0x5a4632, 0x2c4a6a, 0x6a3030, 0x3b3b3b];
+    function makeBird(c) {
+      const g = new THREE.Group();
+      const skin = new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 });
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 9), skin); body.scale.set(0.8, 0.8, 1.7); g.add(body);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), skin); head.position.set(0, 0.14, -0.5); g.add(head);
+      const beak = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.24, 6), new THREE.MeshStandardMaterial({ color: 0xe6a52e })); beak.rotation.x = -Math.PI / 2; beak.position.set(0, 0.12, -0.74); g.add(beak);
+      const tail = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.55, 4), skin); tail.rotation.x = Math.PI / 2; tail.scale.set(1, 1, 0.35); tail.position.set(0, 0.06, 0.62); g.add(tail);
+      const wgeo = new THREE.PlaneGeometry(1.25, 0.5); const wmat = new THREE.MeshStandardMaterial({ color: c, roughness: 0.85, side: THREE.DoubleSide });
+      const wl = new THREE.Mesh(wgeo, wmat), wr = wl.clone();
+      wl.position.set(0.62, 0.08, 0.05); wr.position.set(-0.62, 0.08, 0.05); g.add(wl, wr);
+      g.userData = { wl, wr };
+      return g;
+    }
+    for (let i = 0; i < 11; i++) {
+      const b = makeBird(birdCols[i % birdCols.length]);
+      b.userData = Object.assign(b.userData, { cx: (Math.random() - 0.5) * 230, cz: (Math.random() - 0.5) * 230, r: 14 + Math.random() * 36, h: 16 + Math.random() * 24, sp: 0.16 + Math.random() * 0.26, ph: Math.random() * 6.28 });
       scene.add(b); birds.push(b);
     }
+    const birdAhead = new THREE.Vector3();
 
     // ---------- entrada VR ----------
     renderer.xr.setReferenceSpaceType('local-floor');
@@ -274,15 +341,25 @@
         if (r > WORLD_R) { p.x *= WORLD_R / r; p.z *= WORLD_R / r; }
         const dx = p.x - LAKE.x, dz2 = p.z - LAKE.z, ld = Math.hypot(dx, dz2), min = LAKE.r + 0.8;
         if (ld < min) { const k = min / (ld || 1); p.x = LAKE.x + dx * k; p.z = LAKE.z + dz2 * k; }
+        stepDist += Math.hypot(mv.x, mv.z); if (stepDist > 1.7) { stepDist = 0; step(); }
       }
+      // segue o relevo do terreno
+      dolly.position.y = heightAt(dolly.position.x, dolly.position.z);
       // brilho leve do lago
       lake.material.opacity = 0.8 + Math.sin(t * 0.001) * 0.06;
-      // pássaros: voam em círculos e batem as asas
+      // pássaros: voam em círculos, viram pra onde vão e batem as asas
       for (const b of birds) {
-        const u = b.userData, a = t * 0.001 * u.sp + u.ph;
-        b.position.set(u.cx + Math.cos(a) * u.r, u.h + Math.sin(a * 2) * 1.6, u.cz + Math.sin(a) * u.r);
-        b.rotation.y = -a;
-        const flap = Math.sin(t * 0.018 + u.ph) * 0.7; u.wl.rotation.y = flap; u.wr.rotation.y = -flap;
+        const u = b.userData, a = t * 0.001 * u.sp + u.ph, a2 = a + 0.05;
+        b.position.set(u.cx + Math.cos(a) * u.r, u.h + Math.sin(a * 2) * 1.4, u.cz + Math.sin(a) * u.r);
+        birdAhead.set(u.cx + Math.cos(a2) * u.r, u.h + Math.sin(a2 * 2) * 1.4, u.cz + Math.sin(a2) * u.r); b.lookAt(birdAhead);
+        const flap = Math.sin(t * 0.016 + u.ph) * 0.7; u.wl.rotation.z = -flap; u.wr.rotation.z = flap;
+      }
+      // veados: animam (walk) e perambulam pelo gramado
+      for (const dr of deers) {
+        const u = dr.userData; u.mixer.update(dt);
+        const a = t * 0.001 * u.sp + u.ph, x = u.cx + Math.cos(a) * u.r, z = u.cz + Math.sin(a) * u.r, y = heightAt(x, z);
+        dr.position.set(x, y, z);
+        const a2 = a + 0.05; dr.lookAt(u.cx + Math.cos(a2) * u.r, y, u.cz + Math.sin(a2) * u.r); dr.rotateY(DEER_FIX);
       }
       renderer.render(scene, camera);
     }
@@ -290,8 +367,8 @@
 
     addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
 
-    // ---------- som ambiente (vento + pássaros, procedural) ----------
-    let actx = null;
+    // ---------- som ambiente (vento + pássaros + passos, procedural) ----------
+    let actx = null, stepBuf = null, stepDist = 0;
     function startAudio() {
       if (actx) { actx.resume(); return; }
       try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
@@ -302,7 +379,19 @@
       const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420;
       const wg = actx.createGain(); wg.gain.value = 0.05;
       wind.connect(lp).connect(wg).connect(actx.destination); wind.start();
+      // buffer curto de "crunch" pros passos na grama
+      stepBuf = actx.createBuffer(1, (actx.sampleRate * 0.18) | 0, actx.sampleRate);
+      const sd = stepBuf.getChannelData(0);
+      for (let i = 0; i < sd.length; i++) sd[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / sd.length, 2.2);
       scheduleBird();
+    }
+    // passo na grama: ruído curto filtrado (varia um pouco a cada passo)
+    function step() {
+      if (!actx || !stepBuf) return;
+      const s = actx.createBufferSource(); s.buffer = stepBuf;
+      const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 850 + Math.random() * 600; bp.Q.value = 0.7;
+      const g = actx.createGain(); g.gain.value = 0.09 + Math.random() * 0.05;
+      s.connect(bp).connect(g).connect(actx.destination); s.start();
     }
     function chirp(t, base) {
       const o = actx.createOscillator(), g = actx.createGain(); o.type = 'sine';

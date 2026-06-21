@@ -45,6 +45,8 @@
     .uibtn { position: fixed; z-index: 28; border: none; border-radius: 14px; cursor: pointer; font-weight: 800; color: #06321b;
       background: linear-gradient(90deg, #ffd56b, #ff9f43); box-shadow: 0 8px 22px -8px rgba(0,0,0,.6); }
     #buildBtn { top: max(12px, env(safe-area-inset-top)); right: 12px; padding: 10px 14px; font-size: 16px; }
+    #removeBtn { top: max(12px, env(safe-area-inset-top)); right: 142px; padding: 10px 14px; font-size: 16px; background: linear-gradient(90deg, #ffb3b3, #ff8a8a); }
+    #removeBtn.on { background: linear-gradient(90deg, #ff5a5a, #d83232); color: #fff; }
     #buildMenu { position: fixed; z-index: 35; inset: auto 10px max(10px, env(safe-area-inset-bottom)) auto; right: 10px; bottom: 10px;
       width: min(94vw, 360px); max-height: 64vh; overflow-y: auto; background: linear-gradient(180deg, rgba(20,46,32,.97), rgba(8,22,16,.97));
       border: 1px solid rgba(160,230,180,.4); border-radius: 16px; padding: 12px; box-shadow: 0 18px 50px rgba(0,0,0,.5); }
@@ -80,6 +82,7 @@
   <p id="hint">Arraste/mouse para olhar · WASD ou direcional para andar</p>
 
   <button class="uibtn hidden" id="buildBtn">🔨 Construir</button>
+  <button class="uibtn hidden" id="removeBtn">🗑 Remover</button>
   <div id="buildMenu" class="hidden">
     <h3>🔨 Escolha o que construir</h3>
     <div id="buildGrid"></div>
@@ -100,8 +103,8 @@
       <p>Um lugar tranquilo pra <b>passear</b>: floresta, lago e sol. Coloque o óculos <b>Meta</b> e entre no VR, ou explore aqui mesmo.</p>
       <div class="keys">
         🥽 <b>VR (óculos Meta):</b> ande com a <b>alavanca</b>; <b>gatilho esquerdo</b> = correr, <b>lateral/grip</b> = pular.<br>
-        &nbsp;&nbsp;&nbsp;🔨 <b>Y</b> abre o menu de construção · aponte e use o <b>gatilho</b> pra escolher/colocar/conversar · <b>A</b> ou analógico (←→) gira · analógico (↑↓) muda a <b>altura</b>.<br>
-        🖥️ <b>PC:</b> mouse pra olhar, <b>W A S D</b> (Shift = correr, Espaço = pular), <b>E</b> conversa, <b>🔨</b> constrói (<b>R</b> gira, <b>roda do mouse</b> ou <b>⬆⬇</b> mudam a altura).<br>
+        &nbsp;&nbsp;&nbsp;🔨 <b>Y</b> menu de construção · <b>gatilho</b> escolhe/coloca/conversa/remove · <b>A</b> ou analógico (←→) gira · analógico (↑↓) muda o <b>nível</b> · <b>B</b> liga o modo <b>remover</b>. As peças encaixam num grid 3D (não sobrepõem).<br>
+        🖥️ <b>PC:</b> mouse pra olhar, <b>W A S D</b> (Shift = correr, Espaço = pular), <b>E</b> conversa, <b>🔨</b> constrói (<b>R</b> gira, <b>roda</b>/<b>⬆⬇</b> muda o nível), <b>🗑</b> remover (mire e aperte <b>X</b>).<br>
         📱 <b>Celular:</b> <b>arraste</b> pra olhar, <b>direcional</b> anda, toque na dica pra conversar.
       </div>
       <button class="go" id="goBtn">▶ Passear sozinho</button>
@@ -451,9 +454,26 @@
     };
     const piecePT = n => BUILD_PT[n] || n.replace(/-/g, ' ');
     const BUILD_SCALE = 2.4, BUILD_DIST = 4.5; // tamanho das peças e distância do fantasma à frente do jogador
+    const GX = 2 * BUILD_SCALE, GY = 2.4 * BUILD_SCALE; // grid 3D: célula de 4,8 m na horizontal, 5,76 m por nível
     const placedGroup = new THREE.Group(); scene.add(placedGroup);
-    let buildPiece = null, ghost = null, ghostRY = 0, buildLift = 0; // buildLift = altura extra escolhida
+    let buildPiece = null, ghost = null, ghostRY = 0, buildLevel = 0; // buildLevel = nível vertical (passos de GY)
+    let removeMode = false, removeTarget = null;
+    const occupied = new Set();   // chaves "ix,iz,nivel" já ocupadas (sem sobrepor)
+    const placedByKey = {};       // chave -> objeto colocado (pra remover/sincronizar)
+    const ghostMat = new THREE.MeshBasicMaterial({ color: 0x86ff9d, transparent: true, opacity: 0.5, depthWrite: false });
     const server = { user: null, csrf: null };
+    // chave da célula a partir de uma posição do mundo (deriva o nível pelo terreno da coluna)
+    function pieceKey(x, y, z) {
+      const ix = Math.round(x / GX), iz = Math.round(z / GX);
+      const level = Math.round((y - heightAt(ix * GX, iz * GX)) / GY);
+      return ix + ',' + iz + ',' + level;
+    }
+    // posição encaixada no grid (x,z na célula; y = chão da coluna + nível*GY)
+    function snapPlacement(rawx, rawz, level) {
+      const ix = Math.round(rawx / GX), iz = Math.round(rawz / GX);
+      const x = ix * GX, z = iz * GX, y = heightAt(x, z) + level * GY;
+      return { x, y, z, key: ix + ',' + iz + ',' + level };
+    }
     const raycaster = new THREE.Raycaster();
     const rcPos = new THREE.Vector3(), rcDir = new THREE.Vector3(), rcQuat = new THREE.Quaternion();
 
@@ -461,8 +481,11 @@
       return getGLB(`build/${name}.glb`).then(gltf => {
         const o = gltf.scene.clone(true); o.scale.setScalar(BUILD_SCALE);
         o.position.set(x, y, z); o.rotation.y = ry;
-        if (asGhost) o.traverse(m => { if (m.isMesh) { m.material = new THREE.MeshBasicMaterial({ color: 0x86ff9d, transparent: true, opacity: 0.45, depthWrite: false }); } });
-        else { o.updateMatrixWorld(true); buildSolids.push(o); } // entra na lista pra colisão por raycast
+        if (asGhost) { o.traverse(m => { if (m.isMesh) m.material = ghostMat; }); } // material único pra recolorir (verde/vermelho)
+        else {
+          o.updateMatrixWorld(true); buildSolids.push(o); // colisão por raycast
+          const key = pieceKey(x, y, z); o.userData.key = key; o.userData.piece = name; occupied.add(key); placedByKey[key] = o; // ocupa a célula
+        }
         (asGhost ? scene : placedGroup).add(o);
         return o;
       });
@@ -494,7 +517,7 @@
       p.x += dx; p.z += dz;
     }
     function selectPiece(name) {
-      buildPiece = name; ghostRY = 0; buildLift = 0;
+      buildPiece = name; ghostRY = 0; buildLevel = 0; removeMode = false; removeBox.visible = false;
       if (ghost) { scene.remove(ghost); ghost = null; }
       addPiece(name, 0, -999, 0, 0, true).then(o => { ghost = o; });
       document.getElementById('buildMenu').classList.add('hidden');
@@ -512,29 +535,65 @@
     function updateGhost() {
       if (!ghost) return;
       buildAimRay();
-      _aimTargets.length = 0; _aimTargets.push(ground); for (const b of buildSolids) _aimTargets.push(b); // mira no chão E em cima das construções (empilhar)
+      _aimTargets.length = 0; _aimTargets.push(ground); for (const b of buildSolids) _aimTargets.push(b); // mira no chão E nas construções (empilhar)
       const hit = raycaster.intersectObjects(_aimTargets, true)[0];
-      let gx, gz, gy;
-      if (hit && hit.distance < 80) { gx = hit.point.x; gz = hit.point.z; gy = hit.point.y; }
-      else { gx = rcPos.x + rcDir.x * BUILD_DIST; gz = rcPos.z + rcDir.z * BUILD_DIST; gy = heightAt(gx, gz); }
-      ghost.position.set(gx, gy + buildLift, gz); ghost.rotation.y = ghostRY; // + altura escolhida
+      let rx, rz;
+      if (hit && hit.distance < 80) { rx = hit.point.x; rz = hit.point.z; }
+      else { rx = rcPos.x + rcDir.x * BUILD_DIST; rz = rcPos.z + rcDir.z * BUILD_DIST; }
+      const s = snapPlacement(rx, rz, buildLevel); // encaixa no grid 3D
+      ghost.position.set(s.x, s.y, s.z); ghost.rotation.y = ghostRY;
+      ghostMat.color.set(occupied.has(s.key) ? 0xff6b6b : 0x86ff9d); // vermelho = célula ocupada
     }
     function doPlace() {
       if (!ghost || !buildPiece) return;
       const x = ghost.position.x, y = ghost.position.y, z = ghost.position.z, ry = ghostRY;
-      addPiece(buildPiece, x, y, z, ry, false);
-      saveBuilding(buildPiece, x, y, z, ry);
+      const key = pieceKey(x, y, z);
+      if (occupied.has(key)) { flash('Já tem uma peça aqui 🙂'); return; } // sem sobrepor
+      addPiece(buildPiece, x, y, z, ry, false).then(o => { saveBuilding(buildPiece, x, y, z, ry).then(id => { if (id && o) o.userData.id = id; }); });
       netSendBuild(buildPiece, x, y, z, ry); // mostra pra todo mundo na sala na hora
     }
     function cancelBuild() {
-      buildPiece = null; buildLift = 0; if (ghost) { scene.remove(ghost); ghost = null; }
+      buildPiece = null; buildLevel = 0; if (ghost) { scene.remove(ghost); ghost = null; }
       document.getElementById('buildBar').classList.add('hidden');
     }
-    function liftBy(d) { if (buildPiece) buildLift = Math.max(-3, Math.min(40, buildLift + d)); }
+    function changeLevel(d) { if (buildPiece) buildLevel = Math.max(-2, Math.min(20, buildLevel + d)); }
     function saveBuilding(piece, x, y, z, ry) {
-      if (!server.user) { flash('Entre na sua conta no site pra salvar as construções 🙂'); return; }
-      fetch('buildings.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF': server.csrf || '' },
-        body: JSON.stringify({ piece, x, y, z, ry }) }).catch(() => {});
+      if (!server.user) { flash('Entre na sua conta no site pra salvar as construções 🙂'); return Promise.resolve(null); }
+      return fetch('buildings.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF': server.csrf || '' },
+        body: JSON.stringify({ piece, x, y, z, ry }) }).then(r => r.json()).then(d => (d && d.id) || null).catch(() => null);
+    }
+    // ---------- remover peças ----------
+    const removeBox = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xff5555, transparent: true, opacity: 0.3, depthWrite: false }));
+    removeBox.visible = false; scene.add(removeBox);
+    const _rb = new THREE.Box3(), _rbc = new THREE.Vector3(), _rbs = new THREE.Vector3();
+    function removePieceLocal(o) {
+      if (!o) return;
+      const i = buildSolids.indexOf(o); if (i >= 0) buildSolids.splice(i, 1);
+      if (o.parent) o.parent.remove(o);
+      if (o.userData.key) { occupied.delete(o.userData.key); delete placedByKey[o.userData.key]; }
+    }
+    function doRemove(o) {
+      if (!o) return;
+      const id = o.userData.id, key = o.userData.key;
+      removePieceLocal(o); removeBox.visible = false; removeTarget = null;
+      if (id) fetch('buildings.php?id=' + id, { method: 'DELETE' }).catch(() => {});
+      netSendRemove(key);
+    }
+    function removeByKey(key) { removePieceLocal(placedByKey[key]); }
+    function updateRemoveAim() {
+      buildAimRay();
+      const hit = raycaster.intersectObjects(buildSolids, true)[0];
+      let target = null;
+      if (hit) { let o = hit.object; while (o && o.parent && o.parent !== placedGroup) o = o.parent; if (o && o.parent === placedGroup) target = o; }
+      removeTarget = target;
+      if (target) { _rb.setFromObject(target); _rb.getCenter(_rbc); _rb.getSize(_rbs); removeBox.position.copy(_rbc); removeBox.scale.set(_rbs.x + 0.2, _rbs.y + 0.2, _rbs.z + 0.2); removeBox.visible = true; }
+      else removeBox.visible = false;
+    }
+    function toggleRemoveMode() {
+      removeMode = !removeMode;
+      if (removeMode) { cancelBuild(); if (menuOpen) closeMenu3D(); flash('Modo remover: mire numa peça e use o gatilho (VR), tecla X (PC) ou toque'); }
+      else { removeBox.visible = false; removeTarget = null; }
+      const rb = document.getElementById('removeBtn'); if (rb) rb.classList.toggle('on', removeMode);
     }
     function loadBuildings() {
       fetch('buildings.php').then(r => r.json()).then(d => {
@@ -611,7 +670,7 @@
       }
     }
     function openMenu3D() {
-      menuOpen = true; menuHover = -1;
+      menuOpen = true; menuHover = -1; removeMode = false; removeBox.visible = false;
       camera.getWorldPosition(rcPos); camera.getWorldDirection(rcDir); rcDir.y = 0; rcDir.normalize();
       menuPlane.position.set(rcPos.x + rcDir.x * 2.3, rcPos.y, rcPos.z + rcDir.z * 2.3);
       menuPlane.lookAt(rcPos.x, rcPos.y, rcPos.z); menuPlane.visible = true; drawMenu(); buildIcons();
@@ -678,8 +737,9 @@
         const sx = ax[2] !== undefined ? ax[2] : (ax[0] || 0), sy = ax[3] !== undefined ? ax[3] : (ax[1] || 0);
         if (src.handedness === 'right') {
           s.tx = sx; s.ty = sy;
-          if (bt[0] && bt[0].pressed) s.interact = true; // gatilho direito = conversar / colocar / escolher
+          if (bt[0] && bt[0].pressed) s.interact = true; // gatilho direito = conversar / colocar / escolher / remover
           if (bt[4] && bt[4].pressed) s.rot = true;      // botão A (direito) = girar a peça
+          if (bt[5] && bt[5].pressed) s.rem = true;      // botão B (direito) = modo remover
         } else {
           s.x = sx; s.y = sy;
           if (bt[0] && bt[0].pressed) s.run = true;  // gatilho (controle esquerdo) = correr
@@ -696,9 +756,10 @@
     addEventListener('keydown', e => {
       if (e.code === 'KeyE' && !e.repeat) interact();
       if (e.code === 'KeyR' && !e.repeat && buildPiece) ghostRY += Math.PI / 4;
+      if (e.code === 'KeyX' && !e.repeat && removeMode) doRemove(removeTarget);
     });
     talkHint.addEventListener('click', interact);
-    let interactWas = false, rotWas = false, menuWas = false;
+    let interactWas = false, rotWas = false, menuWas = false, remWas = false, liftWas = false;
     let toastT = 0;
     function flash(msg) { const el = document.getElementById('toast'); el.textContent = msg; el.style.opacity = '1'; clearTimeout(toastT); toastT = setTimeout(() => el.style.opacity = '0', 2800); }
 
@@ -717,13 +778,15 @@
         run = run || s.run; wantJump = wantJump || s.jump;
         // botão Y (esq) abre/fecha o menu de construção
         if (s.menu && !menuWas) toggleMenu3D(); menuWas = !!s.menu;
-        // gatilho direito: no menu = escolher; construindo = colocar; senão = conversar
-        if (s.interact && !interactWas) { if (menuOpen) menuSelect(menuHover); else if (buildPiece) doPlace(); else interact(); }
+        // botão B (dir) liga/desliga o modo remover
+        if (s.rem && !remWas) toggleRemoveMode(); remWas = !!s.rem;
+        // gatilho direito: menu=escolher; removendo=remover; construindo=colocar; senão=conversar
+        if (s.interact && !interactWas) { if (menuOpen) menuSelect(menuHover); else if (removeMode) doRemove(removeTarget); else if (buildPiece) doPlace(); else interact(); }
         interactWas = !!s.interact;
         // botão A (dir) gira a peça
         if (s.rot && !rotWas && buildPiece) ghostRY += Math.PI / 4; rotWas = !!s.rot;
-        // analógico direito (eixo Y) sobe/desce a peça enquanto constrói
-        if (buildPiece && !menuOpen && Math.abs(s.ty) > 0.2) liftBy(-s.ty * 2.5 * dt);
+        // analógico direito (eixo Y) muda o NÍVEL da peça (1 nível por empurrão)
+        if (buildPiece && !menuOpen) { if (s.ty < -0.6 && !liftWas) { changeLevel(1); liftWas = true; } else if (s.ty > 0.6 && !liftWas) { changeLevel(-1); liftWas = true; } else if (Math.abs(s.ty) < 0.3) liftWas = false; }
         if (!menuOpen && Math.abs(s.tx) > 0.7 && !turned) {
           if (buildPiece) ghostRY -= Math.sign(s.tx) * Math.PI / 4; // construindo: analógico gira a peça
           else dolly.rotation.y -= Math.sign(s.tx) * Math.PI / 6;   // senão: gira o jogador
@@ -792,8 +855,9 @@
         camera.getWorldPosition(camTmp); activeNPC.wrap.getWorldPosition(npcTmp);
         dlgPlane.position.set(npcTmp.x, npcTmp.y + 2.2, npcTmp.z); dlgPlane.lookAt(camTmp);
       }
-      // construção: fantasma segue a frente do jogador
-      if (ghost && !menuOpen) updateGhost();
+      // construção: fantasma encaixa no grid (ou mira de remoção)
+      if (removeMode) updateRemoveAim();
+      else if (ghost && !menuOpen) updateGhost();
       // menu de construção 3D: destaque conforme a mira + gira os ícones
       if (menuOpen) {
         const hcell = menuPick(); if (hcell !== menuHover) { menuHover = hcell; drawMenu(); }
@@ -857,9 +921,10 @@
     document.getElementById('bRot').addEventListener('click', () => { ghostRY += Math.PI / 4; });
     document.getElementById('bPlace').addEventListener('click', doPlace);
     document.getElementById('bCancel').addEventListener('click', cancelBuild);
-    document.getElementById('bUp').addEventListener('click', () => liftBy(0.6));
-    document.getElementById('bDown').addEventListener('click', () => liftBy(-0.6));
-    addEventListener('wheel', e => { if (buildPiece) liftBy(-Math.sign(e.deltaY) * 0.3); }, { passive: true });
+    document.getElementById('bUp').addEventListener('click', () => changeLevel(1));
+    document.getElementById('bDown').addEventListener('click', () => changeLevel(-1));
+    addEventListener('wheel', e => { if (buildPiece) changeLevel(-Math.sign(e.deltaY)); }, { passive: true });
+    document.getElementById('removeBtn').addEventListener('click', toggleRemoveMode);
 
     // ---------- multiplayer (P2P via PeerJS, estrela host-autoritativa, até 5) ----------
     const ROOM_PREFIX = 'jubis-bosque-';
@@ -903,15 +968,23 @@
       if (net.mode === 'guest') { if (net.hostConn && net.hostConn.open) net.hostConn.send(msg); }
       else for (const c of net.conns) if (c.open) c.send(msg);
     }
+    function netSendRemove(key) {
+      if (net.mode === 'solo' || !key) return;
+      const msg = { t: 'removeKey', key };
+      if (net.mode === 'guest') { if (net.hostConn && net.hostConn.open) net.hostConn.send(msg); }
+      else for (const c of net.conns) if (c.open) c.send(msg);
+    }
     function onHostData(c, d) {
       if (!d || !d.t) return;
       if (d.t === 'state') { d.id = d.id || c.peer; net.peerStates[d.id] = d; c._pid = d.id; }
       else if (d.t === 'build') { addPiece(d.piece, +d.x, +d.y, +d.z, +d.ry, false); for (const o of net.conns) if (o !== c && o.open) o.send(d); }
+      else if (d.t === 'removeKey') { removeByKey(d.key); for (const o of net.conns) if (o !== c && o.open) o.send(d); }
     }
     function onGuestData(d) {
       if (!d || !d.t) return;
       if (d.t === 'all') applyPlayers(d.players || []);
       else if (d.t === 'build') addPiece(d.piece, +d.x, +d.y, +d.z, +d.ry, false);
+      else if (d.t === 'removeKey') removeByKey(d.key);
     }
     function createRoom() {
       net.mode = 'host';
@@ -966,6 +1039,7 @@
       document.getElementById('intro').classList.add('hidden');
       document.getElementById('hint').style.display = 'block';
       document.getElementById('buildBtn').classList.remove('hidden');
+      document.getElementById('removeBtn').classList.remove('hidden');
       if (!renderer.xr.isPresenting && cv.requestPointerLock && !('ontouchstart' in window)) cv.requestPointerLock();
       setTimeout(() => { document.getElementById('hint').style.display = 'none'; }, 6000);
     }

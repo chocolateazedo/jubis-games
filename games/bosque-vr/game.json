@@ -1,0 +1,10 @@
+{
+  "title": "Bosque VR",
+  "description": "Passeie por uma floresta com lago e sol — em óculos VR (Meta) ou no navegador.",
+  "emoji": "🌲",
+  "tags": ["3D", "VR", "passeio", "relaxar"],
+  "entry": "index.html",
+  "cover": "cover.svg",
+  "order": 6,
+  "hidden": false
+}

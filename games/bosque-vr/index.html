@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>Bosque VR</title>
+  <!--
+    Bosque VR — Jubis Games
+    Ambiente 3D em primeira pessoa pra passear: floresta com muitas árvores, lago e sol.
+    Funciona em óculos VR (Meta Quest, via WebXR) com o controle, e também no PC
+    (mouse + WASD) e no celular (arrastar pra olhar + direcional pra andar).
+    Three.js via CDN (importmap), sem build.
+  -->
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; height: 100%; overflow: hidden; font-family: 'Rubik', Arial, system-ui, sans-serif;
+      color: #fff; background: #87b9e6; }
+    canvas { display: block; }
+    a.back { position: fixed; top: max(12px, env(safe-area-inset-top)); left: 12px; z-index: 30; color: #fff;
+      text-decoration: none; font-weight: 800; background: rgba(10,30,20,.5); padding: 7px 12px; border-radius: 12px; }
+    /* controle de toque (só em celular/tablet) */
+    .touch { display: none; }
+    @media (hover: none) and (pointer: coarse) { .touch { display: block; } }
+    #joy { position: fixed; left: 22px; bottom: max(26px, env(safe-area-inset-bottom)); width: 128px; height: 128px;
+      border-radius: 50%; background: rgba(255,255,255,.18); border: 2px solid rgba(255,255,255,.4); z-index: 25; }
+    #stick { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px; border-radius: 50%; background: rgba(120,220,150,.85); }
+    /* botão VR (gerado pelo three) e o nosso start */
+    #VRButton { z-index: 30; }
+    #intro { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; padding: 18px;
+      background: radial-gradient(circle at 50% 30%, rgba(20,40,30,.55), rgba(6,14,10,.82)); }
+    #intro.hidden { display: none; }
+    .card { background: linear-gradient(180deg, rgba(20,46,32,.96), rgba(8,22,16,.96)); border: 1px solid rgba(160,230,180,.4);
+      border-radius: 18px; padding: 24px; width: min(94vw, 460px); text-align: center; box-shadow: 0 18px 50px rgba(0,0,0,.5); }
+    .card h1 { margin: 0 0 8px; font-size: 28px; }
+    .card p { margin: 8px 0; opacity: .95; line-height: 1.5; font-size: 15px; }
+    .card .keys { background: rgba(0,0,0,.25); border-radius: 12px; padding: 12px 14px; margin: 12px 0; text-align: left; font-size: 14px; line-height: 1.8; }
+    .card b { color: #bdf5c8; }
+    .go { margin-top: 6px; border: none; border-radius: 14px; padding: 14px 26px; font-weight: 800; font-size: 18px; cursor: pointer;
+      color: #06321b; background: linear-gradient(90deg, #7be88f, #43d977); box-shadow: 0 8px 22px -8px rgba(80,230,130,.8); }
+    .go:active { transform: translateY(1px); }
+    #hint { position: fixed; bottom: max(14px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); z-index: 20;
+      color: #eaffee; opacity: .8; font-size: 13px; text-align: center; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,.6); display: none; }
+  </style>
+</head>
+<body>
+  <a class="back" href="../../">← Voltar</a>
+  <div class="touch"><div id="joy"><div id="stick"></div></div></div>
+  <p id="hint">Arraste/mouse para olhar · WASD ou direcional para andar</p>
+
+  <div id="intro">
+    <div class="card">
+      <h1>🌲 Bosque VR</h1>
+      <p>Um lugar tranquilo pra <b>passear</b>: floresta, lago e sol. Coloque o óculos <b>Meta</b> e entre no VR, ou explore aqui mesmo.</p>
+      <div class="keys">
+        🥽 <b>VR (óculos Meta):</b> aperte <b>ENTRAR NO VR</b> e ande com a <b>alavanca</b> do controle.<br>
+        🖥️ <b>PC:</b> clique pra travar o mouse, olhe com o <b>mouse</b> e ande com <b>W A S D</b> (Shift = correr).<br>
+        📱 <b>Celular:</b> <b>arraste</b> pra olhar e use o <b>direcional</b> pra andar.
+      </div>
+      <button class="go" id="goBtn">▶ Começar a passear</button>
+    </div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { VRButton } from 'three/addons/webxr/VRButton.js';
+
+    const SPEED = 3.2;                 // metros por segundo
+    const WORLD_R = 178;               // raio andável
+    const LAKE = { x: 34, z: -26, r: 26 };
+
+    // ---------- renderer / cena ----------
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.xr.enabled = true;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    document.body.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    const SKY = 0x9ed0f2;
+    scene.fog = new THREE.Fog(0xbfe0f5, 60, 230);
+
+    // ---------- player (dolly) + câmera ----------
+    const dolly = new THREE.Group();
+    const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 600);
+    camera.position.set(0, 1.6, 0);   // altura dos olhos (no VR vira 0 no floor)
+    dolly.add(camera);
+    dolly.position.set(10, 0, 64);
+    dolly.rotation.y = 0;              // olhando pro centro/lago (-z)
+    scene.add(dolly);
+
+    // controles VR (ficam dentro do dolly pra se moverem junto)
+    for (let i = 0; i < 2; i++) {
+      const c = renderer.xr.getController(i);
+      const ray = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1)]),
+        new THREE.LineBasicMaterial({ color: 0x9be8a8 }));
+      ray.scale.z = 5; c.add(ray); dolly.add(c);
+    }
+
+    // ---------- luz / céu / sol ----------
+    scene.add(new THREE.HemisphereLight(0xcfeaff, 0x4a6b3a, 0.95));
+    const sun = new THREE.DirectionalLight(0xfff4d6, 1.5);
+    sun.position.set(80, 120, 40);
+    scene.add(sun);
+
+    // céu (domo com gradiente)
+    function skyTexture() {
+      const c = document.createElement('canvas'); c.width = 16; c.height = 256; const x = c.getContext('2d');
+      const g = x.createLinearGradient(0, 0, 0, 256);
+      g.addColorStop(0, '#3f8fd6'); g.addColorStop(0.5, '#88c4ee'); g.addColorStop(1, '#dff0fb');
+      x.fillStyle = g; x.fillRect(0, 0, 16, 256);
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+    }
+    const sky = new THREE.Mesh(new THREE.SphereGeometry(400, 24, 16), new THREE.MeshBasicMaterial({ map: skyTexture(), side: THREE.BackSide, fog: false }));
+    scene.add(sky);
+    // sol visível
+    const sunBall = new THREE.Mesh(new THREE.SphereGeometry(14, 20, 16), new THREE.MeshBasicMaterial({ color: 0xfff3b0, fog: false }));
+    sunBall.position.copy(sun.position).multiplyScalar(2.6); scene.add(sunBall);
+    const sunGlow = new THREE.Mesh(new THREE.SphereGeometry(26, 20, 16), new THREE.MeshBasicMaterial({ color: 0xfff0a0, transparent: true, opacity: 0.25, fog: false }));
+    sunGlow.position.copy(sunBall.position); scene.add(sunGlow);
+    // nuvens
+    for (let i = 0; i < 14; i++) {
+      const cl = new THREE.Group();
+      for (let j = 0; j < 4; j++) {
+        const b = new THREE.Mesh(new THREE.SphereGeometry(6 + Math.random() * 6, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, fog: false }));
+        b.position.set((Math.random() - 0.5) * 18, (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 10); b.scale.y = 0.6; cl.add(b);
+      }
+      const a = Math.random() * Math.PI * 2, d = 120 + Math.random() * 200;
+      cl.position.set(Math.cos(a) * d, 70 + Math.random() * 40, Math.sin(a) * d); scene.add(cl);
+    }
+
+    // ---------- chão (grama) ----------
+    function grassTexture() {
+      const s = 256, c = document.createElement('canvas'); c.width = c.height = s; const x = c.getContext('2d');
+      x.fillStyle = '#3f8a3d'; x.fillRect(0, 0, s, s);
+      for (let i = 0; i < 2600; i++) { const g = 60 + Math.random() * 90; x.fillStyle = `rgba(${30 + Math.random() * 30},${g | 0},${30 + Math.random() * 30},.6)`; x.fillRect(Math.random() * s, Math.random() * s, 2, 3); }
+      const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(60, 60); t.colorSpace = THREE.SRGBColorSpace; return t;
+    }
+    const ground = new THREE.Mesh(new THREE.CircleGeometry(WORLD_R + 30, 48), new THREE.MeshStandardMaterial({ map: grassTexture(), roughness: 1 }));
+    ground.rotation.x = -Math.PI / 2; scene.add(ground);
+
+    // ---------- lago ----------
+    const lake = new THREE.Mesh(new THREE.CircleGeometry(LAKE.r, 40), new THREE.MeshStandardMaterial({ color: 0x2f7fc4, transparent: true, opacity: 0.86, roughness: 0.15, metalness: 0.4 }));
+    lake.rotation.x = -Math.PI / 2; lake.position.set(LAKE.x, 0.04, LAKE.z); scene.add(lake);
+    // margem de areia
+    const shore = new THREE.Mesh(new THREE.RingGeometry(LAKE.r, LAKE.r + 3.2, 40), new THREE.MeshStandardMaterial({ color: 0xd9c48b, roughness: 1 }));
+    shore.rotation.x = -Math.PI / 2; shore.position.set(LAKE.x, 0.03, LAKE.z); scene.add(shore);
+
+    // ---------- árvores (instanced) + sombras "blob" ----------
+    const TREES = 230;
+    const trunkGeo = new THREE.CylinderGeometry(0.22, 0.32, 2.4, 6); trunkGeo.translate(0, 1.2, 0);
+    const foliGeo = new THREE.IcosahedronGeometry(1.7, 0);
+    const trunkMesh = new THREE.InstancedMesh(trunkGeo, new THREE.MeshStandardMaterial({ color: 0x7a5230, roughness: 1 }), TREES);
+    const foliMesh = new THREE.InstancedMesh(foliGeo, new THREE.MeshStandardMaterial({ roughness: 1, flatShading: true }), TREES);
+    const blobGeo = new THREE.CircleGeometry(1.7, 12); blobGeo.rotateX(-Math.PI / 2);
+    const blobMesh = new THREE.InstancedMesh(blobGeo, new THREE.MeshBasicMaterial({ color: 0x123018, transparent: true, opacity: 0.32 }), TREES);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), scl = new THREE.Vector3();
+    const greens = [0x4caf50, 0x3d9140, 0x6abf4f, 0x2f7d3a, 0x86c95a];
+    let placed = 0, guard = 0;
+    while (placed < TREES && guard < TREES * 30) {
+      guard++;
+      const a = Math.random() * Math.PI * 2, d = 8 + Math.random() * (WORLD_R - 6);
+      const x = Math.cos(a) * d, z = Math.sin(a) * d;
+      if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 5) continue;       // não na água
+      if (Math.hypot(x - dolly.position.x, z - dolly.position.z) < 6) continue; // clareira de spawn
+      const s = 0.7 + Math.random() * 1.5, yaw = Math.random() * Math.PI * 2;
+      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+      // tronco
+      scl.set(s, s, s); m.compose(pos.set(x, 0, z), q, scl); trunkMesh.setMatrixAt(placed, m);
+      // folhagem (em cima do tronco)
+      const fy = 2.4 * s + 1.1 * s; m.compose(pos.set(x, fy, z), q, scl.set(s, s * (0.9 + Math.random() * 0.4), s)); foliMesh.setMatrixAt(placed, m);
+      foliMesh.setColorAt(placed, new THREE.Color(greens[(Math.random() * greens.length) | 0]));
+      // sombra
+      m.compose(pos.set(x, 0.05, z), new THREE.Quaternion(), scl.set(s * 1.1, 1, s * 1.1)); blobMesh.setMatrixAt(placed, m);
+      placed++;
+    }
+    trunkMesh.count = foliMesh.count = blobMesh.count = placed;
+    foliMesh.instanceColor.needsUpdate = true;
+    scene.add(blobMesh, trunkMesh, foliMesh);
+
+    // algumas pedras
+    for (let i = 0; i < 22; i++) {
+      const a = Math.random() * Math.PI * 2, d = 10 + Math.random() * (WORLD_R - 10);
+      const x = Math.cos(a) * d, z = Math.sin(a) * d; if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 4) continue;
+      if (Math.hypot(x - dolly.position.x, z - dolly.position.z) < 9) continue; // longe do spawn
+      const r = new THREE.Mesh(new THREE.DodecahedronGeometry(0.5 + Math.random() * 0.9, 0), new THREE.MeshStandardMaterial({ color: 0x8a8f96, roughness: 1, flatShading: true }));
+      r.position.set(x, 0.3, z); r.rotation.set(Math.random(), Math.random(), Math.random()); scene.add(r);
+    }
+
+    // ---------- entrada VR ----------
+    renderer.xr.setReferenceSpaceType('local-floor');
+    document.body.appendChild(VRButton.createButton(renderer));
+    renderer.xr.addEventListener('sessionstart', () => { camera.position.set(0, 0, 0); });
+    renderer.xr.addEventListener('sessionend', () => { camera.position.set(0, 1.6, 0); });
+
+    // ---------- controles desktop/touch ----------
+    const keys = {};
+    addEventListener('keydown', e => { keys[e.code] = true; });
+    addEventListener('keyup', e => { keys[e.code] = false; });
+    let yaw = dolly.rotation.y, pitch = 0, locked = false;
+    const cv = renderer.domElement;
+    cv.addEventListener('click', () => { if (!renderer.xr.isPresenting && cv.requestPointerLock) cv.requestPointerLock(); });
+    document.addEventListener('pointerlockchange', () => { locked = (document.pointerLockElement === cv); });
+    addEventListener('mousemove', e => { if (!locked) return; yaw -= e.movementX * 0.0022; pitch -= e.movementY * 0.0022; pitch = Math.max(-1.3, Math.min(1.3, pitch)); });
+
+    // toque: direcional anda, arrastar (fora do direcional) olha
+    const joy = { x: 0, y: 0, id: null, cx: 0, cy: 0 };
+    const joyEl = document.getElementById('joy'), stickEl = document.getElementById('stick');
+    joyEl.addEventListener('touchstart', e => { const t = e.changedTouches[0]; joy.id = t.identifier; const r = joyEl.getBoundingClientRect(); joy.cx = r.left + r.width / 2; joy.cy = r.top + r.height / 2; e.preventDefault(); }, { passive: false });
+    let look = { id: null, x: 0, y: 0 };
+    addEventListener('touchstart', e => { for (const t of e.changedTouches) { if (t.identifier === joy.id) continue; if (look.id === null) { look.id = t.identifier; look.x = t.clientX; look.y = t.clientY; } } }, { passive: false });
+    addEventListener('touchmove', e => {
+      for (const t of e.changedTouches) {
+        if (t.identifier === joy.id) { joy.x = Math.max(-1, Math.min(1, (t.clientX - joy.cx) / 54)); joy.y = Math.max(-1, Math.min(1, (t.clientY - joy.cy) / 54)); stickEl.style.transform = `translate(${joy.x * 34}px,${joy.y * 34}px)`; }
+        else if (t.identifier === look.id) { yaw -= (t.clientX - look.x) * 0.005; pitch -= (t.clientY - look.y) * 0.005; pitch = Math.max(-1.3, Math.min(1.3, pitch)); look.x = t.clientX; look.y = t.clientY; }
+      }
+    }, { passive: false });
+    addEventListener('touchend', e => { for (const t of e.changedTouches) { if (t.identifier === joy.id) { joy.id = null; joy.x = joy.y = 0; stickEl.style.transform = ''; } if (t.identifier === look.id) look.id = null; } });
+
+    // ---------- thumbstick do VR ----------
+    let turned = false;
+    function readSticks() {
+      const s = { x: 0, y: 0, tx: 0 }, sess = renderer.xr.getSession(); if (!sess) return s;
+      for (const src of sess.inputSources) {
+        const gp = src.gamepad; if (!gp) continue; const ax = gp.axes;
+        const sx = ax[2] !== undefined ? ax[2] : (ax[0] || 0), sy = ax[3] !== undefined ? ax[3] : (ax[1] || 0);
+        if (src.handedness === 'right') { s.tx = sx; } else { s.x = sx; s.y = sy; }
+      }
+      return s;
+    }
+
+    // ---------- loop ----------
+    const fwd = new THREE.Vector3(), right = new THREE.Vector3(), mv = new THREE.Vector3();
+    let last = 0;
+    function frame(t) {
+      const dt = last ? Math.min((t - last) / 1000, 0.05) : 0; last = t;
+      const vr = renderer.xr.isPresenting;
+      let mx = 0, mz = 0;
+      if (vr) {
+        const s = readSticks(); const dz = v => Math.abs(v) < 0.15 ? 0 : v;
+        mx = dz(s.x); mz = dz(s.y);
+        if (Math.abs(s.tx) > 0.7 && !turned) { dolly.rotation.y -= Math.sign(s.tx) * Math.PI / 6; turned = true; }
+        if (Math.abs(s.tx) < 0.3) turned = false;
+      } else {
+        dolly.rotation.y = yaw; camera.rotation.x = pitch;
+        mx = (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0) + joy.x;
+        mz = (keys['KeyS'] ? 1 : 0) - (keys['KeyW'] ? 1 : 0) + (keys['ArrowDown'] ? 1 : 0) - (keys['ArrowUp'] ? 1 : 0) + joy.y;
+      }
+      const len = Math.hypot(mx, mz);
+      if (len > 0.01) {
+        if (len > 1) { mx /= len; mz /= len; }
+        camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize();
+        right.set(fwd.z, 0, -fwd.x);
+        const spd = SPEED * dt * (keys['ShiftLeft'] || keys['ShiftRight'] ? 1.9 : 1);
+        mv.set(0, 0, 0).addScaledVector(fwd, -mz * spd).addScaledVector(right, mx * spd);
+        dolly.position.x += mv.x; dolly.position.z += mv.z;
+        // limites: mundo + lago
+        const p = dolly.position, r = Math.hypot(p.x, p.z);
+        if (r > WORLD_R) { p.x *= WORLD_R / r; p.z *= WORLD_R / r; }
+        const dx = p.x - LAKE.x, dz2 = p.z - LAKE.z, ld = Math.hypot(dx, dz2), min = LAKE.r + 0.8;
+        if (ld < min) { const k = min / (ld || 1); p.x = LAKE.x + dx * k; p.z = LAKE.z + dz2 * k; }
+      }
+      // brilho leve do lago
+      lake.material.opacity = 0.8 + Math.sin(t * 0.001) * 0.06;
+      renderer.render(scene, camera);
+    }
+    renderer.setAnimationLoop(frame);
+
+    addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
+
+    // ---------- intro ----------
+    document.getElementById('goBtn').addEventListener('click', () => {
+      document.getElementById('intro').classList.add('hidden');
+      document.getElementById('hint').style.display = 'block';
+      if (!renderer.xr.isPresenting && cv.requestPointerLock && !('ontouchstart' in window)) cv.requestPointerLock();
+      setTimeout(() => { document.getElementById('hint').style.display = 'none'; }, 6000);
+    });
+  </script>
+</body>
+</html>

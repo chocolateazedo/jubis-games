@@ -57,6 +57,7 @@
       display: flex; gap: 8px; }
     #buildBar button { border: none; border-radius: 12px; padding: 12px 16px; font-weight: 800; font-size: 15px; cursor: pointer; color: #06321b; }
     #bPlace { background: linear-gradient(90deg, #7be88f, #43d977); } #bRot { background: #cfe9ff; } #bCancel { background: #ffd0d0; }
+    #bUp, #bDown { background: #ffe6a8; min-width: 46px; }
     .hidden { display: none !important; }
     #talkHint { position: fixed; z-index: 26; left: 50%; bottom: 22%; transform: translateX(-50%); display: none;
       background: rgba(8,24,16,.78); color: #eaffee; border: 1px solid rgba(160,230,180,.5); border-radius: 14px;
@@ -84,6 +85,8 @@
     <div id="buildGrid"></div>
   </div>
   <div id="buildBar" class="hidden">
+    <button id="bDown">⬇</button>
+    <button id="bUp">⬆</button>
     <button id="bRot">⟳ Girar</button>
     <button id="bPlace">✓ Colocar</button>
     <button id="bCancel">✕ Sair</button>
@@ -97,8 +100,8 @@
       <p>Um lugar tranquilo pra <b>passear</b>: floresta, lago e sol. Coloque o óculos <b>Meta</b> e entre no VR, ou explore aqui mesmo.</p>
       <div class="keys">
         🥽 <b>VR (óculos Meta):</b> ande com a <b>alavanca</b>; <b>gatilho esquerdo</b> = correr, <b>lateral/grip</b> = pular.<br>
-        &nbsp;&nbsp;&nbsp;🔨 <b>Y</b> abre o menu de construção · aponte e use o <b>gatilho</b> pra escolher, colocar e conversar · <b>A</b> ou <b>analógico direito</b> giram a peça.<br>
-        🖥️ <b>PC:</b> mouse pra olhar, <b>W A S D</b> (Shift = correr, Espaço = pular), <b>E</b> conversa, <b>🔨</b> constrói (<b>R</b> gira).<br>
+        &nbsp;&nbsp;&nbsp;🔨 <b>Y</b> abre o menu de construção · aponte e use o <b>gatilho</b> pra escolher/colocar/conversar · <b>A</b> ou analógico (←→) gira · analógico (↑↓) muda a <b>altura</b>.<br>
+        🖥️ <b>PC:</b> mouse pra olhar, <b>W A S D</b> (Shift = correr, Espaço = pular), <b>E</b> conversa, <b>🔨</b> constrói (<b>R</b> gira, <b>roda do mouse</b> ou <b>⬆⬇</b> mudam a altura).<br>
         📱 <b>Celular:</b> <b>arraste</b> pra olhar, <b>direcional</b> anda, toque na dica pra conversar.
       </div>
       <button class="go" id="goBtn">▶ Passear sozinho</button>
@@ -449,7 +452,7 @@
     const piecePT = n => BUILD_PT[n] || n.replace(/-/g, ' ');
     const BUILD_SCALE = 2.4, BUILD_DIST = 4.5; // tamanho das peças e distância do fantasma à frente do jogador
     const placedGroup = new THREE.Group(); scene.add(placedGroup);
-    let buildPiece = null, ghost = null, ghostRY = 0;
+    let buildPiece = null, ghost = null, ghostRY = 0, buildLift = 0; // buildLift = altura extra escolhida
     const server = { user: null, csrf: null };
     const raycaster = new THREE.Raycaster();
     const rcPos = new THREE.Vector3(), rcDir = new THREE.Vector3(), rcQuat = new THREE.Quaternion();
@@ -491,7 +494,7 @@
       p.x += dx; p.z += dz;
     }
     function selectPiece(name) {
-      buildPiece = name; ghostRY = 0;
+      buildPiece = name; ghostRY = 0; buildLift = 0;
       if (ghost) { scene.remove(ghost); ghost = null; }
       addPiece(name, 0, -999, 0, 0, true).then(o => { ghost = o; });
       document.getElementById('buildMenu').classList.add('hidden');
@@ -505,14 +508,16 @@
       } else { camera.getWorldPosition(rcPos); camera.getWorldDirection(rcDir); }
       rcDir.normalize(); raycaster.set(rcPos, rcDir);
     }
+    const _aimTargets = [];
     function updateGhost() {
       if (!ghost) return;
       buildAimRay();
-      const hit = raycaster.intersectObject(ground, false)[0];
+      _aimTargets.length = 0; _aimTargets.push(ground); for (const b of buildSolids) _aimTargets.push(b); // mira no chão E em cima das construções (empilhar)
+      const hit = raycaster.intersectObjects(_aimTargets, true)[0];
       let gx, gz, gy;
       if (hit && hit.distance < 80) { gx = hit.point.x; gz = hit.point.z; gy = hit.point.y; }
       else { gx = rcPos.x + rcDir.x * BUILD_DIST; gz = rcPos.z + rcDir.z * BUILD_DIST; gy = heightAt(gx, gz); }
-      ghost.position.set(gx, gy, gz); ghost.rotation.y = ghostRY;
+      ghost.position.set(gx, gy + buildLift, gz); ghost.rotation.y = ghostRY; // + altura escolhida
     }
     function doPlace() {
       if (!ghost || !buildPiece) return;
@@ -522,9 +527,10 @@
       netSendBuild(buildPiece, x, y, z, ry); // mostra pra todo mundo na sala na hora
     }
     function cancelBuild() {
-      buildPiece = null; if (ghost) { scene.remove(ghost); ghost = null; }
+      buildPiece = null; buildLift = 0; if (ghost) { scene.remove(ghost); ghost = null; }
       document.getElementById('buildBar').classList.add('hidden');
     }
+    function liftBy(d) { if (buildPiece) buildLift = Math.max(-3, Math.min(40, buildLift + d)); }
     function saveBuilding(piece, x, y, z, ry) {
       if (!server.user) { flash('Entre na sua conta no site pra salvar as construções 🙂'); return; }
       fetch('buildings.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF': server.csrf || '' },
@@ -539,15 +545,17 @@
     }
     loadBuildings();
 
-    // ---------- menu de construção 3D (pra escolher peça dentro do VR, com o controle) ----------
-    const MENU_COLS = 4, MENU_ROWS = 8, MENU_PER = MENU_COLS * (MENU_ROWS - 1); // 1ª linha = navegação
+    // ---------- menu de construção 3D (grande, com ícones reais, pra usar no VR) ----------
+    const MENU_COLS = 3, MENU_ROWS = 5, MENU_PER = MENU_COLS * (MENU_ROWS - 1); // linha 0 = navegação, 4 linhas de itens (12/página)
+    const MENU_W = 2.8; // largura/altura do painel em metros (bem maior que antes)
     const menuPages = Math.ceil(BUILD_PIECES.length / MENU_PER);
     let menuOpen = false, menuPage = 0, menuHover = -1;
     const mCanvas = document.createElement('canvas'); mCanvas.width = 1024; mCanvas.height = 1024;
     const mCtx = mCanvas.getContext('2d');
     const mTex = new THREE.CanvasTexture(mCanvas); mTex.colorSpace = THREE.SRGBColorSpace;
-    const menuPlane = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.5), new THREE.MeshBasicMaterial({ map: mTex, transparent: true, depthTest: false }));
-    menuPlane.renderOrder = 1000; menuPlane.visible = false; scene.add(menuPlane);
+    const menuPlane = new THREE.Mesh(new THREE.PlaneGeometry(MENU_W, MENU_W), new THREE.MeshBasicMaterial({ map: mTex, transparent: true }));
+    menuPlane.visible = false; scene.add(menuPlane); // respeita profundidade pra os ícones 3D ficarem na frente
+    const menuIcons = new THREE.Group(); scene.add(menuIcons); // mini-modelos 3D (os "ícones")
     function wrapCenter(c, text, cx, cy, maxW, lh) {
       const words = text.split(' '), lines = []; let line = '';
       for (const w of words) { if (c.measureText(line + w).width > maxW && line) { lines.push(line.trim()); line = w + ' '; } else line += w + ' '; }
@@ -558,31 +566,57 @@
     function drawMenu() {
       const c = mCtx, W = 1024, cw = W / MENU_COLS, ch = W / MENU_ROWS;
       c.clearRect(0, 0, W, W);
-      c.fillStyle = 'rgba(8,22,16,0.96)'; rr(c, 4, 4, W - 8, W - 8, 28); c.fill();
-      c.strokeStyle = 'rgba(160,230,180,0.6)'; c.lineWidth = 5; c.stroke();
+      c.fillStyle = 'rgba(8,22,16,0.92)'; rr(c, 4, 4, W - 8, W - 8, 30); c.fill();
+      c.strokeStyle = 'rgba(160,230,180,0.6)'; c.lineWidth = 6; c.stroke();
       c.textAlign = 'center'; c.textBaseline = 'middle';
-      const nav = ['◀ anterior', 'próxima ▶', '✕ sair', `pág ${menuPage + 1}/${menuPages}`];
+      const nav = ['◀', '✕ Sair · pág ' + (menuPage + 1) + '/' + menuPages, '▶'];
       for (let col = 0; col < MENU_COLS; col++) {
-        if (menuHover === col) { c.fillStyle = 'rgba(120,220,150,0.35)'; c.fillRect(col * cw + 4, 4, cw - 8, ch - 8); }
-        c.fillStyle = '#bdf5c8'; c.font = 'bold 28px Arial'; c.fillText(nav[col], col * cw + cw / 2, ch / 2);
+        const x = col * cw;
+        if (menuHover === col) { c.fillStyle = 'rgba(120,220,150,0.4)'; rr(c, x + 8, 8, cw - 16, ch - 16, 14); c.fill(); }
+        c.fillStyle = '#bdf5c8'; c.font = 'bold ' + (col === 1 ? 30 : 52) + 'px Arial'; c.fillText(nav[col], x + cw / 2, ch / 2);
       }
       for (let i = 0; i < MENU_PER; i++) {
-        const pieceIdx = menuPage * MENU_PER + i; if (pieceIdx >= BUILD_PIECES.length) break;
+        const idx = menuPage * MENU_PER + i; if (idx >= BUILD_PIECES.length) break;
         const row = 1 + Math.floor(i / MENU_COLS), col = i % MENU_COLS, x = col * cw, y = row * ch, cell = row * MENU_COLS + col;
-        c.fillStyle = menuHover === cell ? 'rgba(120,220,150,0.45)' : 'rgba(255,255,255,0.06)';
-        rr(c, x + 6, y + 6, cw - 12, ch - 12, 12); c.fill();
-        c.fillStyle = '#eaffee'; c.font = '23px Arial';
-        wrapCenter(c, piecePT(BUILD_PIECES[pieceIdx]), x + cw / 2, y + ch / 2, cw - 24, 26);
+        c.fillStyle = menuHover === cell ? 'rgba(120,220,150,0.4)' : 'rgba(255,255,255,0.06)';
+        rr(c, x + 8, y + 8, cw - 16, ch - 16, 16); c.fill();
+        c.strokeStyle = 'rgba(160,230,180,0.18)'; c.lineWidth = 2; c.stroke();
+        c.fillStyle = '#eaffee'; c.font = '22px Arial'; // rótulo no rodapé da célula (o ícone 3D fica acima)
+        wrapCenter(c, piecePT(BUILD_PIECES[idx]), x + cw / 2, y + ch - 36, cw - 24, 24);
       }
       c.textAlign = 'left'; c.textBaseline = 'alphabetic'; mTex.needsUpdate = true;
+    }
+    function clearIcons() { for (let i = menuIcons.children.length - 1; i >= 0; i--) menuIcons.remove(menuIcons.children[i]); }
+    function iconWorld(row, col) { // centro (parte de cima) da célula, em coordenadas de mundo
+      const cw = 1 / MENU_COLS, ch = 1 / MENU_ROWS;
+      const ux = (col + 0.5) * cw, uy = (row + 0.4) * ch; // 0..1 no canvas (y pra baixo)
+      return menuPlane.localToWorld(new THREE.Vector3((ux - 0.5) * MENU_W, (0.5 - uy) * MENU_W, 0.12));
+    }
+    function buildIcons() {
+      clearIcons(); if (!menuOpen) return;
+      menuPlane.updateMatrixWorld(true); // garante posição correta das células antes do localToWorld
+      for (let i = 0; i < MENU_PER; i++) {
+        const idx = menuPage * MENU_PER + i; if (idx >= BUILD_PIECES.length) break;
+        const row = 1 + Math.floor(i / MENU_COLS), col = i % MENU_COLS;
+        const holder = new THREE.Group(); holder.position.copy(iconWorld(row, col)); holder.quaternion.copy(menuPlane.quaternion); holder.rotateX(-0.42);
+        menuIcons.add(holder);
+        getGLB(`build/${BUILD_PIECES[idx]}.glb`).then(g => {
+          if (!menuOpen || !holder.parent) return;
+          const o = g.scene.clone(true);
+          const bb = new THREE.Box3().setFromObject(o), sz = new THREE.Vector3(); bb.getSize(sz);
+          const mx = Math.max(sz.x, sz.y, sz.z) || 1, s = (MENU_W / MENU_COLS) * 0.40 / mx;
+          o.scale.setScalar(s); const ctr = new THREE.Vector3(); bb.getCenter(ctr); o.position.set(-ctr.x * s, -ctr.y * s, -ctr.z * s);
+          const spin = new THREE.Group(); spin.add(o); holder.add(spin);
+        }).catch(() => {});
+      }
     }
     function openMenu3D() {
       menuOpen = true; menuHover = -1;
       camera.getWorldPosition(rcPos); camera.getWorldDirection(rcDir); rcDir.y = 0; rcDir.normalize();
-      menuPlane.position.set(rcPos.x + rcDir.x * 1.9, rcPos.y, rcPos.z + rcDir.z * 1.9);
-      menuPlane.lookAt(rcPos.x, rcPos.y, rcPos.z); menuPlane.visible = true; drawMenu();
+      menuPlane.position.set(rcPos.x + rcDir.x * 2.3, rcPos.y, rcPos.z + rcDir.z * 2.3);
+      menuPlane.lookAt(rcPos.x, rcPos.y, rcPos.z); menuPlane.visible = true; drawMenu(); buildIcons();
     }
-    function closeMenu3D() { menuOpen = false; menuPlane.visible = false; }
+    function closeMenu3D() { menuOpen = false; menuPlane.visible = false; clearIcons(); }
     function toggleMenu3D() { menuOpen ? closeMenu3D() : openMenu3D(); }
     function menuPick() {
       buildAimRay();
@@ -596,13 +630,13 @@
       if (cell < 0) return;
       const col = cell % MENU_COLS, row = (cell / MENU_COLS) | 0;
       if (row === 0) {
-        if (col === 0) { menuPage = (menuPage - 1 + menuPages) % menuPages; drawMenu(); }
-        else if (col === 1) { menuPage = (menuPage + 1) % menuPages; drawMenu(); }
-        else if (col === 2) { closeMenu3D(); cancelBuild(); }
+        if (col === 0) { menuPage = (menuPage - 1 + menuPages) % menuPages; drawMenu(); buildIcons(); }
+        else if (col === 2) { menuPage = (menuPage + 1) % menuPages; drawMenu(); buildIcons(); }
+        else { closeMenu3D(); cancelBuild(); }
         return;
       }
-      const pieceIdx = menuPage * MENU_PER + (row - 1) * MENU_COLS + col;
-      if (pieceIdx < BUILD_PIECES.length) { selectPiece(BUILD_PIECES[pieceIdx]); closeMenu3D(); }
+      const idx = menuPage * MENU_PER + (row - 1) * MENU_COLS + col;
+      if (idx < BUILD_PIECES.length) { selectPiece(BUILD_PIECES[idx]); closeMenu3D(); }
     }
 
     // ---------- entrada VR ----------
@@ -638,12 +672,12 @@
     // ---------- thumbstick do VR ----------
     let turned = false;
     function readSticks() {
-      const s = { x: 0, y: 0, tx: 0, run: false, jump: false }, sess = renderer.xr.getSession(); if (!sess) return s;
+      const s = { x: 0, y: 0, tx: 0, ty: 0, run: false, jump: false }, sess = renderer.xr.getSession(); if (!sess) return s;
       for (const src of sess.inputSources) {
         const gp = src.gamepad; if (!gp) continue; const ax = gp.axes, bt = gp.buttons;
         const sx = ax[2] !== undefined ? ax[2] : (ax[0] || 0), sy = ax[3] !== undefined ? ax[3] : (ax[1] || 0);
         if (src.handedness === 'right') {
-          s.tx = sx;
+          s.tx = sx; s.ty = sy;
           if (bt[0] && bt[0].pressed) s.interact = true; // gatilho direito = conversar / colocar / escolher
           if (bt[4] && bt[4].pressed) s.rot = true;      // botão A (direito) = girar a peça
         } else {
@@ -688,6 +722,8 @@
         interactWas = !!s.interact;
         // botão A (dir) gira a peça
         if (s.rot && !rotWas && buildPiece) ghostRY += Math.PI / 4; rotWas = !!s.rot;
+        // analógico direito (eixo Y) sobe/desce a peça enquanto constrói
+        if (buildPiece && !menuOpen && Math.abs(s.ty) > 0.2) liftBy(-s.ty * 2.5 * dt);
         if (!menuOpen && Math.abs(s.tx) > 0.7 && !turned) {
           if (buildPiece) ghostRY -= Math.sign(s.tx) * Math.PI / 4; // construindo: analógico gira a peça
           else dolly.rotation.y -= Math.sign(s.tx) * Math.PI / 6;   // senão: gira o jogador
@@ -758,8 +794,11 @@
       }
       // construção: fantasma segue a frente do jogador
       if (ghost && !menuOpen) updateGhost();
-      // menu de construção 3D: atualiza o destaque conforme o controle mira
-      if (menuOpen) { const hcell = menuPick(); if (hcell !== menuHover) { menuHover = hcell; drawMenu(); } }
+      // menu de construção 3D: destaque conforme a mira + gira os ícones
+      if (menuOpen) {
+        const hcell = menuPick(); if (hcell !== menuHover) { menuHover = hcell; drawMenu(); }
+        for (const h of menuIcons.children) { const s = h.children[0]; if (s) s.rotation.y += dt * 0.9; }
+      }
       // dica de "conversar" quando perto de um NPC
       const near = activeNPC ? null : nearestNPC();
       talkHint.style.display = near ? 'block' : 'none';
@@ -818,6 +857,9 @@
     document.getElementById('bRot').addEventListener('click', () => { ghostRY += Math.PI / 4; });
     document.getElementById('bPlace').addEventListener('click', doPlace);
     document.getElementById('bCancel').addEventListener('click', cancelBuild);
+    document.getElementById('bUp').addEventListener('click', () => liftBy(0.6));
+    document.getElementById('bDown').addEventListener('click', () => liftBy(-0.6));
+    addEventListener('wheel', e => { if (buildPiece) liftBy(-Math.sign(e.deltaY) * 0.3); }, { passive: true });
 
     // ---------- multiplayer (P2P via PeerJS, estrela host-autoritativa, até 5) ----------
     const ROOM_PREFIX = 'jubis-bosque-';

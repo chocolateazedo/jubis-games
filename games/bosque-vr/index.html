@@ -88,9 +88,10 @@
       <h1>🌲 Bosque VR</h1>
       <p>Um lugar tranquilo pra <b>passear</b>: floresta, lago e sol. Coloque o óculos <b>Meta</b> e entre no VR, ou explore aqui mesmo.</p>
       <div class="keys">
-        🥽 <b>VR (óculos Meta):</b> aperte <b>ENTRAR NO VR</b> e ande com a <b>alavanca</b> do controle.<br>
-        🖥️ <b>PC:</b> clique pra travar o mouse, olhe com o <b>mouse</b> e ande com <b>W A S D</b> (Shift = correr).<br>
-        📱 <b>Celular:</b> <b>arraste</b> pra olhar e use o <b>direcional</b> pra andar.
+        🥽 <b>VR (óculos Meta):</b> ande com a <b>alavanca</b>; <b>gatilho esquerdo</b> = correr, <b>lateral/grip</b> = pular.<br>
+        &nbsp;&nbsp;&nbsp;🔨 <b>Y</b> abre o menu de construção · aponte e use o <b>gatilho</b> pra escolher, colocar e conversar · <b>A</b> gira a peça.<br>
+        🖥️ <b>PC:</b> mouse pra olhar, <b>W A S D</b> (Shift = correr, Espaço = pular), <b>E</b> conversa, <b>🔨</b> constrói (<b>R</b> gira).<br>
+        📱 <b>Celular:</b> <b>arraste</b> pra olhar, <b>direcional</b> anda, toque na dica pra conversar.
       </div>
       <button class="go" id="goBtn">▶ Começar a passear</button>
     </div>
@@ -146,11 +147,14 @@
     scene.add(dolly);
 
     // controles VR (ficam dentro do dolly pra se moverem junto)
+    let rightCtrl = null, leftCtrl = null;
     for (let i = 0; i < 2; i++) {
       const c = renderer.xr.getController(i);
       const ray = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1)]),
         new THREE.LineBasicMaterial({ color: 0x9be8a8 }));
       ray.scale.z = 5; c.add(ray); dolly.add(c);
+      c.addEventListener('connected', e => { if (e.data && e.data.handedness === 'right') rightCtrl = c; else leftCtrl = c; });
+      c.addEventListener('disconnected', () => { if (rightCtrl === c) rightCtrl = null; if (leftCtrl === c) leftCtrl = null; });
     }
 
     // ---------- luz / céu / sol ----------
@@ -410,6 +414,8 @@
     const placedGroup = new THREE.Group(); scene.add(placedGroup);
     let buildPiece = null, ghost = null, ghostRY = 0;
     const server = { user: null, csrf: null };
+    const raycaster = new THREE.Raycaster();
+    const rcPos = new THREE.Vector3(), rcDir = new THREE.Vector3(), rcQuat = new THREE.Quaternion();
 
     function addPiece(name, x, y, z, ry, asGhost) {
       return getGLB(`build/${name}.glb`).then(gltf => {
@@ -427,11 +433,22 @@
       document.getElementById('buildMenu').classList.add('hidden');
       document.getElementById('buildBar').classList.remove('hidden');
     }
+    // raio de mira: no VR sai do controle direito; no PC/celular sai do centro da tela
+    function buildAimRay() {
+      if (renderer.xr.isPresenting && rightCtrl) {
+        rightCtrl.getWorldPosition(rcPos); rightCtrl.getWorldQuaternion(rcQuat);
+        rcDir.set(0, 0, -1).applyQuaternion(rcQuat);
+      } else { camera.getWorldPosition(rcPos); camera.getWorldDirection(rcDir); }
+      rcDir.normalize(); raycaster.set(rcPos, rcDir);
+    }
     function updateGhost() {
       if (!ghost) return;
-      camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize();
-      const gx = dolly.position.x + fwd.x * BUILD_DIST, gz = dolly.position.z + fwd.z * BUILD_DIST;
-      ghost.position.set(gx, heightAt(gx, gz), gz); ghost.rotation.y = ghostRY;
+      buildAimRay();
+      const hit = raycaster.intersectObject(ground, false)[0];
+      let gx, gz, gy;
+      if (hit && hit.distance < 80) { gx = hit.point.x; gz = hit.point.z; gy = hit.point.y; }
+      else { gx = rcPos.x + rcDir.x * BUILD_DIST; gz = rcPos.z + rcDir.z * BUILD_DIST; gy = heightAt(gx, gz); }
+      ghost.position.set(gx, gy, gz); ghost.rotation.y = ghostRY;
     }
     function doPlace() {
       if (!ghost || !buildPiece) return;
@@ -456,6 +473,72 @@
       }).catch(() => {});
     }
     loadBuildings();
+
+    // ---------- menu de construção 3D (pra escolher peça dentro do VR, com o controle) ----------
+    const MENU_COLS = 4, MENU_ROWS = 8, MENU_PER = MENU_COLS * (MENU_ROWS - 1); // 1ª linha = navegação
+    const menuPages = Math.ceil(BUILD_PIECES.length / MENU_PER);
+    let menuOpen = false, menuPage = 0, menuHover = -1;
+    const mCanvas = document.createElement('canvas'); mCanvas.width = 1024; mCanvas.height = 1024;
+    const mCtx = mCanvas.getContext('2d');
+    const mTex = new THREE.CanvasTexture(mCanvas); mTex.colorSpace = THREE.SRGBColorSpace;
+    const menuPlane = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.5), new THREE.MeshBasicMaterial({ map: mTex, transparent: true, depthTest: false }));
+    menuPlane.renderOrder = 1000; menuPlane.visible = false; scene.add(menuPlane);
+    function wrapCenter(c, text, cx, cy, maxW, lh) {
+      const words = text.split(' '), lines = []; let line = '';
+      for (const w of words) { if (c.measureText(line + w).width > maxW && line) { lines.push(line.trim()); line = w + ' '; } else line += w + ' '; }
+      lines.push(line.trim());
+      const y0 = cy - (lines.length - 1) * lh / 2;
+      for (let i = 0; i < lines.length; i++) c.fillText(lines[i], cx, y0 + i * lh);
+    }
+    function drawMenu() {
+      const c = mCtx, W = 1024, cw = W / MENU_COLS, ch = W / MENU_ROWS;
+      c.clearRect(0, 0, W, W);
+      c.fillStyle = 'rgba(8,22,16,0.96)'; rr(c, 4, 4, W - 8, W - 8, 28); c.fill();
+      c.strokeStyle = 'rgba(160,230,180,0.6)'; c.lineWidth = 5; c.stroke();
+      c.textAlign = 'center'; c.textBaseline = 'middle';
+      const nav = ['◀ anterior', 'próxima ▶', '✕ sair', `pág ${menuPage + 1}/${menuPages}`];
+      for (let col = 0; col < MENU_COLS; col++) {
+        if (menuHover === col) { c.fillStyle = 'rgba(120,220,150,0.35)'; c.fillRect(col * cw + 4, 4, cw - 8, ch - 8); }
+        c.fillStyle = '#bdf5c8'; c.font = 'bold 28px Arial'; c.fillText(nav[col], col * cw + cw / 2, ch / 2);
+      }
+      for (let i = 0; i < MENU_PER; i++) {
+        const pieceIdx = menuPage * MENU_PER + i; if (pieceIdx >= BUILD_PIECES.length) break;
+        const row = 1 + Math.floor(i / MENU_COLS), col = i % MENU_COLS, x = col * cw, y = row * ch, cell = row * MENU_COLS + col;
+        c.fillStyle = menuHover === cell ? 'rgba(120,220,150,0.45)' : 'rgba(255,255,255,0.06)';
+        rr(c, x + 6, y + 6, cw - 12, ch - 12, 12); c.fill();
+        c.fillStyle = '#eaffee'; c.font = '23px Arial';
+        wrapCenter(c, BUILD_PIECES[pieceIdx].replace(/-/g, ' '), x + cw / 2, y + ch / 2, cw - 24, 26);
+      }
+      c.textAlign = 'left'; c.textBaseline = 'alphabetic'; mTex.needsUpdate = true;
+    }
+    function openMenu3D() {
+      menuOpen = true; menuHover = -1;
+      camera.getWorldPosition(rcPos); camera.getWorldDirection(rcDir); rcDir.y = 0; rcDir.normalize();
+      menuPlane.position.set(rcPos.x + rcDir.x * 1.9, rcPos.y, rcPos.z + rcDir.z * 1.9);
+      menuPlane.lookAt(rcPos.x, rcPos.y, rcPos.z); menuPlane.visible = true; drawMenu();
+    }
+    function closeMenu3D() { menuOpen = false; menuPlane.visible = false; }
+    function toggleMenu3D() { menuOpen ? closeMenu3D() : openMenu3D(); }
+    function menuPick() {
+      buildAimRay();
+      const hit = raycaster.intersectObject(menuPlane, false)[0];
+      if (!hit || !hit.uv) return -1;
+      const col = Math.min(MENU_COLS - 1, Math.max(0, Math.floor(hit.uv.x * MENU_COLS)));
+      const row = Math.min(MENU_ROWS - 1, Math.max(0, Math.floor((1 - hit.uv.y) * MENU_ROWS)));
+      return row * MENU_COLS + col;
+    }
+    function menuSelect(cell) {
+      if (cell < 0) return;
+      const col = cell % MENU_COLS, row = (cell / MENU_COLS) | 0;
+      if (row === 0) {
+        if (col === 0) { menuPage = (menuPage - 1 + menuPages) % menuPages; drawMenu(); }
+        else if (col === 1) { menuPage = (menuPage + 1) % menuPages; drawMenu(); }
+        else if (col === 2) { closeMenu3D(); cancelBuild(); }
+        return;
+      }
+      const pieceIdx = menuPage * MENU_PER + (row - 1) * MENU_COLS + col;
+      if (pieceIdx < BUILD_PIECES.length) { selectPiece(BUILD_PIECES[pieceIdx]); closeMenu3D(); }
+    }
 
     // ---------- entrada VR ----------
     renderer.xr.setReferenceSpaceType('local-floor');
@@ -494,11 +577,15 @@
       for (const src of sess.inputSources) {
         const gp = src.gamepad; if (!gp) continue; const ax = gp.axes, bt = gp.buttons;
         const sx = ax[2] !== undefined ? ax[2] : (ax[0] || 0), sy = ax[3] !== undefined ? ax[3] : (ax[1] || 0);
-        if (src.handedness === 'right') { s.tx = sx; if (bt[0] && bt[0].pressed) s.interact = true; } // gatilho direito = conversar
-        else {
+        if (src.handedness === 'right') {
+          s.tx = sx;
+          if (bt[0] && bt[0].pressed) s.interact = true; // gatilho direito = conversar / colocar / escolher
+          if (bt[4] && bt[4].pressed) s.rot = true;      // botão A (direito) = girar a peça
+        } else {
           s.x = sx; s.y = sy;
-          if (bt[4] && bt[4].pressed) s.run = true;  // botão X (controle esquerdo) = correr
+          if (bt[0] && bt[0].pressed) s.run = true;  // gatilho (controle esquerdo) = correr
           if (bt[1] && bt[1].pressed) s.jump = true; // botão lateral/grip (controle esquerdo) = pular
+          if (bt[5] && bt[5].pressed) s.menu = true; // botão Y (controle esquerdo) = menu de construção
         }
       }
       return s;
@@ -507,9 +594,12 @@
     // ---------- interação (conversar com NPC) e avisos ----------
     const talkHint = document.getElementById('talkHint');
     function interact() { if (activeNPC) advanceTalk(); else { const n = nearestNPC(); if (n) startTalk(n); } }
-    addEventListener('keydown', e => { if (e.code === 'KeyE' && !e.repeat) interact(); });
+    addEventListener('keydown', e => {
+      if (e.code === 'KeyE' && !e.repeat) interact();
+      if (e.code === 'KeyR' && !e.repeat && buildPiece) ghostRY += Math.PI / 4;
+    });
     talkHint.addEventListener('click', interact);
-    let interactWas = false;
+    let interactWas = false, rotWas = false, menuWas = false;
     let toastT = 0;
     function flash(msg) { const el = document.getElementById('toast'); el.textContent = msg; el.style.opacity = '1'; clearTimeout(toastT); toastT = setTimeout(() => el.style.opacity = '0', 2800); }
 
@@ -526,8 +616,14 @@
         const s = readSticks(); const dz = v => Math.abs(v) < 0.15 ? 0 : v;
         mx = dz(s.x); mz = dz(s.y);
         run = run || s.run; wantJump = wantJump || s.jump;
-        if (s.interact && !interactWas) interact(); interactWas = !!s.interact;
-        if (Math.abs(s.tx) > 0.7 && !turned) { dolly.rotation.y -= Math.sign(s.tx) * Math.PI / 6; turned = true; }
+        // botão Y (esq) abre/fecha o menu de construção
+        if (s.menu && !menuWas) toggleMenu3D(); menuWas = !!s.menu;
+        // gatilho direito: no menu = escolher; construindo = colocar; senão = conversar
+        if (s.interact && !interactWas) { if (menuOpen) menuSelect(menuHover); else if (buildPiece) doPlace(); else interact(); }
+        interactWas = !!s.interact;
+        // botão A (dir) gira a peça
+        if (s.rot && !rotWas && buildPiece) ghostRY += Math.PI / 4; rotWas = !!s.rot;
+        if (!menuOpen && Math.abs(s.tx) > 0.7 && !turned) { dolly.rotation.y -= Math.sign(s.tx) * Math.PI / 6; turned = true; }
         if (Math.abs(s.tx) < 0.3) turned = false;
       } else {
         dolly.rotation.y = yaw; camera.rotation.x = pitch;
@@ -591,7 +687,9 @@
         dlgPlane.position.set(npcTmp.x, npcTmp.y + 2.2, npcTmp.z); dlgPlane.lookAt(camTmp);
       }
       // construção: fantasma segue a frente do jogador
-      if (ghost) updateGhost();
+      if (ghost && !menuOpen) updateGhost();
+      // menu de construção 3D: atualiza o destaque conforme o controle mira
+      if (menuOpen) { const hcell = menuPick(); if (hcell !== menuHover) { menuHover = hcell; drawMenu(); } }
       // dica de "conversar" quando perto de um NPC
       const near = activeNPC ? null : nearestNPC();
       talkHint.style.display = near ? 'block' : 'none';

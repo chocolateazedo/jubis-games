@@ -1,0 +1,8 @@
+{
+  "title": "Batata Quente",
+  "description": "Passe a batata quente antes que ela exploda! Online, de 2 a 10 jogadores. 🥔🔥",
+  "emoji": "🥔",
+  "tags": ["3d", "multiplayer", "online", "festa"],
+  "entry": "index.html",
+  "order": 2
+}

@@ -106,18 +106,24 @@ function jubis_signup(string $username, string $password, string $email = ''): a
             ':e'  => $email,
         ]);
         return ['ok' => true];
-    } catch (PDOException $e) {
-        if ($e->getCode() === '23505') { // unique_violation
+    } catch (Throwable $e) {
+        if ($e instanceof PDOException && $e->getCode() === '23505') { // unique_violation
             return ['error' => 'Esse nome de usuário já existe. Escolha outro.'];
         }
-        return ['error' => 'Não foi possível criar a conta agora. Tente novamente.'];
+        // banco fora/não configurado etc. — não estoura 500, mostra mensagem amigável
+        return ['error' => 'O sistema de contas está indisponível agora. Tente novamente em breve.'];
     }
 }
 
 /** Confere usuário+senha e inicia a sessão. Retorna ['ok'=>true] ou ['error'=>'...']. */
 function jubis_login(string $username, string $password): array
 {
-    $user = jubis_load_user($username);
+    try {
+        $user = jubis_load_user($username);
+    } catch (Throwable $e) {
+        // banco fora/não configurado — mensagem amigável em vez de 500
+        return ['error' => 'O sistema de contas está indisponível agora. Tente novamente em breve.'];
+    }
     $hash = $user['pass_hash'] ?? '$2y$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidin';
     if (!$user || !password_verify($password, $hash)) {
         usleep(250000); // pequeno atraso contra força bruta

@@ -31,7 +31,13 @@ if (!empty($_GET['diag'])) {
     echo "  1) URL do banco definida ........ " . ($url !== '' ? 'SIM' : 'NÃO') . "\n";
     echo "  2) Driver pdo_pgsql instalado ... " . ($driver ? 'SIM' : 'NÃO') . "\n";
     echo "  3) Conecta no banco ............. " . ($connOk ? 'SIM' : 'NÃO') . "\n";
-    echo "  4) Tabelas (jubis.users) existem  " . ($tablesOk ? 'SIM' : 'NÃO') . "\n\n";
+    echo "  4) Tabelas (jubis.users) existem  " . ($tablesOk ? 'SIM' : 'NÃO') . "\n";
+    echo "  --- capacidades PostgreSQL do servidor ---\n";
+    echo "  ext pdo_pgsql .... " . (extension_loaded('pdo_pgsql') ? 'SIM' : 'NÃO') . "\n";
+    echo "  ext pgsql (pg_*) . " . (extension_loaded('pgsql') ? 'SIM' : 'NÃO') . "\n";
+    echo "  pg_connect() ..... " . (function_exists('pg_connect') ? 'SIM' : 'NÃO') . "\n";
+    echo "  PDO drivers ...... " . implode(',', PDO::getAvailableDrivers()) . "\n";
+    echo "  PHP .............. " . PHP_VERSION . "\n\n";
     if (!$url)            echo "AÇÃO: definir JUBIS_DATABASE_URL (ou includes/db_config.local.php).\n";
     elseif (!$driver)    echo "AÇÃO: habilitar a extensão PHP pdo_pgsql no servidor.\n";
     elseif (!$connOk)    echo "AÇÃO: conexão falhou — confira host/porta/usuário/senha da URL.\n";

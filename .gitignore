@@ -7,3 +7,7 @@ includes/db_config.php
 
 # Dados de runtime da área logada (se algum dia usar arquivos)
 data/users/
+
+# Presença ("quantos estão jogando") — gerado em runtime
+data/presence.json
+data/.htaccess

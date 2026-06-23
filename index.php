@@ -15,6 +15,10 @@ try {
     if ($me) { $u = jubis_load_user($me); $myCoins = $u ? jubis_coins($u) : 0; }
 } catch (Throwable $e) { $me = null; }
 
+// quantos estão jogando cada jogo agora (degrada com elegância se falhar)
+$counts = [];
+try { require_once __DIR__ . '/includes/presence.php'; $counts = jubis_presence_counts(); } catch (Throwable $e) { $counts = []; }
+
 function e(string $s): string {
     return htmlspecialchars($s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
@@ -143,6 +147,9 @@ function e(string $s): string {
               </div>
               <div class="game-card__body">
                 <h3 class="game-card__title"><?= e($game['title']) ?></h3>
+                <?php if (!empty($counts[$game['slug']])): ?>
+                  <p class="game-card__live" style="margin:5px 0 0;font-size:.78rem;font-weight:800;color:#6bffa8;text-shadow:0 0 8px rgba(107,255,168,.5)">🟢 <?= (int)$counts[$game['slug']] ?> jogando agora</p>
+                <?php endif; ?>
                 <?php if (!empty($game['tags'])): ?>
                   <ul class="game-card__tags">
                     <?php foreach ($game['tags'] as $tag): ?>

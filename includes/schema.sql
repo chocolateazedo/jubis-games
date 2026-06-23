@@ -1,43 +1,27 @@
--- Jubis Games — schema da área logada (PostgreSQL).
--- Fica num schema próprio "jubis", isolado do projeto Top Terapia (schema public).
--- Idempotente: pode rodar várias vezes sem problema.
+-- Jubis Games — tabelas da área logada (MySQL).
+-- Convivem no MESMO banco do Top Terapia, mas usam prefixo jubis_ pra não colidir
+-- com as tabelas dele. Idempotente (create table if not exists).
 
-create schema if not exists jubis;
-
--- Usuários (self signup)
-create table if not exists jubis.users (
-  id          bigserial primary key,
-  username    text        not null,                 -- nome de exibição (como digitado)
-  username_lc text        not null unique,          -- lower(username): unicidade case-insensitive
-  pass_hash   text        not null,                 -- password_hash (bcrypt)
-  email       text        not null default '',
-  jubis_coins integer     not null default 0 check (jubis_coins >= 0),
-  created_at  timestamptz not null default now(),
-  last_login  timestamptz
-);
+create table if not exists jubis_users (
+  id          bigint unsigned not null auto_increment primary key,
+  username    varchar(32)  not null,                 -- nome como digitado (exibição)
+  username_lc varchar(32)  not null,                 -- lower(username): unicidade case-insensitive
+  pass_hash   varchar(255) not null,                 -- password_hash (bcrypt)
+  email       varchar(255) not null default '',      -- opcional
+  jubis_coins int          not null default 0,       -- saldo (nunca negativo; garantido no código)
+  created_at  datetime     not null default current_timestamp,
+  last_login  datetime     null,
+  unique key uq_jubis_users_lc (username_lc)
+) engine=InnoDB default charset=utf8mb4;
 
 -- Extrato da moeda Jubis Coin (cada crédito/débito vira uma linha)
-create table if not exists jubis.coin_ledger (
-  id            bigserial   primary key,
-  user_id       bigint      not null references jubis.users(id) on delete cascade,
-  delta         integer     not null,               -- + ganhou / - gastou
-  reason        text        not null default '',
-  balance_after integer     not null,
-  created_at    timestamptz not null default now()
-);
-
-create index if not exists idx_coin_ledger_user on jubis.coin_ledger (user_id, created_at desc);
-
--- Construções colocadas no Bosque VR (mundo compartilhado).
--- Também é criada sob demanda por games/bosque-vr/buildings.php (idempotente).
-create table if not exists jubis.buildings (
-  id         bigserial   primary key,
-  user_id    bigint      references jubis.users(id) on delete set null,
-  username   text        not null default '',
-  piece      text        not null,                 -- nome da peça do Kenney Building Kit
-  x          real        not null,
-  y          real        not null,
-  z          real        not null,
-  ry         real        not null default 0,       -- rotação no eixo Y (radianos)
-  created_at timestamptz not null default now()
-);
+create table if not exists jubis_coin_ledger (
+  id            bigint unsigned not null auto_increment primary key,
+  user_id       bigint unsigned not null,
+  delta         int          not null,               -- + ganhou / - gastou
+  reason        varchar(255) not null default '',
+  balance_after int          not null,
+  created_at    datetime     not null default current_timestamp,
+  key idx_jubis_ledger_user (user_id, created_at),
+  constraint fk_jubis_ledger_user foreign key (user_id) references jubis_users(id) on delete cascade
+) engine=InnoDB default charset=utf8mb4;

@@ -20,26 +20,23 @@ header('Cache-Control: no-store');
 if (!empty($_GET['diag'])) {
     $url = '';
     try { $url = jubis_database_url(); } catch (Throwable $e) {}
-    $driver = in_array('pgsql', PDO::getAvailableDrivers(), true);
+    $driver = in_array('mysql', PDO::getAvailableDrivers(), true);
     $connOk = false; $tablesOk = false;
     try {
         $pdo = jubis_db(); $connOk = true;
-        try { $pdo->query('select 1 from jubis.users limit 1'); $tablesOk = true; } catch (Throwable $e) { $tablesOk = false; }
+        try { $pdo->query('select 1 from jubis_users limit 1'); $tablesOk = true; } catch (Throwable $e) { $tablesOk = false; }
     } catch (Throwable $e) { $connOk = false; }
 
-    echo "Diagnóstico do banco (Jubis):\n";
+    echo "Diagnóstico do banco (Jubis — MySQL):\n";
     echo "  1) URL do banco definida ........ " . ($url !== '' ? 'SIM' : 'NÃO') . "\n";
-    echo "  2) Driver pdo_pgsql instalado ... " . ($driver ? 'SIM' : 'NÃO') . "\n";
+    echo "  2) Driver pdo_mysql instalado ... " . ($driver ? 'SIM' : 'NÃO') . "\n";
     echo "  3) Conecta no banco ............. " . ($connOk ? 'SIM' : 'NÃO') . "\n";
-    echo "  4) Tabelas (jubis.users) existem  " . ($tablesOk ? 'SIM' : 'NÃO') . "\n";
-    echo "  --- capacidades PostgreSQL do servidor ---\n";
-    echo "  ext pdo_pgsql .... " . (extension_loaded('pdo_pgsql') ? 'SIM' : 'NÃO') . "\n";
-    echo "  ext pgsql (pg_*) . " . (extension_loaded('pgsql') ? 'SIM' : 'NÃO') . "\n";
-    echo "  pg_connect() ..... " . (function_exists('pg_connect') ? 'SIM' : 'NÃO') . "\n";
+    echo "  4) Tabela jubis_users existe .... " . ($tablesOk ? 'SIM' : 'NÃO') . "\n";
+    echo "  --- info do servidor ---\n";
     echo "  PDO drivers ...... " . implode(',', PDO::getAvailableDrivers()) . "\n";
     echo "  PHP .............. " . PHP_VERSION . "\n\n";
-    if (!$url)            echo "AÇÃO: definir JUBIS_DATABASE_URL (ou includes/db_config.local.php).\n";
-    elseif (!$driver)    echo "AÇÃO: habilitar a extensão PHP pdo_pgsql no servidor.\n";
+    if (!$url)            echo "AÇÃO: definir JUBIS_DATABASE_URL (mysql://...) ou includes/db_config.local.php.\n";
+    elseif (!$driver)    echo "AÇÃO: habilitar a extensão PHP pdo_mysql no servidor.\n";
     elseif (!$connOk)    echo "AÇÃO: conexão falhou — confira host/porta/usuário/senha da URL.\n";
     elseif (!$tablesOk)  echo "AÇÃO: rode a migração: /setup.php?key=SUA_CHAVE (com JUBIS_SETUP_KEY) OU aplique includes/schema.sql.\n";
     else                 echo "TUDO OK ✅ — o login deve funcionar.\n";

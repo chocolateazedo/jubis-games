@@ -5,5 +5,6 @@
 // Em produção, o ideal é definir a variável de ambiente JUBIS_DATABASE_URL
 // no servidor, em vez de subir esse arquivo.
 //
-// Formato: postgresql://usuario:senha@host:porta/banco
-return 'postgresql://USUARIO:SENHA@HOST:PORTA/NOME_DO_BANCO';
+// Formato (MySQL — mesmo banco do Top Terapia): mysql://usuario:senha@host:porta/banco
+// Ex.: mysql://top:SENHA@localhost:3306/top
+return 'mysql://USUARIO:SENHA@HOST:PORTA/NOME_DO_BANCO';

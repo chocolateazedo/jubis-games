@@ -65,7 +65,7 @@ function jubis_load_user(string $username): ?array
 {
     $st = jubis_db()->prepare(
         'select id, username, pass_hash, email, jubis_coins, created_at, last_login
-         from jubis.users where username_lc = :lc'
+         from jubis_users where username_lc = :lc'
     );
     $st->execute([':lc' => strtolower(trim($username))]);
     $row = $st->fetch();
@@ -96,7 +96,7 @@ function jubis_signup(string $username, string $password, string $email = ''): a
 
     try {
         $st = jubis_db()->prepare(
-            'insert into jubis.users (username, username_lc, pass_hash, email)
+            'insert into jubis_users (username, username_lc, pass_hash, email)
              values (:u, :lc, :h, :e)'
         );
         $st->execute([
@@ -107,7 +107,7 @@ function jubis_signup(string $username, string $password, string $email = ''): a
         ]);
         return ['ok' => true];
     } catch (Throwable $e) {
-        if ($e instanceof PDOException && $e->getCode() === '23505') { // unique_violation
+        if ($e instanceof PDOException && $e->getCode() === '23000') { // duplicate key (MySQL)
             return ['error' => 'Esse nome de usuário já existe. Escolha outro.'];
         }
         // banco fora/não configurado etc. — não estoura 500, mostra mensagem amigável
@@ -135,7 +135,7 @@ function jubis_login(string $username, string $password): array
     $_SESSION['user'] = $user['username'];
 
     try {
-        $st = jubis_db()->prepare('update jubis.users set last_login = now() where id = :id');
+        $st = jubis_db()->prepare('update jubis_users set last_login = now() where id = :id');
         $st->execute([':id' => $user['id']]);
     } catch (Throwable $e) { /* não bloqueia o login */ }
 
@@ -196,24 +196,23 @@ function jubis_add_coins(string $username, int $delta, string $reason = ''): ?ar
     $pdo = jubis_db();
     $pdo->beginTransaction();
     try {
-        $st = $pdo->prepare(
-            'update jubis.users set jubis_coins = greatest(0, jubis_coins + :d)
-             where username_lc = :lc returning id, jubis_coins'
-        );
-        $st->execute([':d' => $delta, ':lc' => strtolower(trim($username))]);
+        $lc = strtolower(trim($username));
+        // trava a linha do usuário (evita corrida em créditos/débitos simultâneos)
+        $st = $pdo->prepare('select id, jubis_coins from jubis_users where username_lc = :lc for update');
+        $st->execute([':lc' => $lc]);
         $row = $st->fetch();
         if (!$row) { $pdo->rollBack(); return null; }
+        $uid    = (int) $row['id'];
+        $newBal = max(0, (int) $row['jubis_coins'] + $delta);   // nunca negativo
+
+        $pdo->prepare('update jubis_users set jubis_coins = :c where id = :id')
+            ->execute([':c' => $newBal, ':id' => $uid]);
 
         if ($delta !== 0) {
             $pdo->prepare(
-                'insert into jubis.coin_ledger (user_id, delta, reason, balance_after)
+                'insert into jubis_coin_ledger (user_id, delta, reason, balance_after)
                  values (:uid, :d, :r, :bal)'
-            )->execute([
-                ':uid' => (int) $row['id'],
-                ':d'   => $delta,
-                ':r'   => $reason,
-                ':bal' => (int) $row['jubis_coins'],
-            ]);
+            )->execute([':uid' => $uid, ':d' => $delta, ':r' => $reason, ':bal' => $newBal]);
         }
         $pdo->commit();
     } catch (Throwable $e) {

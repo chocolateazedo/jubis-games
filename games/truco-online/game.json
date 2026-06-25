@@ -1,0 +1,8 @@
+{
+  "title": "Truco Online",
+  "description": "Truco 1 contra 1 online (ou contra o robô)! Manilha pela vira, truco, retruco e até 12. 🃏",
+  "emoji": "🃏",
+  "tags": ["cartas", "multiplayer", "online", "truco"],
+  "entry": "index.html",
+  "order": 3
+}

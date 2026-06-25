@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+<meta name="theme-color" content="#0b3d1e" />
+<title>Truco Online — Jubis Games</title>
+<style>
+:root { color-scheme: dark; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; width: 100%; min-height: 100dvh; overflow-x: hidden;
+  background: radial-gradient(circle at 50% 0%, #15643a 0%, #0b3d1e 45%, #05230f 100%);
+  font-family: 'Trebuchet MS', Arial, system-ui, sans-serif; color: #eafff0; touch-action: manipulation; }
+a.back { position: fixed; left: 10px; top: max(10px, env(safe-area-inset-top)); z-index: 60;
+  color: #ffe27a; text-decoration: none; font-weight: 800; background: rgba(0,0,0,.45);
+  padding: 6px 11px; border-radius: 10px; border: 1px solid rgba(255,226,122,.4); }
+
+/* telas */
+.screen { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.screen.hidden { display: none; }
+.card-ui { width: min(94vw, 440px); text-align: center;
+  background: linear-gradient(160deg, rgba(12,70,38,.95), rgba(6,40,20,.96));
+  border: 2px solid rgba(255,226,122,.45); border-radius: 22px; padding: 22px 18px; box-shadow: 0 18px 50px rgba(0,0,0,.55); }
+.card-ui h1 { margin: 0 0 6px; font-size: clamp(26px, 7vw, 42px); color: #ffe27a; text-shadow: 0 0 12px rgba(255,200,80,.5); }
+.card-ui p { margin: 8px 0; opacity: .92; font-size: 15px; }
+input[type=text] { width: 100%; padding: 12px; border: 2px solid rgba(255,255,255,.22); border-radius: 12px;
+  background: rgba(0,0,0,.3); color: #fff; font-size: 16px; font-weight: 700; text-align: center; text-transform: uppercase; letter-spacing: 3px; outline: none; }
+.btn { margin-top: 10px; width: 100%; padding: 13px; border: 0; border-radius: 14px; font-size: 17px; font-weight: 900; cursor: pointer;
+  background: linear-gradient(135deg, #ffe27a, #ff9c2a); color: #2a1500; box-shadow: 0 8px 22px rgba(255,140,0,.3); }
+.btn.alt { background: linear-gradient(135deg, #7ee0a0, #2a9d5a); color: #04220f; }
+.btn.blue { background: linear-gradient(135deg, #79c0ff, #2a7bd2); color: #04223a; }
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.row { display: flex; gap: 8px; } .row input { flex: 1; } .row .btn { width: auto; margin-top: 0; padding: 12px 16px; }
+.err { color: #ff9b9b; min-height: 18px; font-size: 14px; margin-top: 6px; }
+code { background: rgba(255,255,255,.16); padding: 4px 12px; border-radius: 8px; font-size: 26px; font-weight: 900; letter-spacing: 5px; color: #ffe27a; }
+
+/* mesa */
+#table { display: none; flex-direction: column; min-height: 100dvh; padding: calc(48px + env(safe-area-inset-top)) 10px calc(12px + env(safe-area-inset-bottom)); gap: 8px; }
+#table.show { display: flex; }
+.scorebar { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 800; }
+.scorebar .s { background: rgba(0,0,0,.4); border: 1px solid rgba(255,226,122,.4); border-radius: 999px; padding: 6px 14px; }
+.scorebar .s b { color: #ffe27a; font-size: 1.1rem; }
+.center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; min-height: 0; }
+.opp { text-align: center; opacity: .9; font-weight: 700; }
+.oppcards { display: flex; gap: 6px; justify-content: center; margin-top: 4px; }
+.felt { display: flex; gap: 14px; align-items: center; justify-content: center; flex-wrap: wrap; padding: 10px 0; }
+.vira-wrap { text-align: center; font-size: .8rem; opacity: .85; }
+.played { min-width: 64px; min-height: 92px; display: flex; align-items: center; justify-content: center; }
+.played .ph { width: 64px; height: 92px; border: 2px dashed rgba(255,255,255,.2); border-radius: 10px; }
+.bigmsg { min-height: 26px; font-weight: 900; font-size: 20px; text-align: center; color: #ffe27a; text-shadow: 0 2px 8px rgba(0,0,0,.6); }
+.rounds { display: flex; gap: 6px; justify-content: center; }
+.dot { width: 12px; height: 12px; border-radius: 50%; background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.3); }
+.dot.me { background: #7ee0a0; } .dot.opp { background: #ff9b9b; } .dot.tie { background: #ffe27a; }
+
+.hand { display: flex; gap: 10px; justify-content: center; align-items: flex-end; min-height: 100px; }
+.card { width: 66px; height: 94px; border-radius: 10px; background: #fff; color: #111; position: relative;
+  box-shadow: 0 6px 14px rgba(0,0,0,.45); cursor: pointer; transition: transform .12s; flex: 0 0 auto; user-select: none; }
+.card:active { transform: translateY(-6px); }
+.card.dis { cursor: default; filter: brightness(.8); }
+.card.back { background: repeating-linear-gradient(45deg, #b81c1c, #b81c1c 7px, #8e1414 7px, #8e1414 14px); border: 2px solid #fff; }
+.card .r { position: absolute; top: 5px; left: 7px; font-weight: 900; font-size: 20px; }
+.card .s { position: absolute; bottom: 4px; right: 7px; font-size: 22px; }
+.card .big { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 38px; }
+.card.red { color: #d11; } .card.blk { color: #111; }
+.card.mani { outline: 3px solid #ffd23f; box-shadow: 0 0 16px rgba(255,210,63,.8); }
+.actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 6px; }
+.actions .btn { width: auto; margin-top: 0; padding: 11px 18px; font-size: 15px; }
+.small { font-size: 12px; opacity: .7; text-align: center; }
+</style>
+</head>
+<body>
+<a class="back" href="../../">← Voltar</a>
+
+<!-- MENU -->
+<div id="menuScreen" class="screen">
+  <div class="card-ui">
+    <h1>🃏 Truco Online</h1>
+    <p>1 contra 1. Manilha pela <b>vira</b>, truco/retruco e jogo até <b>12</b>.</p>
+    <label style="display:block;text-align:left;margin:8px 0 4px;font-weight:700">Seu nome</label>
+    <input id="nameInput" type="text" maxlength="12" placeholder="Ex: João" style="text-transform:none;letter-spacing:0" />
+    <button class="btn alt" id="soloBtn">🤖 Jogar contra o robô</button>
+    <button class="btn" id="createBtn">🌐 Criar sala online</button>
+    <div class="row" style="margin-top:8px">
+      <input id="codeInput" type="text" maxlength="4" placeholder="CÓDIGO" />
+      <button class="btn blue" id="joinBtn">Entrar</button>
+    </div>
+    <div class="err" id="menuErr"></div>
+  </div>
+</div>
+
+<!-- LOBBY -->
+<div id="lobbyScreen" class="screen hidden">
+  <div class="card-ui">
+    <h1 id="lobbyTitle">Sala</h1>
+    <p id="lobbyCode">Código: <code id="roomCode">----</code></p>
+    <p class="small" id="lobbyHint">Mande o código pro amigo e espere ele entrar…</p>
+    <button class="btn alt" id="leaveLobby">Sair</button>
+  </div>
+</div>
+
+<!-- MESA -->
+<div id="table">
+  <div class="scorebar">
+    <span class="s">🟢 <span id="meName">Você</span> <b id="meScore">0</b></span>
+    <span class="s" id="valuePill">Valendo <b id="handValue">1</b></span>
+    <span class="s">🔴 <span id="oppName">Robô</span> <b id="oppScore">0</b></span>
+  </div>
+  <div class="center">
+    <div class="opp">
+      <span id="oppLabel">Robô</span>
+      <div class="oppcards" id="oppCards"></div>
+    </div>
+    <div class="rounds" id="rounds"></div>
+    <div class="felt">
+      <div class="played" id="oppPlayed"><div class="ph"></div></div>
+      <div class="vira-wrap">vira<br><div id="viraCard"></div><div id="maniLabel" style="margin-top:3px">manilha: —</div></div>
+      <div class="played" id="myPlayed"><div class="ph"></div></div>
+    </div>
+    <div class="bigmsg" id="bigmsg"></div>
+  </div>
+  <div class="hand" id="hand"></div>
+  <div class="actions" id="actions"></div>
+  <div class="small" id="turnInfo"></div>
+</div>
+
+<!-- FIM -->
+<div id="endScreen" class="screen hidden">
+  <div class="card-ui">
+    <h1 id="endTitle">Fim de jogo</h1>
+    <p id="endMsg"></p>
+    <button class="btn" id="endAgain">Jogar de novo</button>
+    <button class="btn alt" id="endMenu" style="margin-top:8px">Menu</button>
+  </div>
+</div>
+
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+const ROOM_PREFIX = 'jubis-truco-';
+const ICE = [{ urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }];
+
+// baralho do truco (40 cartas). Ordem fraca->forte:
+const RANKS = ['4', '5', '6', '7', 'Q', 'J', 'K', 'A', '2', '3'];
+const RANK_LABEL = { '4':'4','5':'5','6':'6','7':'7','Q':'Q','J':'J','K':'K','A':'A','2':'2','3':'3' };
+const SUITS = ['ouros', 'espadas', 'copas', 'paus']; // ordem de força da manilha (paus = mais forte)
+const SUIT_SYM = { ouros:'♦', espadas:'♠', copas:'♥', paus:'♣' };
+const VALUES = [1, 3, 6, 9, 12]; // valor da mão por nível de truco
+
+let mode = 'menu';   // menu | solo | host | guest
+let peer = null, conn = null, myName = 'Você', oppName = 'Adversário';
+let G = null;        // estado do jogo (no host/solo). guest usa só "view".
+let view = null;     // o que o guest enxerga
+
+// ---------- util de carta ----------
+function deckShuffled() {
+  const d = [];
+  for (const r of RANKS) for (const s of SUITS) d.push({ rank: r, suit: s });
+  for (let i = d.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [d[i], d[j]] = [d[j], d[i]]; }
+  return d;
+}
+function maniRankOf(viraRank) { return RANKS[(RANKS.indexOf(viraRank) + 1) % RANKS.length]; }
+function strength(card, mani) {
+  if (card.rank === mani) return 100 + SUITS.indexOf(card.suit); // manilha: naipe desempata
+  return RANKS.indexOf(card.rank);
+}
+// compara 2 cartas: 1 (a ganha), -1 (b ganha), 0 (empate)
+function cmp(a, b, mani) { const x = strength(a, mani), y = strength(b, mani); return x > y ? 1 : (x < y ? -1 : 0); }
+
+// ====================================================================
+// LÓGICA (roda no host/solo)
+// ====================================================================
+function newGame() {
+  G = { scores: [0, 0], mao: 0, hand: null, over: false, winner: -1 };
+  newHand(true);
+}
+function newHand(first) {
+  if (!first) G.mao = 1 - G.mao;
+  const d = deckShuffled();
+  const hands = [[d[0], d[1], d[2]], [d[3], d[4], d[5]]];
+  const vira = d[6];
+  G.hand = {
+    hands, vira, mani: maniRankOf(vira.rank),
+    turn: G.mao,            // quem joga agora
+    starter: G.mao,         // quem começou a vaza
+    played: [null, null],
+    tricks: [],             // resultados das vazas: 0/1/'t'
+    value: 1, level: 0,     // valor e nível de truco
+    phase: 'play',          // play | truco | handover
+    proposing: 0, proposer: -1, respondTurn: -1, lastRaiser: -1,
+    msg: ''
+  };
+  pushState();
+  maybeBot();
+}
+function curHand() { return G.hand; }
+
+function playCard(player, idx) {
+  const H = curHand();
+  if (!H || H.phase !== 'play' || H.turn !== player) return;
+  const hand = H.hands[player];
+  if (idx < 0 || idx >= hand.length) return;
+  H.played[player] = hand.splice(idx, 1)[0];
+  if (H.played[1 - player] == null) {
+    // espera o outro
+    H.turn = 1 - player;
+    pushState(); maybeBot();
+  } else {
+    resolveTrick();
+  }
+}
+function resolveTrick() {
+  const H = curHand();
+  const a = H.played[0], b = H.played[1];
+  const c = cmp(a, b, H.mani);
+  const res = c === 0 ? 't' : (c > 0 ? 0 : 1);
+  H.tricks.push(res);
+  H.played = [null, null];
+  const decided = handResult(H.tricks, G.mao);
+  H.lastTrick = res;
+  if (decided !== null) { endHand(decided); return; }
+  // próxima vaza: quem ganhou começa (empate: quem começou a vaza anterior)
+  H.starter = (res === 't') ? H.starter : res;
+  H.turn = H.starter;
+  H.msg = res === 't' ? 'Empate na vaza!' : '';
+  pushState(); maybeBot();
+}
+// resultado da mão a partir das vazas. retorna 0/1 ou null (indefinido)
+function handResult(tr, mao) {
+  const w0 = tr[0], w1 = tr.length > 1 ? tr[1] : undefined, w2 = tr.length > 2 ? tr[2] : undefined;
+  if (tr.length === 1) {
+    return null; // nunca decide na 1ª
+  }
+  if (tr.length === 2) {
+    if (w0 === 't' && w1 !== 't') return w1;                 // empatou 1ª, ganhou 2ª
+    if (w0 !== 't' && w1 === w0) return w0;                  // ganhou as duas
+    if (w0 !== 't' && w1 === 't') return w0;                 // ganhou 1ª, empatou 2ª
+    return null;                                             // 1-1 ou empate-empate -> 3ª vaza
+  }
+  // 3ª vaza
+  if (w0 === 't' && w1 === 't') return (w2 === 't') ? mao : w2;
+  // caso 1-1: ganha quem fez a 3ª; se empatar a 3ª, ganha quem fez a 1ª
+  if (w2 !== 't') return w2;
+  return w0;
+}
+function endHand(winner) {
+  const H = curHand();
+  H.phase = 'handover';
+  G.scores[winner] += H.value;
+  H.msg = (winner === 0 ? meName : oppName) + ' ganhou a mão! (+' + H.value + ')';
+  pushState();
+  if (G.scores[winner] >= 12) { G.over = true; G.winner = winner; pushState(); return; }
+  setTimeout(() => { if (G && !G.over) newHand(false); }, 1900);
+}
+
+// ---- truco ----
+function callTruco(player) {
+  const H = curHand();
+  if (!H || H.phase !== 'play' || H.turn !== player || H.level >= 4 || H.lastRaiser === player) return;
+  H.phase = 'truco';
+  H.proposer = player;
+  H.proposing = VALUES[H.level + 1];
+  H.respondTurn = 1 - player;
+  H.msg = (player === 0 ? meName : oppName) + ' pediu ' + trucoName(H.proposing) + '!';
+  pushState(); maybeBot();
+}
+function trucoName(v) { return v === 3 ? 'TRUCO' : v === 6 ? 'SEIS' : v === 9 ? 'NOVE' : 'DOZE'; }
+function respondTruco(player, action) {
+  const H = curHand();
+  if (!H || H.phase !== 'truco' || H.respondTurn !== player) return;
+  if (action === 'accept') {
+    H.value = H.proposing; H.level = VALUES.indexOf(H.proposing); H.lastRaiser = H.proposer;
+    H.phase = 'play'; H.turn = H.proposer; H.proposing = 0; H.respondTurn = -1;
+    H.msg = (player === 0 ? meName : oppName) + ' aceitou! Valendo ' + H.value + '.';
+    pushState(); maybeBot();
+  } else if (action === 'run') {
+    H.msg = (player === 0 ? meName : oppName) + ' correu!';
+    endHand(H.proposer); // quem pediu ganha o valor atual
+  } else if (action === 'raise') {
+    if (H.proposing >= 12) return;
+    H.level = VALUES.indexOf(H.proposing);   // o pedido anterior vira o nível "base" do aumento
+    H.lastRaiser = -1;
+    H.proposer = player;
+    H.proposing = VALUES[VALUES.indexOf(H.proposing) + 1];
+    H.respondTurn = 1 - player;
+    H.msg = (player === 0 ? meName : oppName) + ' aumentou pra ' + trucoName(H.proposing) + '!';
+    pushState(); maybeBot();
+  }
+}
+
+// ====================================================================
+// BOT (modo solo: jogador 1)
+// ====================================================================
+function maybeBot() {
+  if (mode !== 'solo' || !G || G.over) return;
+  const H = curHand(); if (!H) return;
+  if (H.phase === 'play' && H.turn === 1) setTimeout(botPlay, 850);
+  else if (H.phase === 'truco' && H.respondTurn === 1) setTimeout(botRespond, 950);
+}
+function botHandPower() {
+  const H = curHand(); const h = H.hands[1];
+  return h.reduce((a, c) => a + strength(c, H.mani), 0) / Math.max(1, h.length);
+}
+function botPlay() {
+  const H = curHand(); if (!H || H.phase !== 'play' || H.turn !== 1) return;
+  const h = H.hands[1];
+  // às vezes pede truco com mão forte
+  if (H.level < 4 && H.lastRaiser !== 1 && botHandPower() > 60 && Math.random() < 0.35) { callTruco(1); return; }
+  let idx = 0;
+  const opp = H.played[0];
+  if (opp) {
+    // tenta a menor carta que vença; senão a menor de todas
+    let best = -1, bestStr = 1e9;
+    for (let i = 0; i < h.length; i++) if (cmp(h[i], opp, H.mani) > 0 && strength(h[i], H.mani) < bestStr) { best = i; bestStr = strength(h[i], H.mani); }
+    if (best >= 0) idx = best;
+    else { let lo = 0; for (let i = 1; i < h.length; i++) if (strength(h[i], H.mani) < strength(h[lo], H.mani)) lo = i; idx = lo; }
+  } else {
+    // liderando: joga uma carta mediana/baixa
+    let lo = 0; for (let i = 1; i < h.length; i++) if (strength(h[i], H.mani) < strength(h[lo], H.mani)) lo = i; idx = lo;
+  }
+  playCard(1, idx);
+}
+function botRespond() {
+  const H = curHand(); if (!H || H.phase !== 'truco' || H.respondTurn !== 1) return;
+  const p = botHandPower();
+  if (p > 75 && H.proposing < 12 && Math.random() < 0.4) respondTruco(1, 'raise');
+  else if (p > 45 || Math.random() < 0.4) respondTruco(1, 'accept');
+  else respondTruco(1, 'run');
+}
+
+// ====================================================================
+// ESTADO -> VIEW (cada jogador vê só a própria mão)
+// ====================================================================
+function viewFor(p) {
+  const H = curHand();
+  if (!H) return null;
+  return {
+    myHand: H.hands[p].map(c => ({ ...c })),
+    oppCount: H.hands[1 - p].length,
+    vira: { ...H.vira }, mani: H.mani,
+    myPlayed: H.played[p] ? { ...H.played[p] } : null,
+    oppPlayed: H.played[1 - p] ? { ...H.played[1 - p] } : null,
+    myTurn: H.phase === 'play' && H.turn === p,
+    canTruco: H.phase === 'play' && H.turn === p && H.level < 4 && H.lastRaiser !== p,
+    respond: (H.phase === 'truco' && H.respondTurn === p) ? { value: H.proposing, canRaise: H.proposing < 12 } : null,
+    scores: { me: G.scores[p], opp: G.scores[1 - p] },
+    value: H.value,
+    tricks: H.tricks.map(t => t === 't' ? 't' : (t === p ? 'me' : 'opp')),
+    msg: H.msg, phase: H.phase,
+    over: G.over, iWon: G.over && G.winner === p,
+    names: p === 0 ? { me: myName, opp: oppName } : { me: oppName, opp: myName },
+  };
+}
+function pushState() {
+  // host/solo: renderiza a própria view (jogador 0) e manda a do guest (jogador 1)
+  if (mode === 'solo' || mode === 'host') {
+    view = viewFor(0); render();
+    if (mode === 'host') send({ t: 'st', v: viewFor(1) });
+    if (G.over) showEnd(view.iWon);
+  }
+}
+
+// ====================================================================
+// REDE
+// ====================================================================
+function send(o) { try { if (conn && conn.open) conn.send(o); } catch (e) {} }
+function startHost() {
+  mode = 'host';
+  const code = randomCode();
+  peer = new Peer(ROOM_PREFIX + code, { debug: 1, config: { iceServers: ICE } });
+  $('roomCode').textContent = '…';
+  peer.on('open', () => $('roomCode').textContent = code);
+  peer.on('connection', c => {
+    if (conn) { c.on('open', () => c.close()); return; }
+    conn = c;
+    c.on('open', () => {
+      send({ t: 'hello', name: myName });
+    });
+    c.on('data', onHostData);
+    c.on('close', () => backToMenu('O adversário saiu.'));
+    c.on('error', () => {});
+  });
+  peer.on('error', e => $('menuErr').textContent = 'Erro: ' + e.type);
+  showLobby(true, code);
+}
+function onHostData(d) {
+  if (!d || !d.t) return;
+  if (d.t === 'name') { oppName = String(d.name || 'Adversário').slice(0, 12); $('oppName').textContent = oppName; $('oppLabel').textContent = oppName; startTable(); newGame(); }
+  else if (d.t === 'play') playCard(1, d.i);
+  else if (d.t === 'truco') callTruco(1);
+  else if (d.t === 'resp') respondTruco(1, d.a);
+}
+function startJoin(code) {
+  mode = 'guest';
+  peer = new Peer(undefined, { debug: 1, config: { iceServers: ICE } });
+  peer.on('open', () => {
+    conn = peer.connect(ROOM_PREFIX + code, { reliable: true });
+    conn.on('open', () => { send({ t: 'name', name: myName }); showLobby(false, code); });
+    conn.on('data', onGuestData);
+    conn.on('close', () => backToMenu('A sala fechou.'));
+    conn.on('error', () => { $('menuErr').textContent = 'Não consegui entrar.'; });
+  });
+  peer.on('error', e => { $('menuErr').textContent = 'Não achei a sala (' + e.type + ').'; });
+}
+function onGuestData(d) {
+  if (!d || !d.t) return;
+  if (d.t === 'hello') { oppName = String(d.name || 'Adversário').slice(0, 12); }
+  else if (d.t === 'st') { view = d.v; if (!$('table').classList.contains('show')) startTable(); render(); if (view.over) showEnd(view.iWon); }
+}
+function randomCode() { const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s = ''; for (let i = 0; i < 4; i++) s += a[(Math.random() * a.length) | 0]; return s; }
+
+// ações do jogador local
+function uiPlay(i) { if (mode === 'guest') send({ t: 'play', i }); else playCard(0, i); }
+function uiTruco() { if (mode === 'guest') send({ t: 'truco' }); else callTruco(0); }
+function uiRespond(a) { if (mode === 'guest') send({ t: 'resp', a }); else respondTruco(0, a); }
+
+// ====================================================================
+// RENDER
+// ====================================================================
+function cardEl(c, mani, clickable, idx) {
+  const el = document.createElement('div');
+  const red = (c.suit === 'ouros' || c.suit === 'copas');
+  el.className = 'card ' + (red ? 'red' : 'blk') + (c.rank === mani ? ' mani' : '') + (clickable ? '' : ' dis');
+  el.innerHTML = `<div class="r">${RANK_LABEL[c.rank]}</div><div class="big">${SUIT_SYM[c.suit]}</div><div class="s">${SUIT_SYM[c.suit]}</div>`;
+  if (clickable) el.onclick = () => uiPlay(idx);
+  return el;
+}
+function render() {
+  if (!view) return;
+  const v = view;
+  $('meName').textContent = v.names.me; $('oppName').textContent = v.names.opp; $('oppLabel').textContent = v.names.opp;
+  $('meScore').textContent = v.scores.me; $('oppScore').textContent = v.scores.opp;
+  $('handValue').textContent = v.value;
+  // vira + manilha
+  $('viraCard').innerHTML = ''; $('viraCard').appendChild(miniCard(v.vira, v.mani));
+  $('maniLabel').textContent = 'manilha: ' + RANK_LABEL[v.mani];
+  // cartas do oponente (viradas)
+  const oc = $('oppCards'); oc.innerHTML = '';
+  for (let i = 0; i < v.oppCount; i++) { const b = document.createElement('div'); b.className = 'card back'; b.style.width = '34px'; b.style.height = '48px'; oc.appendChild(b); }
+  // jogadas na mesa
+  $('oppPlayed').innerHTML = ''; $('oppPlayed').appendChild(v.oppPlayed ? cardEl(v.oppPlayed, v.mani, false) : ph());
+  $('myPlayed').innerHTML = ''; $('myPlayed').appendChild(v.myPlayed ? cardEl(v.myPlayed, v.mani, false) : ph());
+  // rounds
+  const rd = $('rounds'); rd.innerHTML = '';
+  for (let i = 0; i < 3; i++) { const d = document.createElement('div'); d.className = 'dot' + (v.tricks[i] ? ' ' + (v.tricks[i] === 'me' ? 'me' : v.tricks[i] === 'opp' ? 'opp' : 'tie') : ''); rd.appendChild(d); }
+  // minha mão
+  const hand = $('hand'); hand.innerHTML = '';
+  v.myHand.forEach((c, i) => hand.appendChild(cardEl(c, v.mani, v.myTurn && v.phase === 'play', i)));
+  // mensagem + ações
+  $('bigmsg').textContent = v.msg || '';
+  const act = $('actions'); act.innerHTML = '';
+  if (v.respond) {
+    const t = document.createElement('div'); t.style.width = '100%'; t.style.textAlign = 'center'; t.style.fontWeight = '900'; t.style.marginBottom = '4px';
+    t.textContent = 'Pediram ' + (v.respond.value === 3 ? 'TRUCO' : v.respond.value) + '! O que você faz?'; act.appendChild(t);
+    act.appendChild(mkBtn('✅ Aceitar', 'alt', () => uiRespond('accept')));
+    if (v.respond.canRaise) act.appendChild(mkBtn('🔥 Aumentar', '', () => uiRespond('raise')));
+    act.appendChild(mkBtn('🏳️ Correr', 'blue', () => uiRespond('run')));
+  } else if (v.canTruco) {
+    act.appendChild(mkBtn('🔥 TRUCO!', '', uiTruco));
+  }
+  $('turnInfo').textContent = v.phase === 'play' ? (v.myTurn ? 'Sua vez — escolha uma carta' : 'Vez do adversário…') : (v.phase === 'truco' && !v.respond ? 'Esperando resposta…' : '');
+}
+function ph() { const d = document.createElement('div'); d.className = 'ph'; return d; }
+function miniCard(c, mani) { const el = cardEl(c, mani, false); el.style.width = '44px'; el.style.height = '62px'; el.querySelector('.r').style.fontSize = '14px'; el.querySelector('.big').style.fontSize = '24px'; el.querySelector('.s').style.fontSize = '14px'; return el; }
+function mkBtn(txt, cls, fn) { const b = document.createElement('button'); b.className = 'btn ' + cls; b.style.width = 'auto'; b.style.marginTop = '0'; b.style.padding = '11px 18px'; b.style.fontSize = '15px'; b.textContent = txt; b.onclick = fn; return b; }
+
+// ====================================================================
+// UI / navegação
+// ====================================================================
+function showLobby(isHost, code) {
+  $('menuScreen').classList.add('hidden'); $('endScreen').classList.add('hidden');
+  $('lobbyScreen').classList.remove('hidden');
+  $('lobbyTitle').textContent = isHost ? '🏠 Sua sala' : '🚪 Entrando…';
+  $('lobbyCode').style.display = isHost ? 'block' : 'none';
+  $('lobbyHint').textContent = isHost ? 'Mande o código pro amigo e espere ele entrar…' : 'Conectando na sala ' + code + '…';
+}
+function startTable() {
+  $('menuScreen').classList.add('hidden'); $('lobbyScreen').classList.add('hidden'); $('endScreen').classList.add('hidden');
+  $('table').classList.add('show');
+}
+function showEnd(won) {
+  $('endScreen').classList.remove('hidden');
+  $('endTitle').textContent = won ? '🏆 Você venceu!' : '😞 Você perdeu';
+  $('endMsg').textContent = won ? 'Mandou bem no truco!' : 'Quem sabe na próxima!';
+}
+function backToMenu(msg) {
+  try { conn && conn.close(); } catch (e) {} try { peer && peer.destroy(); } catch (e) {}
+  peer = null; conn = null; G = null; view = null; mode = 'menu';
+  $('table').classList.remove('show');
+  $('lobbyScreen').classList.add('hidden'); $('endScreen').classList.add('hidden');
+  $('menuScreen').classList.remove('hidden');
+  if (msg) $('menuErr').textContent = msg;
+}
+
+$('soloBtn').addEventListener('click', () => {
+  myName = ($('nameInput').value || '').trim().slice(0, 12) || 'Você'; oppName = '🤖 Robô';
+  mode = 'solo'; startTable(); newGame();
+});
+$('createBtn').addEventListener('click', () => {
+  myName = ($('nameInput').value || '').trim().slice(0, 12) || 'Anfitrião';
+  if (!peer) startHost();
+});
+$('joinBtn').addEventListener('click', () => {
+  myName = ($('nameInput').value || '').trim().slice(0, 12) || 'Jogador';
+  const code = ($('codeInput').value || '').trim().toUpperCase();
+  if (code.length < 3) { $('menuErr').textContent = 'Digite o código.'; return; }
+  $('menuErr').textContent = ''; startJoin(code);
+});
+$('leaveLobby').addEventListener('click', () => backToMenu());
+$('endMenu').addEventListener('click', () => backToMenu());
+$('endAgain').addEventListener('click', () => {
+  $('endScreen').classList.add('hidden');
+  if (mode === 'solo') { newGame(); }
+  else if (mode === 'host') { newGame(); }
+  else { /* guest espera o host */ $('table').classList.add('show'); }
+});
+
+$('nameInput').value = localStorage.getItem('truco-nome') || '';
+$('nameInput').addEventListener('change', e => localStorage.setItem('truco-nome', e.target.value.trim()));
+})();
+</script>
+<script src="../../assets/js/presence.js"></script>
+</body>
+</html>

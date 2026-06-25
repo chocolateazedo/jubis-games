@@ -76,6 +76,7 @@ Pronto! Faz upload e o jogo aparece automaticamente na página inicial. Não pre
 - Futebol Online 3D (`games/futebol-online`) — pelada 3×3 em **3D** (Three.js) multiplayer online (WebRTC/PeerJS, host-autoritativo) com até 4 jogadores; os lugares vazios viram bots. Condução de bola ao tocar e chute (espaço/CHUTAR). Tem modo "jogar sozinho"
 - Salão de Damas (`games/salao-de-damas`) — salão 3D multiplayer online onde os jogadores andam de cartola, sentam nas mesas e jogam damas (com regra do **sopro**), conversam por **chat de texto** (balões 3D) e por **chat de voz** com proximidade (WebRTC/PeerJS). Tem **2º andar** que abre quando o térreo lota
 - Batata Quente (`games/batata-quente`) — pega-pega 3D online (WebRTC/PeerJS, host-autoritativo) de 2 a 10 jogadores: quem segura a batata por 10s explode; encoste em alguém pra passar. Último de pé vence
+- Truco Online (`games/truco-online`) — truco 1×1 online (WebRTC/PeerJS) ou contra o robô: manilha pela vira, truco/retruco/seis/nove/doze, jogo até 12 pontos
 
 ## Área logada (contas + Jubis Coin)
 

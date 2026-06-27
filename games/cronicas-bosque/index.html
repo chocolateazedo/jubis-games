@@ -100,19 +100,6 @@
   </div>
   <p id="hint">Arraste/mouse para olhar · WASD ou direcional para andar</p>
 
-  <button class="uibtn hidden" id="buildBtn">🔨 Construir</button>
-  <button class="uibtn hidden" id="removeBtn">🗑 Remover</button>
-  <div id="buildMenu" class="hidden">
-    <h3>🔨 Escolha o que construir</h3>
-    <div id="buildGrid"></div>
-  </div>
-  <div id="buildBar" class="hidden">
-    <button id="bDown">⬇</button>
-    <button id="bUp">⬆</button>
-    <button id="bRot">⟳ Girar</button>
-    <button id="bPlace">✓ Colocar</button>
-    <button id="bCancel">✕ Sair</button>
-  </div>
   <div id="questBar"></div>
   <div id="talkHint">💬 Conversar (E / gatilho)</div>
   <div id="toast"></div>
@@ -1355,14 +1342,11 @@
         const sx = ax[2] !== undefined ? ax[2] : (ax[0] || 0), sy = ax[3] !== undefined ? ax[3] : (ax[1] || 0);
         if (src.handedness === 'right') {
           s.tx = sx; s.ty = sy;
-          if (bt[0] && bt[0].pressed) s.interact = true; // gatilho direito = conversar / colocar / escolher / remover
-          if (bt[4] && bt[4].pressed) s.rot = true;      // botão A (direito) = girar a peça
-          if (bt[5] && bt[5].pressed) s.rem = true;      // botão B (direito) = modo remover
+          if (bt[0] && bt[0].pressed) s.interact = true; // gatilho direito = conversar / agir / escolher
         } else {
           s.x = sx; s.y = sy;
           if (bt[0] && bt[0].pressed) s.run = true;  // gatilho (controle esquerdo) = correr
           if (bt[1] && bt[1].pressed) s.jump = true; // botão lateral/grip (controle esquerdo) = pular
-          if (bt[5] && bt[5].pressed) s.menu = true; // botão Y (controle esquerdo) = menu de construção
         }
       }
       return s;
@@ -1371,8 +1355,8 @@
     // ---------- interação (conversar com NPC) e avisos ----------
     const talkHint = document.getElementById('talkHint');
     function interact() {
+      if (narration) { advanceNarration(); return; } // diálogo/narração tem prioridade (inclusive no meio da batalha)
       if (inBattle) { battleInteract(); return; }
-      if (narration) { advanceNarration(); return; }
       if (eraMenuOpen) { eraSelect(eraHover); return; }
       if (activeNPC) { advanceTalk(); return; }
       if (nearCovinha()) { plantarSemente(); return; }
@@ -1405,22 +1389,11 @@
         const s = readSticks(); const dz = v => Math.abs(v) < 0.15 ? 0 : v;
         mx = dz(s.x); mz = dz(s.y);
         run = run || s.run; wantJump = wantJump || s.jump;
-        // botão Y (esq) abre/fecha o menu de construção
-        if (s.menu && !menuWas) toggleMenu3D(); menuWas = !!s.menu;
-        // botão B (dir) liga/desliga o modo remover
-        if (s.rem && !remWas) toggleRemoveMode(); remWas = !!s.rem;
-        // gatilho direito: menu=escolher; removendo=remover; construindo=colocar; senão=conversar
-        if (s.interact && !interactWas) { if (menuOpen) menuSelect(menuHover); else if (removeMode) doRemove(removeTarget); else if (buildPiece) doPlace(); else interact(); }
+        // gatilho direito = conversar / agir (avançar diálogo, abrir menu de batalha, escolher)
+        if (s.interact && !interactWas) interact();
         interactWas = !!s.interact;
-        // botão A (dir) gira a peça
-        if (s.rot && !rotWas && buildPiece) ghostRY += Math.PI / 4; rotWas = !!s.rot;
-        // analógico direito (eixo Y) muda o NÍVEL da peça (1 nível por empurrão)
-        if (buildPiece && !menuOpen) { if (s.ty < -0.6 && !liftWas) { changeLevel(1); liftWas = true; } else if (s.ty > 0.6 && !liftWas) { changeLevel(-1); liftWas = true; } else if (Math.abs(s.ty) < 0.3) liftWas = false; }
-        if (!menuOpen && Math.abs(s.tx) > 0.7 && !turned) {
-          if (buildPiece) ghostRY -= Math.sign(s.tx) * Math.PI / 4; // construindo: analógico gira a peça
-          else dolly.rotation.y -= Math.sign(s.tx) * Math.PI / 6;   // senão: gira o jogador
-          turned = true;
-        }
+        // analógico direito = giro em passos (snap turn)
+        if (Math.abs(s.tx) > 0.7 && !turned) { dolly.rotation.y -= Math.sign(s.tx) * Math.PI / 6; turned = true; }
         if (Math.abs(s.tx) < 0.3) turned = false;
       } else {
         dolly.rotation.y = yaw; camera.rotation.x = pitch;
@@ -1521,13 +1494,13 @@
       // COMBATE: tick da batalha ou checa aproximação de inimigo; efeitos morrendo
       if (inBattle) updateBattle(dt); else { checkAggro(); checkBoss(); }
       updateDying(dt);
-      // dica de interação (contextual)
-      if (inBattle) {
-        if (battle && battle.ready && !battle.menuOpen) { talkHint.textContent = '⚔ Agir! (E / gatilho / toque)'; talkHint.style.display = 'block'; }
-        else if (battle && battle.menuOpen) { talkHint.textContent = 'Mire e confirme (E / gatilho / toque)'; talkHint.style.display = 'block'; }
+      // dica de interação (contextual) — a narração tem prioridade (até no meio da batalha)
+      if (narration) { talkHint.textContent = '▶ Continuar (toque / E / gatilho)'; talkHint.style.display = 'block'; }
+      else if (inBattle) {
+        if (battle && battle.ready && !battle.menuOpen) { talkHint.textContent = '⚔ Agir! (toque / E / gatilho)'; talkHint.style.display = 'block'; }
+        else if (battle && battle.menuOpen) { talkHint.textContent = 'Toque a opção / mire e confirme'; talkHint.style.display = 'block'; }
         else talkHint.style.display = 'none';
-      } else if (narration) { talkHint.textContent = '▶ Continuar (E / gatilho / toque)'; talkHint.style.display = 'block'; }
-      else {
+      } else {
         const livre = !activeNPC && !eraMenuOpen;
         if (livre && nearCovinha()) { talkHint.textContent = '🌱 Plantar a Semente-do-Amanhã (E / gatilho)'; talkHint.style.display = 'block'; }
         else if (livre && nearFox()) { talkHint.textContent = '🦊 Libertar a Fagulha (E / gatilho)'; talkHint.style.display = 'block'; }
@@ -1617,17 +1590,7 @@
     }
     renderer.xr.addEventListener('sessionstart', startAudio);
 
-    // ---------- UI de construção ----------
-    const buildMenu = document.getElementById('buildMenu'), buildGrid = document.getElementById('buildGrid');
-    BUILD_PIECES.forEach(name => { const b = document.createElement('button'); b.textContent = piecePT(name); b.addEventListener('click', () => selectPiece(name)); buildGrid.appendChild(b); });
-    document.getElementById('buildBtn').addEventListener('click', () => buildMenu.classList.toggle('hidden'));
-    document.getElementById('bRot').addEventListener('click', () => { ghostRY += Math.PI / 4; });
-    document.getElementById('bPlace').addEventListener('click', doPlace);
-    document.getElementById('bCancel').addEventListener('click', cancelBuild);
-    document.getElementById('bUp').addEventListener('click', () => changeLevel(1));
-    document.getElementById('bDown').addEventListener('click', () => changeLevel(-1));
-    addEventListener('wheel', e => { if (buildPiece) changeLevel(-Math.sign(e.deltaY)); }, { passive: true });
-    document.getElementById('removeBtn').addEventListener('click', toggleRemoveMode);
+    // (construção removida do RPG — sem UI nem gatilhos de construir/remover)
 
     // ---------- multiplayer (P2P via PeerJS, estrela host-autoritativa, até 5) ----------
     const ROOM_PREFIX = 'jubis-bosque-';

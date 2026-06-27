@@ -211,12 +211,26 @@
     const shore = new THREE.Mesh(new THREE.RingGeometry(LAKE.r - 0.5, LAKE.r + 3.5, 48), new THREE.MeshStandardMaterial({ color: 0xd9c48b, roughness: 1 }));
     shore.rotation.x = -Math.PI / 2; shore.position.set(LAKE.x, LAKE_Y + 0.12, LAKE.z); scene.add(shore);
 
-    // ---------- AS TRÊS ERAS (mesmo terreno, só troca pele: cor/luz/névoa) ----------
-    // render baratíssimo: nada é reinstanciado; trocar de era é só ajustar materiais/luz/fog.
+    // ---------- partículas de clima (vaga-lumes / cinzas / pétalas) — trocam por era ----------
+    const PCOUNT = 160, PSPAN = 90, PHIGH = 17;
+    const pPos = new Float32Array(PCOUNT * 3), pVel = new Float32Array(PCOUNT * 3);
+    for (let i = 0; i < PCOUNT; i++) {
+      pPos[i * 3] = (Math.random() - 0.5) * PSPAN; pPos[i * 3 + 1] = Math.random() * PHIGH + 0.5; pPos[i * 3 + 2] = (Math.random() - 0.5) * PSPAN;
+      pVel[i * 3] = (Math.random() - 0.5) * 0.4; pVel[i * 3 + 1] = (Math.random() - 0.5) * 0.15; pVel[i * 3 + 2] = (Math.random() - 0.5) * 0.4;
+    }
+    const pGeo = new THREE.BufferGeometry(); pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+    const pCv = document.createElement('canvas'); pCv.width = pCv.height = 32; const pcx = pCv.getContext('2d');
+    const pgr = pcx.createRadialGradient(16, 16, 0, 16, 16, 16); pgr.addColorStop(0, 'rgba(255,255,255,1)'); pgr.addColorStop(0.4, 'rgba(255,255,255,0.7)'); pgr.addColorStop(1, 'rgba(255,255,255,0)');
+    pcx.fillStyle = pgr; pcx.fillRect(0, 0, 32, 32);
+    const pMat = new THREE.PointsMaterial({ size: 0.5, map: new THREE.CanvasTexture(pCv), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, color: 0xffe98a });
+    const particles = new THREE.Points(pGeo, pMat); particles.frustumCulled = false; scene.add(particles);
+    let partFall = 0.05;
+
+    // ---------- AS TRÊS ERAS (mesmo terreno, só troca pele: cor/luz/névoa/partículas) ----------
     const ERAS = {
-      bosque:  { bg: 0x9ed0f2, useEnv: true,  fog: [0xbfe0f5, 60, 230], sun: [0xfff4d6, 1.40], hemi: [0xdfeeff, 0x5a6b40, 0.40], ground: 0xffffff, shore: 0xd9c48b, water: 0x2f7fc4, waterOp: 0.86, tree: 0xffffff },
-      ermo:    { bg: 0xcf9b5a, useEnv: false, fog: [0xc98a4a, 38, 150], sun: [0xffb066, 0.85], hemi: [0xe9c79a, 0x4a3a2a, 0.55], ground: 0x9a8358, shore: 0x8a7048, water: 0x6a5a3a, waterOp: 0.30, tree: 0x8a7a5c },
-      semente: { bg: 0xffe0c0, useEnv: false, fog: [0xffe6c8, 70, 260], sun: [0xffe6b0, 1.25], hemi: [0xfff0d8, 0x6f8f5a, 0.60], ground: 0xbfe6a0, shore: 0xe8d2a0, water: 0x4fd0c0, waterOp: 0.80, tree: 0xcfffcf },
+      bosque:  { bg: 0x9ed0f2, useEnv: true,  fog: [0xbfe0f5, 60, 230], sun: [0xfff4d6, 1.40], hemi: [0xdfeeff, 0x5a6b40, 0.40], ground: 0xffffff, shore: 0xd9c48b, water: 0x2f7fc4, waterOp: 0.86, tree: 0xffffff, part: { color: 0xffe98a, size: 0.5, add: true,  fall: 0.05 } },
+      ermo:    { bg: 0xcf9b5a, useEnv: false, fog: [0xc98a4a, 38, 150], sun: [0xffb066, 0.85], hemi: [0xe9c79a, 0x4a3a2a, 0.55], ground: 0x9a8358, shore: 0x8a7048, water: 0x6a5a3a, waterOp: 0.30, tree: 0x8a7a5c, part: { color: 0xb7a98a, size: 0.45, add: false, fall: -0.7 } },
+      semente: { bg: 0xffe0c0, useEnv: false, fog: [0xffe6c8, 70, 260], sun: [0xffe6b0, 1.25], hemi: [0xfff0d8, 0x6f8f5a, 0.60], ground: 0xbfe6a0, shore: 0xe8d2a0, water: 0x4fd0c0, waterOp: 0.80, tree: 0xcfffcf, part: { color: 0xffd4e6, size: 0.55, add: false, fall: -0.35 } },
     };
     const treeMeshes = []; // árvores/pedras instanciadas, tingidas por era
     let currentEra = 'bosque';
@@ -232,6 +246,7 @@
       shore.material.color.setHex(E.shore);
       lake.material.color.setHex(E.water); lake.material.opacity = E.waterOp;
       for (const tm of treeMeshes) tm.material.color.setHex(E.tree);
+      pMat.color.setHex(E.part.color); pMat.size = E.part.size; pMat.blending = E.part.add ? THREE.AdditiveBlending : THREE.NormalBlending; pMat.needsUpdate = true; partFall = E.part.fall;
     }
     applyEra('bosque');
     const ERA_NOME = { bosque: '🌳 Bosque — agora', ermo: '🥀 Ermo — o futuro murcho', semente: '🌱 Semente — o passado' };
@@ -575,6 +590,7 @@
     function reverdecerErmo() { // o futuro cura em tempo real
       ERAS.ermo.bg = 0x9ed0f2; ERAS.ermo.fog = [0xbfe0f5, 60, 230]; ERAS.ermo.sun = [0xfff4d6, 1.3]; ERAS.ermo.hemi = [0xdfeeff, 0x5a6b40, 0.45];
       ERAS.ermo.ground = 0xffffff; ERAS.ermo.water = 0x2f7fc4; ERAS.ermo.waterOp = 0.86; ERAS.ermo.tree = 0xffffff;
+      ERAS.ermo.part = { color: 0xffe98a, size: 0.5, add: true, fall: 0.05 }; // cinzas viram vaga-lumes
       if (currentEra === 'ermo') applyEra('ermo');
     }
 
@@ -783,7 +799,7 @@
     }
 
     // ---------- PETS (cube pets): um de cada tipo, vagando pelo bosque ----------
-    const PETS = ['beaver','bee','bunny','caterpillar','cat','chick','cow','crab','deer','dog','elephant','fish','fox','giraffe','hog','koala','lion','monkey','panda','parrot','penguin','pig','polar','tiger'];
+    const PETS = ['bunny', 'deer', 'koala', 'panda', 'hog', 'chick', 'cat', 'parrot']; // poucos bichos fofos pra dar vida (sem poluir o RPG)
     const pets = [];
     PETS.forEach((name, i) => {
       getGLB(`../bosque-vr/pets/animal-${name}.glb`).then(gltf => {
@@ -832,13 +848,11 @@
     }
     // NPCs da trama: diálogo condicional (falasFn) + ação ao terminar (onEnd); visíveis só na sua era
     const STORY_NPCS = [
-      { id: 'cogu', nome: 'Seu Cogu', char: 'a', x: 4, z: 58, era: 'bosque',
+      { id: 'cogu', nome: 'Seu Cogu', char: 'a', x: 6, z: 56, era: 'bosque',
         falasFn: () => game.fase <= 1
-          ? ['Psiu… chega aqui, broto. Reparou no cinza no chão? Não é normal, não.', 'É o futuro vazando pra cá, pela raiz do Vovô Carvalho. Vai falar com ele!']
+          ? ['Psiu… chega aqui, broto. Reparou no cinza no chão? Não é normal, não.', 'É o futuro vazando pra cá, pela raiz do Vovô Carvalho. Vai falar com ele!', 'Ah — se um bichinho ficar bravo e te atacar, é só encher a barra de AÇÃO e revidar.']
           : ['Cuidado com o que você mexe lá atrás… toda folha que cai aqui caiu primeiro em outro lugar.'],
         onEnd: () => { if (game.fase === 1) setObjetivo('Vá até o Vovô Carvalho e toque nele 🌳'); } },
-      { id: 'lila', nome: 'Lila', char: 'd', x: -7, z: 52, era: 'bosque', falasFn: () => ['Que dia bonito! Mas o lago anda com gostinho de poeira…'] },
-      { id: 'teo', nome: 'Téo', char: 'g', x: 16, z: 46, era: 'bosque', falasFn: () => ['Os bichinhos ficaram bravos com a Murcha. Se um te atacar, encha a barra de AÇÃO e revide!'] },
     ];
     const npcs = [];
     STORY_NPCS.forEach(d => {
@@ -1431,6 +1445,16 @@
       if (covinha) covinha.visible = currentEra === 'semente';
       if (manchaCinza) manchaCinza.visible = currentEra === 'bosque' && !game.flags.sementePlantada;
       if (brotoNovo) brotoNovo.visible = currentEra === 'bosque' && game.flags.sementePlantada;
+      // partículas mágicas: derivam, caem/sobem conforme a era e seguem o jogador
+      { const pa = pGeo.attributes.position.array, hs = PSPAN / 2;
+        for (let i = 0; i < PCOUNT; i++) {
+          pa[i * 3] += pVel[i * 3] * dt; pa[i * 3 + 1] += (pVel[i * 3 + 1] + partFall) * dt; pa[i * 3 + 2] += pVel[i * 3 + 2] * dt;
+          if (pa[i * 3 + 1] > PHIGH) pa[i * 3 + 1] = 0.4; else if (pa[i * 3 + 1] < 0.3) pa[i * 3 + 1] = PHIGH;
+          if (pa[i * 3] > hs) pa[i * 3] = -hs; else if (pa[i * 3] < -hs) pa[i * 3] = hs;
+          if (pa[i * 3 + 2] > hs) pa[i * 3 + 2] = -hs; else if (pa[i * 3 + 2] < -hs) pa[i * 3 + 2] = hs;
+        }
+        pGeo.attributes.position.needsUpdate = true; particles.position.set(dolly.position.x, 0, dolly.position.z);
+      }
       // construção: fantasma encaixa no grid (ou mira de remoção)
       if (removeMode) updateRemoveAim();
       else if (ghost && !menuOpen) updateGhost();

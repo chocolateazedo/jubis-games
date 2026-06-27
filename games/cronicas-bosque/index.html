@@ -75,6 +75,14 @@
     #questBar { position: fixed; z-index: 27; top: max(58px, calc(env(safe-area-inset-top) + 52px)); left: 50%; transform: translateX(-50%); display: none;
       background: rgba(8,24,16,.82); color: #eaffee; border: 1px solid rgba(255,225,140,.55); border-radius: 12px;
       padding: 7px 16px; font-weight: 700; font-size: 14px; max-width: 92vw; text-align: center; pointer-events: none; }
+    /* barra de ações de batalha no celular */
+    #battleBar { position: fixed; z-index: 28; left: 50%; bottom: max(20px, calc(env(safe-area-inset-bottom) + 8px)); transform: translateX(-50%);
+      display: none; gap: 10px; flex-wrap: wrap; justify-content: center; max-width: 94vw; }
+    #battleBar .bbtn { border: 2px solid rgba(160,230,180,.5); background: rgba(8,24,16,.85); color: #eaffee; font-weight: 800; font-size: 16px;
+      padding: 14px 18px; border-radius: 14px; -webkit-tap-highlight-color: transparent; touch-action: none; backdrop-filter: blur(2px); }
+    #battleBar .bbtn:active { background: rgba(120,220,150,.6); transform: scale(.95); }
+    #battleBar .bbtn.dim { opacity: .45; }
+    body.inbattle #joy, body.inbattle #mbtns { display: none !important; } /* na batalha, só a barra de ações */
     #toast { position: fixed; z-index: 36; left: 50%; top: 16%; transform: translateX(-50%); opacity: 0; transition: opacity .3s;
       background: rgba(8,24,16,.92); color: #fff; border: 1px solid rgba(160,230,180,.5); border-radius: 12px; padding: 10px 16px; font-size: 14px; max-width: 86vw; text-align: center; }
     /* multiplayer */
@@ -102,6 +110,7 @@
 
   <div id="questBar"></div>
   <div id="talkHint">💬 Conversar (E / gatilho)</div>
+  <div id="battleBar"></div>
   <div id="toast"></div>
 
   <div id="intro">
@@ -426,13 +435,29 @@
       }
       c.textAlign = 'left'; c.textBaseline = 'alphabetic'; batTex.needsUpdate = true;
     }
+    function onTouchUI() { return (('ontouchstart' in window) || navigator.maxTouchPoints > 0) && !renderer.xr.isPresenting; }
+    function renderBattleBar() {
+      const bb = document.getElementById('battleBar'); if (!bb || !battle) return;
+      bb.innerHTML = '';
+      let items;
+      if (battle.faseBatalha === 'acalanto') items = [{ t: '🎵 Cantar pra ninar', i: 0 }];
+      else if (!battle.sub) items = BAT_ACTIONS.map((a, i) => ({ t: a.t, i }));
+      else items = battleMenuItems().map((it, i) => ({ t: it.t, i, dim: it.dim }));
+      for (const it of items) {
+        const b = document.createElement('button'); b.className = 'bbtn' + (it.dim ? ' dim' : ''); b.textContent = it.t;
+        b.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); battleSelect(it.i); }, { passive: false });
+        bb.appendChild(b);
+      }
+      bb.style.display = 'flex';
+    }
     function openBattleMenu() {
       hero.defending = false; battle.menuOpen = true; battle.hover = -1; battle.sub = null;
+      if (onTouchUI()) { renderBattleBar(); return; } // celular: barra de botões tocáveis (sem mira)
       camera.getWorldPosition(rcPos); camera.getWorldDirection(rcDir); rcDir.y = 0; rcDir.normalize();
       battlePanel.position.set(rcPos.x + rcDir.x * 1.6, rcPos.y - 0.1, rcPos.z + rcDir.z * 1.6); battlePanel.lookAt(rcPos.x, rcPos.y - 0.1, rcPos.z);
       battlePanel.visible = true; drawBattleMenu();
     }
-    function closeBattleMenu() { if (battle) { battle.menuOpen = false; battle.sub = null; } battlePanel.visible = false; }
+    function closeBattleMenu() { if (battle) { battle.menuOpen = false; battle.sub = null; } battlePanel.visible = false; const bb = document.getElementById('battleBar'); if (bb) bb.style.display = 'none'; }
     function battlePick() {
       buildAimRay(); const hit = raycaster.intersectObject(battlePanel, false)[0]; if (!hit || !hit.uv) return -1;
       if (battle.faseBatalha === 'acalanto') return 0; // só "Cantar"
@@ -442,18 +467,19 @@
     }
     function aliveEnemy() { return battle && battle.enemies.find(e => e.alive); }
     function resetHeroTurn() { battle.heroAtb = 0; battle.ready = false; }
+    function refreshMenu() { if (!battle || !battle.menuOpen) return; if (onTouchUI()) renderBattleBar(); else drawBattleMenu(); }
     function battleSelect(i) {
       if (i < 0 || !battle) return;
-      if (battle.faseBatalha === 'acalanto') { closeBattleMenu(); cantar(); return; }
+      if (battle.faseBatalha === 'acalanto') { cantar(); refreshMenu(); return; } // canta sem fechar o menu (3 notas seguidas)
       if (!battle.sub) {
         const k = BAT_ACTIONS[i].k;
         if (k === 'atacar') { closeBattleMenu(); heroAttack(aliveEnemy()); }
         else if (k === 'defender') { closeBattleMenu(); hero.defending = true; flash('🛡 Você se protegeu!'); resetHeroTurn(); }
-        else if (k === 'tecnica') { battle.sub = 'tecnica'; battle.hover = -1; drawBattleMenu(); }
-        else if (k === 'item') { if (!Object.keys(hero.itens).some(x => hero.itens[x] > 0)) { flash('Você não tem itens.'); return; } battle.sub = 'item'; battle.hover = -1; drawBattleMenu(); }
+        else if (k === 'tecnica') { battle.sub = 'tecnica'; battle.hover = -1; refreshMenu(); }
+        else if (k === 'item') { if (!Object.keys(hero.itens).some(x => hero.itens[x] > 0)) { flash('Você não tem itens.'); return; } battle.sub = 'item'; battle.hover = -1; refreshMenu(); }
       } else {
         const it = battleMenuItems()[i]; if (!it) return;
-        if (it.back) { battle.sub = null; battle.hover = -1; drawBattleMenu(); return; }
+        if (it.back) { battle.sub = null; battle.hover = -1; refreshMenu(); return; }
         if (it.dim) { flash('MP insuficiente!'); return; }
         if (battle.sub === 'tecnica') { closeBattleMenu(); heroTecnica(it.key, aliveEnemy()); }
         else { closeBattleMenu(); heroItem(it.key); }
@@ -536,7 +562,7 @@
     }
     function loseBattle() { flash('😴 Você cochilou no Bosque…'); endBattle(); hero.hp = hero.hpMax; hero.mp = hero.mpMax; dolly.position.set(10, heightAt(10, 64), 64); travelEra(currentEra); }
     function endBattle() {
-      inBattle = false; closeBattleMenu(); updateMusicTrack();
+      inBattle = false; document.body.classList.remove('inbattle'); closeBattleMenu(); updateMusicTrack();
       if (battle && battle.ring) scene.remove(battle.ring);
       if (battle) for (const e of battle.enemies) if (e.alive && e.bar) e.actor.wrap.remove(e.bar);
       if (battle && battle.ally && battle.ally.actor) { scene.remove(battle.ally.actor.wrap); const mi = mixers.indexOf(battle.ally.actor.mixer); if (mi >= 0) mixers.splice(mi, 1); }
@@ -560,7 +586,7 @@
         a.enemyKey = 'murcha';
         const e = { actor: a, def: d, hp: d.hp, hpMax: d.hp, atb: 0.2, alive: true, bar: makeBar(), boss: true };
         e.bar.position.set(0, d.h + 0.7, 0); a.wrap.add(e.bar); drawBar(e.bar, 1, d.nome + ' ' + d.hp);
-        inBattle = true; updateMusicTrack();
+        inBattle = true; document.body.classList.add('inbattle'); updateMusicTrack();
         battle = { enemies: [e], ally: null, heroAtb: 0, ready: false, menuOpen: false, hover: -1, ring: null, boss: e, faseBatalha: 'luta', cantar: 0 };
         if (game.flags.fagulha) { /* aliada entra também */
           getGLB('../bosque-vr/pets/animal-fox.glb').then(g2 => {
@@ -581,7 +607,7 @@
       startNarration('Fagulha', ['Espera… esse jeito torto de asa, esse pó… ela não tá brava.', 'Ela tá com FRIO e sozinha faz tempo demais. Não dá pra bater nela — dá pra CANTAR pra ela. 🎵'], () => { flash('🎵 Abra o menu e escolha CANTAR (3×).'); });
     }
     function cantar() {
-      battle.cantar++; sfx('ready'); flash('🎵 lá… lá… lá…  (' + battle.cantar + '/3)'); resetHeroTurn();
+      battle.cantar++; sfx('ready'); flash('🎵 lá… lá… lá…  (' + battle.cantar + '/3)');
       if (battle.cantar >= 3) bossSleep();
     }
     function bossSleep() {
@@ -608,7 +634,7 @@
       }).catch(() => {});
     }
     function startBattle(actor) {
-      inBattle = true; updateMusicTrack();
+      inBattle = true; document.body.classList.add('inbattle'); updateMusicTrack();
       camera.getWorldDirection(rcDir); rcDir.y = 0; rcDir.normalize();
       const ex = dolly.position.x + rcDir.x * 5, ez = dolly.position.z + rcDir.z * 5;
       actor.wrap.position.set(ex, heightAt(ex, ez), ez);
@@ -651,7 +677,9 @@
       camera.getWorldPosition(camW);
       for (const e of b.enemies) { if (!e.alive) continue; e.actor.wrap.lookAt(dolly.position.x, e.actor.wrap.position.y, dolly.position.z); if (e.bar.userData.last !== e.hp) { e.bar.userData.last = e.hp; drawBar(e.bar, e.hp / e.hpMax, e.def.nome + ' ' + Math.max(0, e.hp)); } e.bar.lookAt(camW); }
       if (b.ally && b.ally.alive) { const al = b.ally, en = b.enemies.find(x => x.alive); if (en) al.actor.wrap.lookAt(en.actor.wrap.position.x, al.actor.wrap.position.y, en.actor.wrap.position.z); if (al.bar.userData.last !== al.hp) { al.bar.userData.last = al.hp; drawBar(al.bar, al.hp / al.hpMax, 'Fagulha ' + Math.max(0, al.hp)); } al.bar.lookAt(camW); }
-      if (b.menuOpen) { const h = battlePick(); if (h !== b.hover) { b.hover = h; drawBattleMenu(); } }
+      // celular: quando o herói está pronto, abre a barra de ações sozinha (sem precisar mirar)
+      if (b.ready && !b.menuOpen && !narration && onTouchUI()) openBattleMenu();
+      if (b.menuOpen && !onTouchUI()) { const h = battlePick(); if (h !== b.hover) { b.hover = h; drawBattleMenu(); } }
       updateHeroHud();
     }
     function updateDying(dt) {

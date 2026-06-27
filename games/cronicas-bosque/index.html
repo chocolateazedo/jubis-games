@@ -25,6 +25,14 @@
     #joy { position: fixed; left: 22px; bottom: max(26px, env(safe-area-inset-bottom)); width: 128px; height: 128px;
       border-radius: 50%; background: rgba(255,255,255,.18); border: 2px solid rgba(255,255,255,.4); z-index: 25; }
     #stick { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px; border-radius: 50%; background: rgba(120,220,150,.85); }
+    /* botões de ação no celular */
+    #mbtns { position: fixed; right: max(18px, env(safe-area-inset-right)); bottom: max(28px, env(safe-area-inset-bottom)); z-index: 25; display: flex; flex-direction: column-reverse; align-items: center; gap: 12px; }
+    .mbtn { border: 2px solid rgba(255,255,255,.45); background: rgba(120,220,150,.30); color: #fff; font-weight: 800; -webkit-tap-highlight-color: transparent; touch-action: none; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+    .mbtn:active { background: rgba(120,220,150,.65); transform: scale(.93); }
+    .mbtn.on { background: rgba(255,210,100,.75); border-color: #ffe6a0; }
+    #btnAcao { width: 84px; height: 84px; font-size: 19px; background: linear-gradient(180deg, rgba(123,232,143,.6), rgba(67,217,119,.55)); }
+    #btnPular, #btnCorrer { width: 60px; height: 60px; font-size: 24px; background: rgba(255,255,255,.18); }
+    #fsBtn { position: fixed; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); z-index: 25; width: 46px; height: 46px; font-size: 20px; background: rgba(0,0,0,.35); }
     /* botão VR (gerado pelo three) e o nosso start */
     #VRButton { z-index: 30; }
     #intro { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; padding: 18px;
@@ -81,7 +89,15 @@
 </head>
 <body>
   <a class="back" href="../../">← Voltar</a>
-  <div class="touch"><div id="joy"><div id="stick"></div></div></div>
+  <div class="touch">
+    <div id="joy"><div id="stick"></div></div>
+    <div id="mbtns">
+      <button class="mbtn" id="btnAcao">Ação</button>
+      <button class="mbtn small" id="btnPular">⤒</button>
+      <button class="mbtn small" id="btnCorrer">🏃</button>
+    </div>
+    <button class="mbtn" id="fsBtn">⛶</button>
+  </div>
   <p id="hint">Arraste/mouse para olhar · WASD ou direcional para andar</p>
 
   <button class="uibtn hidden" id="buildBtn">🔨 Construir</button>
@@ -1090,13 +1106,15 @@
       document.getElementById('buildMenu').classList.add('hidden');
       document.getElementById('buildBar').classList.remove('hidden');
     }
-    // raio de mira: no VR sai do controle direito; no PC/celular sai do centro da tela
+    // raio de mira: no VR sai do controle direito; no celular/PC-sem-trava sai do DEDO/cursor; senão do centro da tela
+    let pointerNDC = null; // {x,y} normalizado (-1..1) do toque/mouse, quando dá pra mirar com ele
+    let touchRun = false, touchJump = false; // botões de correr/pular do celular
     function buildAimRay() {
       if (renderer.xr.isPresenting && rightCtrl) {
-        rightCtrl.getWorldPosition(rcPos); rightCtrl.getWorldQuaternion(rcQuat);
-        rcDir.set(0, 0, -1).applyQuaternion(rcQuat);
-      } else { camera.getWorldPosition(rcPos); camera.getWorldDirection(rcDir); }
-      rcDir.normalize(); raycaster.set(rcPos, rcDir);
+        rightCtrl.getWorldPosition(rcPos); rightCtrl.getWorldQuaternion(rcQuat); rcDir.set(0, 0, -1).applyQuaternion(rcQuat).normalize(); raycaster.set(rcPos, rcDir);
+      } else if (pointerNDC && !locked) {
+        raycaster.setFromCamera(pointerNDC, camera); rcPos.copy(raycaster.ray.origin); rcDir.copy(raycaster.ray.direction);
+      } else { camera.getWorldPosition(rcPos); camera.getWorldDirection(rcDir); rcDir.normalize(); raycaster.set(rcPos, rcDir); }
     }
     const _aimTargets = [];
     function updateGhost() {
@@ -1285,16 +1303,48 @@
     // toque: direcional anda, arrastar (fora do direcional) olha
     const joy = { x: 0, y: 0, id: null, cx: 0, cy: 0 };
     const joyEl = document.getElementById('joy'), stickEl = document.getElementById('stick');
-    joyEl.addEventListener('touchstart', e => { const t = e.changedTouches[0]; joy.id = t.identifier; const r = joyEl.getBoundingClientRect(); joy.cx = r.left + r.width / 2; joy.cy = r.top + r.height / 2; e.preventDefault(); }, { passive: false });
+    joyEl.addEventListener('touchstart', e => { const t = e.changedTouches[0]; joy.id = t.identifier; const r = joyEl.getBoundingClientRect(); joy.cx = r.left + r.width / 2; joy.cy = r.top + r.height / 2; e.preventDefault(); e.stopPropagation(); }, { passive: false });
     let look = { id: null, x: 0, y: 0 };
-    addEventListener('touchstart', e => { for (const t of e.changedTouches) { if (t.identifier === joy.id) continue; if (look.id === null) { look.id = t.identifier; look.x = t.clientX; look.y = t.clientY; } } }, { passive: false });
+    function ndcFrom(x, y) { return { x: (x / innerWidth) * 2 - 1, y: -(y / innerHeight) * 2 + 1 }; }
+    function menuOpenAny() { return eraMenuOpen || (battle && battle.menuOpen) || menuOpen; }
+    function tapSelect() {
+      if (eraMenuOpen) { const c = eraPick(); if (c >= 0) eraSelect(c); return true; }
+      if (battle && battle.menuOpen) { const c = battlePick(); if (c >= 0) battleSelect(c); return true; }
+      if (menuOpen) { const c = menuPick(); if (c >= 0) menuSelect(c); return true; }
+      return false;
+    }
+    const isUiTap = t => t.target && t.target.closest && t.target.closest('.mbtn, #joy, a.back, #fsBtn');
+    addEventListener('touchstart', e => {
+      for (const t of e.changedTouches) {
+        if (t.identifier === joy.id || isUiTap(t)) continue;
+        pointerNDC = ndcFrom(t.clientX, t.clientY);
+        if (narration || activeNPC) { interact(); continue; }       // toque avança o diálogo
+        if (menuOpenAny()) { tapSelect(); continue; }                // toque escolhe direto no menu 3D
+        if (look.id === null) { look.id = t.identifier; look.x = t.clientX; look.y = t.clientY; } // senão, olhar
+      }
+    }, { passive: false });
     addEventListener('touchmove', e => {
       for (const t of e.changedTouches) {
         if (t.identifier === joy.id) { joy.x = Math.max(-1, Math.min(1, (t.clientX - joy.cx) / 54)); joy.y = Math.max(-1, Math.min(1, (t.clientY - joy.cy) / 54)); stickEl.style.transform = `translate(${joy.x * 34}px,${joy.y * 34}px)`; }
-        else if (t.identifier === look.id) { yaw -= (t.clientX - look.x) * 0.005; pitch -= (t.clientY - look.y) * 0.005; pitch = Math.max(-1.3, Math.min(1.3, pitch)); look.x = t.clientX; look.y = t.clientY; }
+        else if (t.identifier === look.id) { pointerNDC = ndcFrom(t.clientX, t.clientY); yaw -= (t.clientX - look.x) * 0.005; pitch -= (t.clientY - look.y) * 0.005; pitch = Math.max(-1.3, Math.min(1.3, pitch)); look.x = t.clientX; look.y = t.clientY; }
       }
     }, { passive: false });
     addEventListener('touchend', e => { for (const t of e.changedTouches) { if (t.identifier === joy.id) { joy.id = null; joy.x = joy.y = 0; stickEl.style.transform = ''; } if (t.identifier === look.id) look.id = null; } });
+    // ---------- fullscreen + botões de ação do celular ----------
+    const touchDev = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+    function goFullscreen() {
+      const el = document.documentElement, rq = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (rq && !document.fullscreenElement) { try { const p = rq.call(el); if (p && p.catch) p.catch(() => {}); } catch (e) {} }
+      if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
+    }
+    { const bind = (id, on, off) => { const el = document.getElementById(id); if (!el) return;
+        el.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); on(); }, { passive: false });
+        if (off) el.addEventListener('touchend', e => { e.preventDefault(); e.stopPropagation(); off(); }, { passive: false }); };
+      bind('btnAcao', () => interact());
+      bind('btnPular', () => { touchJump = true; }, () => { touchJump = false; });
+      bind('btnCorrer', () => { touchRun = !touchRun; const b = document.getElementById('btnCorrer'); if (b) b.classList.toggle('on', touchRun); });
+      bind('fsBtn', () => goFullscreen());
+    }
 
     // ---------- thumbstick do VR ----------
     let turned = false;
@@ -1349,8 +1399,8 @@
       const dt = last ? Math.min((t - last) / 1000, 0.05) : 0; last = t;
       const vr = renderer.xr.isPresenting;
       let mx = 0, mz = 0;
-      let run = !!(keys['ShiftLeft'] || keys['ShiftRight']);   // correr: Shift no PC, botão X no VR
-      let wantJump = !!keys['Space'];                          // pular: Espaço no PC, grip esquerdo no VR
+      let run = !!(keys['ShiftLeft'] || keys['ShiftRight']) || touchRun;   // correr: Shift (PC), gatilho esq (VR), botão (celular)
+      let wantJump = !!keys['Space'] || touchJump;                          // pular: Espaço (PC), grip (VR), botão (celular)
       if (vr) {
         const s = readSticks(); const dz = v => Math.abs(v) < 0.15 ? 0 : v;
         mx = dz(s.x); mz = dz(s.y);
@@ -1692,6 +1742,7 @@
       document.getElementById('intro').classList.add('hidden');
       document.getElementById('hint').style.display = 'block';
       if (game.fase === 0) iniciarFase(1); // começa a campanha
+      if (touchDev) goFullscreen(); // celular: tela cheia + paisagem
       if (!renderer.xr.isPresenting && cv.requestPointerLock && !('ontouchstart' in window)) cv.requestPointerLock();
       setTimeout(() => { document.getElementById('hint').style.display = 'none'; }, 6000);
     }

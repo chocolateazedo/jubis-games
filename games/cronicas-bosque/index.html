@@ -64,6 +64,9 @@
     #talkHint { position: fixed; z-index: 26; left: 50%; bottom: 22%; transform: translateX(-50%); display: none;
       background: rgba(8,24,16,.78); color: #eaffee; border: 1px solid rgba(160,230,180,.5); border-radius: 14px;
       padding: 10px 16px; font-weight: 700; font-size: 15px; cursor: pointer; }
+    #questBar { position: fixed; z-index: 27; top: max(58px, calc(env(safe-area-inset-top) + 52px)); left: 50%; transform: translateX(-50%); display: none;
+      background: rgba(8,24,16,.82); color: #eaffee; border: 1px solid rgba(255,225,140,.55); border-radius: 12px;
+      padding: 7px 16px; font-weight: 700; font-size: 14px; max-width: 92vw; text-align: center; pointer-events: none; }
     #toast { position: fixed; z-index: 36; left: 50%; top: 16%; transform: translateX(-50%); opacity: 0; transition: opacity .3s;
       background: rgba(8,24,16,.92); color: #fff; border: 1px solid rgba(160,230,180,.5); border-radius: 12px; padding: 10px 16px; font-size: 14px; max-width: 86vw; text-align: center; }
     /* multiplayer */
@@ -94,6 +97,7 @@
     <button id="bPlace">✓ Colocar</button>
     <button id="bCancel">✕ Sair</button>
   </div>
+  <div id="questBar"></div>
   <div id="talkHint">💬 Conversar (E / gatilho)</div>
   <div id="toast"></div>
 
@@ -257,7 +261,13 @@
     function updateFade(dt) {
       if (fadeDir === 0) return;
       fade += fadeDir * dt / 0.4;
-      if (fade >= 1) { fade = 1; fadeDir = -1; if (pendingEra) { applyEra(pendingEra); if (typeof flash === 'function') flash(ERA_NOME[pendingEra]); pendingEra = null; } }
+      if (fade >= 1) {
+        fade = 1; fadeDir = -1;
+        if (pendingEra) {
+          const arrived = pendingEra; applyEra(arrived); if (typeof flash === 'function') flash(ERA_NOME[arrived]); pendingEra = null;
+          if (arrived === 'ermo' && game.flags.lanterna && !game.flags.momento) { game.flags.momento = true; setTimeout(momentoErmo, 700); } // o MOMENTO
+        }
+      }
       else if (fade <= 0) { fade = 0; fadeDir = 0; }
       fadeQuad.material.opacity = fade; fadeQuad.visible = fade > 0.001;
     }
@@ -294,7 +304,13 @@
     }
     function closeEraMenu() { eraMenuOpen = false; eraPanel.visible = false; }
     function eraPick() { buildAimRay(); const hit = raycaster.intersectObject(eraPanel, false)[0]; if (!hit || !hit.uv) return -1; return Math.max(0, Math.min(2, Math.floor(hit.uv.x * 3))); }
-    function eraSelect(c) { if (c < 0) return; const k = ERA_KEYS[c]; closeEraMenu(); if (k !== currentEra) travelEra(k); else if (typeof flash === 'function') flash('Você já está ' + ERA_SUB[c] + '.'); }
+    function eraSelect(c) {
+      if (c < 0) return; const k = ERA_KEYS[c];
+      if (k === 'ermo' && !game.flags.lanterna) { closeEraMenu(); flash('🌑 Escuro demais lá no futuro… preciso da Lanterna-Vagalume.'); return; }
+      if (k === 'semente' && !game.flags.momento) { closeEraMenu(); flash('🌱 O passado ainda está longe demais… volte mais tarde.'); return; }
+      closeEraMenu();
+      if (k !== currentEra) travelEra(k); else flash('Você já está ' + ERA_SUB[c] + '.');
+    }
 
     // ============================================================
     //  COMBATE ATB (por turnos, no próprio mapa — à la Chrono Trigger)
@@ -700,38 +716,36 @@
     const flyAhead = new THREE.Vector3();
 
     // ---------- NPCs (blocky characters): bots com quem dá pra conversar ----------
-    const NPC_DATA = [
-      { f: 'a', nome: 'Dona Bené',   falas: ['Oi, criança! Bem-vindo ao Bosque.', 'Dizem que tem um lago lindo por aqui.', 'Cuide bem dos bichinhos, tá?'] },
-      { f: 'b', nome: 'Seu Joaquim', falas: ['Bom dia! Eu cuido das árvores daqui.', 'Já viu quantos pinheiros temos?'] },
-      { f: 'c', nome: 'Tião',        falas: ['E aí! Bora explorar?', 'Aperte o botão pra correr e o de pular!'] },
-      { f: 'd', nome: 'Lila',        falas: ['Que dia bonito pra um passeio!', 'Os passarinhos cantam a manhã toda.'] },
-      { f: 'e', nome: 'Capitã Aurora', falas: ['Em posição de sentido, recruta!', 'Sua missão: fazer amigos no bosque.', 'Boa sorte!'] },
-      { f: 'f', nome: 'Nina',        falas: ['Você viu o coelhinho passar?', 'Ele é rapidinho!'] },
-      { f: 'g', nome: 'Téo',         falas: ['Adoro construir cabanas.', 'Toca no martelo 🔨 e constrói também!'] },
-      { f: 'h', nome: 'Vó Cigana',   falas: ['Vejo um grande explorador em você...', 'O bosque guarda muitos segredos.'] },
-      { f: 'i', nome: 'Chico',       falas: ['Tô pescando no lago.', 'Já tem peixe nadando por lá!'] },
-      { f: 'j', nome: 'Mel',         falas: ['Zzzz... oi! Eu cuido das abelhas.', 'Olha pro céu, tem abelha voando!'] },
-      { f: 'k', nome: 'Bento',       falas: ['Os veados são tímidos.', 'Anda devagar que você vê todos os bichos.'] },
-      { f: 'l', nome: 'Dora',        falas: ['Quer ouvir uma história?', 'Era uma vez um bosque mágico...'] },
-      { f: 'm', nome: 'Gaspar',      falas: ['Grrr... brincadeira! Sou gente boa.', 'Vem cá bater um papo.'] },
-      { f: 'n', nome: 'Pituca',      falas: ['Eu colecciono pedrinhas!', 'Tem pedras espalhadas pelo bosque.'] },
-      { f: 'o', nome: 'Rui',         falas: ['Corre comigo até aquela árvore!', 'Quem chega primeiro ganha.'] },
-      { f: 'p', nome: 'Sofia',       falas: ['Os bichinhos adoram carinho.', 'Chega perto devagarinho deles.'] },
-      { f: 'q', nome: 'Vavá',        falas: ['Já deu uma volta no lago?', 'A água fica brilhando ao sol.'] },
-      { f: 'r', nome: 'Zeca',        falas: ['Esse bosque vai virar uma cidade!', 'Constrói umas casinhas com a gente.'] },
+    // ======================= MOTOR DE HISTÓRIA (10 fases) =======================
+    const game = { fase: 0, vovoFalou: false, objetivo: '', flags: { lanterna: false, fagulha: false, momento: false } };
+    const FASE_TITULOS = { 1: 'O Bosque Doente', 2: 'A Lanterna-Vagalume', 3: 'O Ermo' };
+    function setObjetivo(txt) {
+      game.objetivo = txt; const q = document.getElementById('questBar');
+      if (q) { q.textContent = 'Fase ' + game.fase + ' · ' + (FASE_TITULOS[game.fase] || '') + ' — ' + txt; q.style.display = 'block'; }
+    }
+    function iniciarFase(n) {
+      game.fase = n; flash('✨ Fase ' + n + ': ' + (FASE_TITULOS[n] || ''));
+      if (n === 1) setObjetivo('Fale com o Seu Cogu 🍄');
+      else if (n === 2) { setObjetivo('Ache a Lanterna-Vagalume ✨ (perto do Vovô)'); criarLanterna(); }
+      else if (n === 3) setObjetivo('Você viu o futuro murcho… a aventura continua! 🌱');
+    }
+    // NPCs da trama: diálogo condicional (falasFn) + ação ao terminar (onEnd); visíveis só na sua era
+    const STORY_NPCS = [
+      { id: 'cogu', nome: 'Seu Cogu', char: 'a', x: 4, z: 58, era: 'bosque',
+        falasFn: () => game.fase <= 1
+          ? ['Psiu… chega aqui, broto. Reparou no cinza no chão? Não é normal, não.', 'É o futuro vazando pra cá, pela raiz do Vovô Carvalho. Vai falar com ele!']
+          : ['Cuidado com o que você mexe lá atrás… toda folha que cai aqui caiu primeiro em outro lugar.'],
+        onEnd: () => { if (game.fase === 1) setObjetivo('Vá até o Vovô Carvalho e toque nele 🌳'); } },
+      { id: 'lila', nome: 'Lila', char: 'd', x: -7, z: 52, era: 'bosque', falasFn: () => ['Que dia bonito! Mas o lago anda com gostinho de poeira…'] },
+      { id: 'teo', nome: 'Téo', char: 'g', x: 16, z: 46, era: 'bosque', falasFn: () => ['Os bichinhos ficaram bravos com a Murcha. Se um te atacar, encha a barra de AÇÃO e revide!'] },
     ];
     const npcs = [];
-    NPC_DATA.forEach((d, i) => {
-      getGLB(`../bosque-vr/npcs/character-${d.f}.glb`).then(gltf => {
+    STORY_NPCS.forEach(d => {
+      getGLB(`../bosque-vr/npcs/character-${d.char}.glb`).then(gltf => {
         const a = spawnActor(gltf, 'idle', 1.5);
-        const ang = (i / NPC_DATA.length) * 6.2832, dist = 9 + (i % 3) * 5;
-        let x = Math.cos(ang) * dist, z = 40 + Math.sin(ang) * dist; // vila logo à frente de quem nasce
-        if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 3) { x = Math.cos(ang) * (dist + LAKE.r); z = Math.sin(ang) * (dist + LAKE.r); }
-        a.wrap.position.set(x, heightAt(x, z), z);
-        a.wrap.rotation.y = ang + Math.PI;
-        a.wrap.userData = { nome: d.nome, falas: d.falas, homeY: a.wrap.rotation.y };
-        obstacles.push({ x, z, r: 0.5 }); // dá pra esbarrar no NPC
-        npcs.push(a);
+        a.wrap.position.set(d.x, heightAt(d.x, d.z), d.z); a.wrap.rotation.y = Math.PI;
+        a.wrap.userData = { nome: d.nome, falasFn: d.falasFn, onEnd: d.onEnd };
+        a.story = d; obstacles.push({ x: d.x, z: d.z, r: 0.5 }); npcs.push(a);
       }).catch(() => {});
     });
 
@@ -755,20 +769,52 @@
       c.fillStyle = '#8fdfa0'; c.font = '30px Arial'; c.fillText('▶ continuar', 44, 286);
       dlgTex.needsUpdate = true;
     }
-    let activeNPC = null, talkIdx = 0;
-    function startTalk(a) { activeNPC = a; talkIdx = 0; drawDialogue(a.wrap.userData.nome, a.wrap.userData.falas[0]); dlgPlane.visible = true; playClip(a, 'emote-yes'); }
+    let activeNPC = null, talkIdx = 0, narration = null;
+    function startTalk(a) {
+      activeNPC = a; talkIdx = 0;
+      activeNPC._falas = a.wrap.userData.falasFn ? a.wrap.userData.falasFn() : (a.wrap.userData.falas || ['…']);
+      drawDialogue(a.wrap.userData.nome, activeNPC._falas[0]); dlgPlane.visible = true; playClip(a, 'emote-yes');
+    }
     function advanceTalk() {
-      if (!activeNPC) return;
-      talkIdx++;
-      const f = activeNPC.wrap.userData.falas;
-      if (talkIdx >= f.length) { dlgPlane.visible = false; playClip(activeNPC, 'idle'); activeNPC = null; return; }
+      if (!activeNPC) return; talkIdx++;
+      const f = activeNPC._falas;
+      if (talkIdx >= f.length) { dlgPlane.visible = false; playClip(activeNPC, 'idle'); const onEnd = activeNPC.wrap.userData.onEnd; activeNPC = null; if (onEnd) onEnd(); return; }
       drawDialogue(activeNPC.wrap.userData.nome, f[talkIdx]);
+    }
+    // narração (sem NPC): o balão aparece na frente do jogador (ex.: o "momento")
+    function startNarration(nome, falas, onEnd) { narration = { nome, falas, idx: 0, onEnd }; drawDialogue(nome, falas[0]); dlgPlane.visible = true; }
+    function advanceNarration() {
+      if (!narration) return; narration.idx++;
+      if (narration.idx >= narration.falas.length) { dlgPlane.visible = false; const oe = narration.onEnd; narration = null; if (oe) oe(); return; }
+      drawDialogue(narration.nome, narration.falas[narration.idx]);
     }
     const npcTmp = new THREE.Vector3(), camTmp = new THREE.Vector3();
     function nearestNPC() {
       let best = null, bd = 3.2; const px = dolly.position.x, pz = dolly.position.z;
-      for (const a of npcs) { const d = Math.hypot(a.wrap.position.x - px, a.wrap.position.z - pz); if (d < bd) { bd = d; best = a; } }
+      for (const a of npcs) { if (a.story && a.story.era !== currentEra) continue; const d = Math.hypot(a.wrap.position.x - px, a.wrap.position.z - pz); if (d < bd) { bd = d; best = a; } }
       return best;
+    }
+    // ---------- Lanterna-Vagalume (item-chave que destrava o Ermo) ----------
+    let lanternItem = null;
+    function criarLanterna() {
+      if (lanternItem || game.flags.lanterna) return;
+      const g = new THREE.Group();
+      g.add(new THREE.Mesh(new THREE.SphereGeometry(0.35, 12, 10), new THREE.MeshBasicMaterial({ color: 0xffe98a })));
+      g.add(new THREE.Mesh(new THREE.SphereGeometry(0.75, 12, 10), new THREE.MeshBasicMaterial({ color: 0xffe98a, transparent: true, opacity: 0.28, depthWrite: false })));
+      const lx = 11, lz = 27; g.position.set(lx, heightAt(lx, lz) + 1.1, lz); scene.add(g); lanternItem = g;
+    }
+    function nearLantern() { return lanternItem && Math.hypot(dolly.position.x - lanternItem.position.x, dolly.position.z - lanternItem.position.z) < 2.8; }
+    function pickLantern() {
+      if (!lanternItem) return; scene.remove(lanternItem); lanternItem = null; game.flags.lanterna = true;
+      flash('✨ Você pegou a Lanterna-Vagalume! O caminho do Ermo se abriu.'); sfx('fanfare'); setObjetivo('Toque o Vovô e viaje ao 🥀 Ermo');
+    }
+    // ---------- o Vovô: conversa (Fase 1) e depois abre o menu das Eras ----------
+    function tocarVovo() {
+      if (!game.vovoFalou) startNarration('Vovô Carvalho', ['Ô, broto… chega mais, sem medo.', 'Tem um cinza entrando nas minhas raízes… e minhas raízes tocam o ontem e o amanhã.', 'Ache uma luz e volte aqui — aí eu te mostro pra onde esse cinza vai dar.'], () => { game.vovoFalou = true; iniciarFase(2); });
+      else openEraMenu();
+    }
+    function momentoErmo() {
+      startNarration('', ['Aqui foi o bosque.', 'O lago virou pó. O céu esqueceu de ser azul.', 'No galho mais alto, o ninho está vazio — frio faz muito tempo.', 'Mas olha: uma folhinha verde, teimosa, ainda segura no galho.', 'Uma folha é pouco. Uma folha é tudo o que o futuro precisa pra recomeçar.'], () => { iniciarFase(3); });
     }
 
     // ---------- construção (Kenney Building Kit, CC0) ----------
@@ -1119,9 +1165,11 @@
     const talkHint = document.getElementById('talkHint');
     function interact() {
       if (inBattle) { battleInteract(); return; }
+      if (narration) { advanceNarration(); return; }
       if (eraMenuOpen) { eraSelect(eraHover); return; }
       if (activeNPC) { advanceTalk(); return; }
-      if (nearPortal()) { openEraMenu(); return; }
+      if (nearLantern()) { pickLantern(); return; }
+      if (nearPortal()) { tocarVovo(); return; }
       const n = nearestNPC(); if (n) startTalk(n);
     }
     addEventListener('keydown', e => {
@@ -1227,7 +1275,13 @@
       if (activeNPC) {
         camera.getWorldPosition(camTmp); activeNPC.wrap.getWorldPosition(npcTmp);
         dlgPlane.position.set(npcTmp.x, npcTmp.y + 2.2, npcTmp.z); dlgPlane.lookAt(camTmp);
+      } else if (narration) { // balão da narração: na frente do jogador
+        camera.getWorldPosition(camTmp); camera.getWorldDirection(rcDir); rcDir.y = 0; rcDir.normalize();
+        dlgPlane.position.set(camTmp.x + rcDir.x * 2.4, camTmp.y - 0.1, camTmp.z + rcDir.z * 2.4); dlgPlane.lookAt(camTmp);
       }
+      // NPCs visíveis só na sua era; a Lanterna boia e gira
+      for (const a of npcs) if (a.story) a.wrap.visible = a.story.era === currentEra;
+      if (lanternItem) { lanternItem.position.y = heightAt(lanternItem.position.x, lanternItem.position.z) + 1.1 + Math.sin(t * 0.004) * 0.12; lanternItem.rotation.y += dt; }
       // construção: fantasma encaixa no grid (ou mira de remoção)
       if (removeMode) updateRemoveAim();
       else if (ghost && !menuOpen) updateGhost();
@@ -1249,11 +1303,12 @@
         if (battle && battle.ready && !battle.menuOpen) { talkHint.textContent = '⚔ Agir! (E / gatilho / toque)'; talkHint.style.display = 'block'; }
         else if (battle && battle.menuOpen) { talkHint.textContent = 'Mire e confirme (E / gatilho / toque)'; talkHint.style.display = 'block'; }
         else talkHint.style.display = 'none';
-      } else {
-        const portalPerto = !activeNPC && !eraMenuOpen && nearPortal();
-        const near = !activeNPC && !eraMenuOpen && !portalPerto && nearestNPC();
-        if (portalPerto) { talkHint.textContent = '🌳 Tocar o Vovô Carvalho (E / gatilho)'; talkHint.style.display = 'block'; }
-        else if (near) { talkHint.textContent = '💬 Conversar (E / gatilho)'; talkHint.style.display = 'block'; }
+      } else if (narration) { talkHint.textContent = '▶ Continuar (E / gatilho / toque)'; talkHint.style.display = 'block'; }
+      else {
+        const livre = !activeNPC && !eraMenuOpen;
+        if (livre && nearLantern()) { talkHint.textContent = '✨ Pegar a Lanterna-Vagalume (E / gatilho)'; talkHint.style.display = 'block'; }
+        else if (livre && nearPortal()) { talkHint.textContent = '🌳 Tocar o Vovô Carvalho (E / gatilho)'; talkHint.style.display = 'block'; }
+        else if (livre && nearestNPC()) { talkHint.textContent = '💬 Conversar (E / gatilho)'; talkHint.style.display = 'block'; }
         else talkHint.style.display = 'none';
       }
       renderer.render(scene, camera);
@@ -1426,7 +1481,7 @@
       startAudio();
       document.getElementById('intro').classList.add('hidden');
       document.getElementById('hint').style.display = 'block';
-      // RPG: botões de construir/remover ficam ocultos
+      if (game.fase === 0) iniciarFase(1); // começa a campanha
       if (!renderer.xr.isPresenting && cv.requestPointerLock && !('ontouchstart' in window)) cv.requestPointerLock();
       setTimeout(() => { document.getElementById('hint').style.display = 'none'; }, 6000);
     }

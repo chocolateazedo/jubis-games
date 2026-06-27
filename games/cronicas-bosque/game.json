@@ -1,0 +1,10 @@
+{
+  "title": "Crônicas do Bosque",
+  "description": "RPG de viagem no tempo: cure o futuro do bosque mudando o passado. VR, PC e celular.",
+  "emoji": "🌳",
+  "tags": ["RPG", "VR", "aventura", "história"],
+  "entry": "index.html",
+  "cover": "cover.svg",
+  "order": 5,
+  "hidden": true
+}

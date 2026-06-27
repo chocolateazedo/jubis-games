@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 375" width="600" height="375" role="img" aria-label="Crônicas do Bosque">
+  <defs>
+    <linearGradient id="past" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe6b0"/><stop offset="1" stop-color="#8fcf6b"/></linearGradient>
+    <linearGradient id="pres" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7ec8f2"/><stop offset="1" stop-color="#357a33"/></linearGradient>
+    <linearGradient id="fut"  x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e0a85a"/><stop offset="1" stop-color="#6b5a3a"/></linearGradient>
+    <radialGradient id="ring" cx="50%" cy="50%" r="50%"><stop offset="60%" stop-color="#fff6c0" stop-opacity="0"/><stop offset="85%" stop-color="#9be8ff"/><stop offset="100%" stop-color="#9be8ff" stop-opacity="0"/></radialGradient>
+    <linearGradient id="ttl" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#eafff0"/><stop offset="1" stop-color="#7be88f"/></linearGradient>
+  </defs>
+  <rect x="0"   width="200" height="375" fill="url(#past)"/>
+  <rect x="200" width="200" height="375" fill="url(#pres)"/>
+  <rect x="400" width="200" height="375" fill="url(#fut)"/>
+  <!-- carvalho-portal no centro -->
+  <circle cx="300" cy="210" r="120" fill="url(#ring)"/>
+  <g transform="translate(300,250)">
+    <rect x="-16" y="-40" width="32" height="120" rx="10" fill="#5a3d22"/>
+    <circle cx="0" cy="-70" r="64" fill="#2f7d3a"/><circle cx="-46" cy="-44" r="40" fill="#3d9140"/><circle cx="46" cy="-44" r="40" fill="#4caf50"/>
+    <circle cx="-12" cy="-2" r="5" fill="#1c130a"/><circle cx="12" cy="-2" r="5" fill="#1c130a"/>
+    <path d="M-12 16 Q0 26 12 16" stroke="#1c130a" stroke-width="4" fill="none" stroke-linecap="round"/>
+  </g>
+  <rect x="90" y="36" width="420" height="64" rx="16" fill="rgba(8,24,16,.72)"/>
+  <text x="300" y="68" font-family="Arial, sans-serif" font-size="30" font-weight="800" text-anchor="middle" fill="url(#ttl)">🌳 Crônicas do Bosque</text>
+  <text x="300" y="92" font-family="Arial, sans-serif" font-size="15" font-weight="600" text-anchor="middle" fill="#cfeede">Semente · Bosque · Ermo</text>
+</svg>

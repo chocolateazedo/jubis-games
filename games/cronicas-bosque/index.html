@@ -1,0 +1,1092 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>Crônicas do Bosque</title>
+  <!--
+    Bosque VR — Jubis Games
+    Ambiente 3D em primeira pessoa pra passear: floresta com muitas árvores, lago e sol.
+    Funciona em óculos VR (Meta Quest, via WebXR) com o controle, e também no PC
+    (mouse + WASD) e no celular (arrastar pra olhar + direcional pra andar).
+    Three.js via CDN (importmap), sem build.
+  -->
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; height: 100%; overflow: hidden; font-family: 'Rubik', Arial, system-ui, sans-serif;
+      color: #fff; background: #87b9e6; }
+    canvas { display: block; }
+    a.back { position: fixed; top: max(12px, env(safe-area-inset-top)); left: 12px; z-index: 30; color: #fff;
+      text-decoration: none; font-weight: 800; background: rgba(10,30,20,.5); padding: 7px 12px; border-radius: 12px; }
+    /* controle de toque (só em celular/tablet) */
+    .touch { display: none; }
+    @media (hover: none) and (pointer: coarse) { .touch { display: block; } }
+    #joy { position: fixed; left: 22px; bottom: max(26px, env(safe-area-inset-bottom)); width: 128px; height: 128px;
+      border-radius: 50%; background: rgba(255,255,255,.18); border: 2px solid rgba(255,255,255,.4); z-index: 25; }
+    #stick { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px; border-radius: 50%; background: rgba(120,220,150,.85); }
+    /* botão VR (gerado pelo three) e o nosso start */
+    #VRButton { z-index: 30; }
+    #intro { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; padding: 18px;
+      background: radial-gradient(circle at 50% 30%, rgba(20,40,30,.55), rgba(6,14,10,.82)); }
+    #intro.hidden { display: none; }
+    .card { background: linear-gradient(180deg, rgba(20,46,32,.96), rgba(8,22,16,.96)); border: 1px solid rgba(160,230,180,.4);
+      border-radius: 18px; padding: 24px; width: min(94vw, 460px); text-align: center; box-shadow: 0 18px 50px rgba(0,0,0,.5); }
+    .card h1 { margin: 0 0 8px; font-size: 28px; }
+    .card p { margin: 8px 0; opacity: .95; line-height: 1.5; font-size: 15px; }
+    .card .keys { background: rgba(0,0,0,.25); border-radius: 12px; padding: 12px 14px; margin: 12px 0; text-align: left; font-size: 14px; line-height: 1.8; }
+    .card b { color: #bdf5c8; }
+    .go { margin-top: 6px; border: none; border-radius: 14px; padding: 14px 26px; font-weight: 800; font-size: 18px; cursor: pointer;
+      color: #06321b; background: linear-gradient(90deg, #7be88f, #43d977); box-shadow: 0 8px 22px -8px rgba(80,230,130,.8); }
+    .go:active { transform: translateY(1px); }
+    #hint { position: fixed; bottom: max(14px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); z-index: 20;
+      color: #eaffee; opacity: .8; font-size: 13px; text-align: center; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,.6); display: none; }
+    /* botão de construir + menu */
+    .uibtn { position: fixed; z-index: 28; border: none; border-radius: 14px; cursor: pointer; font-weight: 800; color: #06321b;
+      background: linear-gradient(90deg, #ffd56b, #ff9f43); box-shadow: 0 8px 22px -8px rgba(0,0,0,.6); }
+    #buildBtn { top: max(12px, env(safe-area-inset-top)); right: 12px; padding: 10px 14px; font-size: 16px; }
+    #removeBtn { top: max(12px, env(safe-area-inset-top)); right: 142px; padding: 10px 14px; font-size: 16px; background: linear-gradient(90deg, #ffb3b3, #ff8a8a); }
+    #removeBtn.on { background: linear-gradient(90deg, #ff5a5a, #d83232); color: #fff; }
+    #buildMenu { position: fixed; z-index: 35; inset: auto 10px max(10px, env(safe-area-inset-bottom)) auto; right: 10px; bottom: 10px;
+      width: min(94vw, 360px); max-height: 64vh; overflow-y: auto; background: linear-gradient(180deg, rgba(20,46,32,.97), rgba(8,22,16,.97));
+      border: 1px solid rgba(160,230,180,.4); border-radius: 16px; padding: 12px; box-shadow: 0 18px 50px rgba(0,0,0,.5); }
+    #buildMenu h3 { margin: 2px 4px 10px; font-size: 16px; }
+    #buildGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    #buildGrid button { text-align: left; border: 1px solid rgba(160,230,180,.25); background: rgba(255,255,255,.06); color: #eaffee;
+      border-radius: 9px; padding: 8px 9px; font-size: 12px; cursor: pointer; }
+    #buildGrid button:active { background: rgba(120,220,150,.3); }
+    #buildBar { position: fixed; z-index: 35; left: 50%; transform: translateX(-50%); bottom: max(16px, env(safe-area-inset-bottom));
+      display: flex; gap: 8px; }
+    #buildBar button { border: none; border-radius: 12px; padding: 12px 16px; font-weight: 800; font-size: 15px; cursor: pointer; color: #06321b; }
+    #bPlace { background: linear-gradient(90deg, #7be88f, #43d977); } #bRot { background: #cfe9ff; } #bCancel { background: #ffd0d0; }
+    #bUp, #bDown { background: #ffe6a8; min-width: 46px; }
+    .hidden { display: none !important; }
+    #talkHint { position: fixed; z-index: 26; left: 50%; bottom: 22%; transform: translateX(-50%); display: none;
+      background: rgba(8,24,16,.78); color: #eaffee; border: 1px solid rgba(160,230,180,.5); border-radius: 14px;
+      padding: 10px 16px; font-weight: 700; font-size: 15px; cursor: pointer; }
+    #toast { position: fixed; z-index: 36; left: 50%; top: 16%; transform: translateX(-50%); opacity: 0; transition: opacity .3s;
+      background: rgba(8,24,16,.92); color: #fff; border: 1px solid rgba(160,230,180,.5); border-radius: 12px; padding: 10px 16px; font-size: 14px; max-width: 86vw; text-align: center; }
+    /* multiplayer */
+    .mp { background: rgba(0,0,0,.22); border-radius: 12px; padding: 12px; margin: 12px 0 4px; text-align: left; }
+    .mp .row { display: flex; gap: 6px; margin-top: 8px; }
+    .mp input { flex: 1; min-width: 0; border-radius: 9px; border: 1px solid rgba(160,230,180,.3); background: rgba(255,255,255,.08); color: #fff; padding: 9px 10px; font-size: 14px; }
+    .mp button { border: none; border-radius: 9px; padding: 9px 12px; font-weight: 800; font-size: 14px; cursor: pointer; color: #06321b; background: linear-gradient(90deg,#8fd0ff,#5aa0ff); white-space: nowrap; }
+    .mp .lbl { font-size: 12px; opacity: .8; }
+    #roomCode { position: fixed; z-index: 28; top: max(12px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); display: none;
+      background: rgba(8,24,16,.8); color: #eaffee; border: 1px solid rgba(160,230,180,.5); border-radius: 12px; padding: 8px 14px; font-weight: 800; font-size: 15px; }
+  </style>
+</head>
+<body>
+  <a class="back" href="../../">← Voltar</a>
+  <div class="touch"><div id="joy"><div id="stick"></div></div></div>
+  <p id="hint">Arraste/mouse para olhar · WASD ou direcional para andar</p>
+
+  <button class="uibtn hidden" id="buildBtn">🔨 Construir</button>
+  <button class="uibtn hidden" id="removeBtn">🗑 Remover</button>
+  <div id="buildMenu" class="hidden">
+    <h3>🔨 Escolha o que construir</h3>
+    <div id="buildGrid"></div>
+  </div>
+  <div id="buildBar" class="hidden">
+    <button id="bDown">⬇</button>
+    <button id="bUp">⬆</button>
+    <button id="bRot">⟳ Girar</button>
+    <button id="bPlace">✓ Colocar</button>
+    <button id="bCancel">✕ Sair</button>
+  </div>
+  <div id="talkHint">💬 Conversar (E / gatilho)</div>
+  <div id="toast"></div>
+
+  <div id="intro">
+    <div class="card">
+      <h1>🌳 Crônicas do Bosque</h1>
+      <p>O bosque está ficando <b>cinza</b>. O <b>Vovô Carvalho</b> guarda um segredo: suas raízes tocam o <b>ontem</b> e o <b>amanhã</b>. Viaje no tempo e <b>cure o futuro mudando o passado</b>.</p>
+      <div class="keys">
+        🥽 <b>VR (óculos Meta):</b> ande com a <b>alavanca</b> (gatilho esquerdo = correr, lateral = pular).<br>
+        🖥️ <b>PC:</b> mouse pra olhar, <b>W A S D</b> pra andar (Shift = correr, Espaço = pular), <b>E</b> pra falar.<br>
+        📱 <b>Celular:</b> <b>arraste</b> pra olhar, <b>direcional</b> pra andar, toque pra falar.<br>
+        <span style="opacity:.7">Chegue perto do <b>Vovô Carvalho</b> pra viajar entre as eras.</span>
+      </div>
+      <button class="go" id="goBtn">▶ Começar a aventura</button>
+    </div>
+  </div>
+  <div id="roomCode" style="display:none"></div>
+
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { VRButton } from 'three/addons/webxr/VRButton.js';
+    import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+    const SPEED = 3.2;                 // metros por segundo
+    const WORLD_R = 178;               // raio andável
+    const LAKE = { x: 34, z: -26, r: 26 };
+    const LAKE_Y = -0.9;              // superfície da água (o terreno afunda perto dela)
+    // relevo suave do terreno; perto do lago vira uma bacia rasa
+    function heightAt(x, z) {
+      let h = Math.sin(x * 0.020) * Math.cos(z * 0.022) * 3.4
+            + Math.sin(x * 0.05 + 1.7) * 1.2 + Math.cos(z * 0.045 + 0.6) * 1.1;
+      const ld = Math.hypot(x - LAKE.x, z - LAKE.z);
+      if (ld < LAKE.r + 12) { const floor = LAKE_Y - 0.5; const k = Math.max(0, Math.min(1, (ld - LAKE.r) / 12)); h = floor + (h - floor) * k; } // fundo abaixo da água, senão o terreno cobre o lago
+      return h;
+    }
+    const UP = new THREE.Vector3(0, 1, 0);
+
+    // ---------- renderer / cena ----------
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.xr.enabled = true;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    document.body.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    const SKY = 0x9ed0f2;
+    scene.fog = new THREE.Fog(0xbfe0f5, 60, 230);
+
+    // ---------- player (dolly) + câmera ----------
+    const dolly = new THREE.Group();
+    const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 600);
+    camera.position.set(0, 1.6, 0);   // altura dos olhos (no VR vira 0 no floor)
+    dolly.add(camera);
+    dolly.position.set(10, heightAt(10, 64), 64);
+    dolly.rotation.y = 0;              // olhando pro centro/lago (-z)
+    scene.add(dolly);
+
+    // controles VR (ficam dentro do dolly pra se moverem junto)
+    let rightCtrl = null, leftCtrl = null;
+    for (let i = 0; i < 2; i++) {
+      const c = renderer.xr.getController(i);
+      const ray = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1)]),
+        new THREE.LineBasicMaterial({ color: 0x9be8a8 }));
+      ray.scale.z = 5; c.add(ray); dolly.add(c);
+      c.addEventListener('connected', e => { if (e.data && e.data.handedness === 'right') rightCtrl = c; else leftCtrl = c; });
+      c.addEventListener('disconnected', () => { if (rightCtrl === c) rightCtrl = null; if (leftCtrl === c) leftCtrl = null; });
+    }
+
+    // ---------- luz / céu / sol ----------
+    const hemi = new THREE.HemisphereLight(0xdfeeff, 0x5a6b40, 0.4); scene.add(hemi);
+    const sun = new THREE.DirectionalLight(0xfff4d6, 1.4);
+    sun.position.set(80, 120, 40);
+    scene.add(sun);
+
+    // céu + iluminação por imagem (HDRI CC0 do Poly Haven)
+    scene.background = new THREE.Color(SKY); // enquanto o HDRI carrega
+    let skyEnv = null; // ambiente HDRI (só usado na era Bosque)
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    new RGBELoader().load('../bosque-vr/sky.hdr?v=1', tex => {
+      tex.mapping = THREE.EquirectangularReflectionMapping;
+      skyEnv = pmrem.fromEquirectangular(tex).texture;
+      tex.dispose(); pmrem.dispose();
+      applyEra(currentEra); // re-aplica pra usar o HDRI se estiver no Bosque
+    }, undefined, () => { /* fallback: mantém o céu sólido */ });
+
+    // ---------- chão (grama com textura PBR CC0) ----------
+    const grassTex = new THREE.TextureLoader().load('../bosque-vr/grass.jpg?v=1');
+    grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping; grassTex.repeat.set(70, 70);
+    grassTex.colorSpace = THREE.SRGBColorSpace; grassTex.anisotropy = 4;
+    const G = (WORLD_R + 30) * 2;
+    const groundGeo = new THREE.PlaneGeometry(G, G, 110, 110);
+    { const p = groundGeo.attributes.position; for (let i = 0; i < p.count; i++) p.setZ(i, heightAt(p.getX(i), -p.getY(i))); groundGeo.computeVertexNormals(); }
+    const ground = new THREE.Mesh(groundGeo, new THREE.MeshStandardMaterial({ map: grassTex, roughness: 1 }));
+    ground.rotation.x = -Math.PI / 2; scene.add(ground);
+
+    // ---------- lago (numa bacia) ----------
+    const lake = new THREE.Mesh(new THREE.CircleGeometry(LAKE.r, 48), new THREE.MeshStandardMaterial({ color: 0x2f7fc4, transparent: true, opacity: 0.86, roughness: 0.12, metalness: 0.45 }));
+    lake.rotation.x = -Math.PI / 2; lake.position.set(LAKE.x, LAKE_Y + 0.05, LAKE.z); scene.add(lake);
+    // margem de areia
+    const shore = new THREE.Mesh(new THREE.RingGeometry(LAKE.r - 0.5, LAKE.r + 3.5, 48), new THREE.MeshStandardMaterial({ color: 0xd9c48b, roughness: 1 }));
+    shore.rotation.x = -Math.PI / 2; shore.position.set(LAKE.x, LAKE_Y + 0.12, LAKE.z); scene.add(shore);
+
+    // ---------- AS TRÊS ERAS (mesmo terreno, só troca pele: cor/luz/névoa) ----------
+    // render baratíssimo: nada é reinstanciado; trocar de era é só ajustar materiais/luz/fog.
+    const ERAS = {
+      bosque:  { bg: 0x9ed0f2, useEnv: true,  fog: [0xbfe0f5, 60, 230], sun: [0xfff4d6, 1.40], hemi: [0xdfeeff, 0x5a6b40, 0.40], ground: 0xffffff, shore: 0xd9c48b, water: 0x2f7fc4, waterOp: 0.86 },
+      ermo:    { bg: 0xcf9b5a, useEnv: false, fog: [0xc98a4a, 38, 150], sun: [0xffb066, 0.85], hemi: [0xe9c79a, 0x4a3a2a, 0.55], ground: 0x9a8358, shore: 0x8a7048, water: 0x6a5a3a, waterOp: 0.30 },
+      semente: { bg: 0xffe0c0, useEnv: false, fog: [0xffe6c8, 70, 260], sun: [0xffe6b0, 1.25], hemi: [0xfff0d8, 0x6f8f5a, 0.60], ground: 0xbfe6a0, shore: 0xe8d2a0, water: 0x4fd0c0, waterOp: 0.80 },
+    };
+    let currentEra = 'bosque';
+    function applyEra(e) {
+      const E = ERAS[e] || ERAS.bosque; currentEra = e;
+      const useHDRI = E.useEnv && skyEnv;
+      scene.background = useHDRI ? skyEnv : new THREE.Color(E.bg);
+      scene.environment = useHDRI ? skyEnv : null;
+      scene.fog.color.setHex(E.fog[0]); scene.fog.near = E.fog[1]; scene.fog.far = E.fog[2];
+      sun.color.setHex(E.sun[0]); sun.intensity = E.sun[1];
+      hemi.color.setHex(E.hemi[0]); hemi.groundColor.setHex(E.hemi[1]); hemi.intensity = E.hemi[2];
+      ground.material.color.setHex(E.ground);
+      shore.material.color.setHex(E.shore);
+      lake.material.color.setHex(E.water); lake.material.opacity = E.waterOp;
+    }
+    applyEra('bosque');
+    const ERA_NOME = { bosque: '🌳 Bosque — agora', ermo: '🥀 Ermo — o futuro murcho', semente: '🌱 Semente — o passado' };
+    function travelEra(e) { applyEra(e); if (typeof flash === 'function') flash(ERA_NOME[e] || e); } // (clarão/crossfade de trilha entram numa próxima milestone)
+
+    // ---------- árvores e pedras: modelos 3D CC0 (Quaternius), instanciados ----------
+    const TREES = 240;
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), scl = new THREE.Vector3(), ID = new THREE.Quaternion();
+    // sombra "blob" no chão sob cada árvore (some na hora, antes dos GLBs carregarem)
+    const blobGeo = new THREE.CircleGeometry(1.5, 14); blobGeo.rotateX(-Math.PI / 2);
+    const blobMesh = new THREE.InstancedMesh(blobGeo, new THREE.MeshBasicMaterial({ color: 0x10280f, transparent: true, opacity: 0.3 }), TREES);
+    blobMesh.count = 0; scene.add(blobMesh);
+
+    // posições das árvores (folhosas + pinheiros), fora do lago e da clareira de spawn
+    const broad = [], pine = [];
+    { let placed = 0, guard = 0;
+      while (placed < TREES && guard < TREES * 30) {
+        guard++;
+        const a = Math.random() * Math.PI * 2, d = 8 + Math.random() * (WORLD_R - 6), x = Math.cos(a) * d, z = Math.sin(a) * d;
+        if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 5) continue;
+        if (Math.hypot(x - dolly.position.x, z - dolly.position.z) < 7) continue;
+        const y = heightAt(x, z), s = 0.8 + Math.random() * 0.7, yaw = Math.random() * Math.PI * 2, vi = (Math.random() * 5) | 0;
+        (Math.random() < 0.38 ? pine : broad).push({ x, y, z, s, yaw, vi });
+        m.compose(pos.set(x, y + 0.06, z), ID, scl.set(s * 2.2, 1, s * 2.2)); blobMesh.setMatrixAt(placed, m);
+        placed++;
+      }
+      blobMesh.count = placed; blobMesh.instanceMatrix.needsUpdate = true;
+    }
+
+    // extrai as variações de um GLB (cada filho do RootNode): geometria centralizada
+    // na origem e a altura medida, pra normalizar a escala depois
+    function extractVariants(gltf) {
+      const out = []; gltf.scene.updateMatrixWorld(true);
+      // desce até o nó que tem várias variações como filhos (ex.: Scene -> RootNode)
+      let parent = gltf.scene;
+      while (parent.children.length === 1 && !parent.children[0].isMesh && parent.children[0].children.length) parent = parent.children[0];
+      const wp = new THREE.Vector3();
+      for (const vn of [...parent.children]) {
+        vn.getWorldPosition(wp);                    // remove o deslocamento (modelos vêm lado a lado em +X)
+        const parts = [], bb = new THREE.Box3();
+        vn.traverse(o => {
+          if (!o.isMesh) return;
+          const g = o.geometry.clone(); g.applyMatrix4(o.matrixWorld); g.translate(-wp.x, -wp.y, -wp.z);
+          g.computeBoundingBox(); bb.union(g.boundingBox); parts.push({ geo: g, mat: o.material });
+        });
+        if (parts.length) out.push({ parts, h: Math.max(0.01, bb.max.y - bb.min.y) });
+      }
+      return out;
+    }
+    // cria um InstancedMesh por (variação × material), normalizando pra altura-alvo
+    function buildInstanced(variants, places, targetH) {
+      if (!variants.length) return;
+      const byV = variants.map(() => []);
+      for (const p of places) byV[p.vi % variants.length].push(p);
+      variants.forEach((v, vi) => {
+        const list = byV[vi]; if (!list.length) return;
+        const base = targetH / v.h;
+        for (const part of v.parts) {
+          const im = new THREE.InstancedMesh(part.geo, part.mat, list.length);
+          list.forEach((p, k) => { q.setFromAxisAngle(UP, p.yaw); const s = p.s * base; m.compose(pos.set(p.x, p.y, p.z), q, scl.set(s, s, s)); im.setMatrixAt(k, m); });
+          im.instanceMatrix.needsUpdate = true; scene.add(im);
+        }
+      });
+    }
+
+    const gltfLoader = new GLTFLoader();
+    gltfLoader.load('../bosque-vr/models/trees.glb', g => buildInstanced(extractVariants(g), broad, 6.5));
+    gltfLoader.load('../bosque-vr/models/pines.glb', g => buildInstanced(extractVariants(g), pine, 8.5));
+
+    // pedras (modelo CC0), também instanced
+    const rockPlace = [];
+    for (let i = 0; i < 26; i++) {
+      const a = Math.random() * Math.PI * 2, d = 10 + Math.random() * (WORLD_R - 10), x = Math.cos(a) * d, z = Math.sin(a) * d;
+      if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 3) continue;
+      if (Math.hypot(x - dolly.position.x, z - dolly.position.z) < 9) continue;
+      rockPlace.push({ x, y: heightAt(x, z), z, s: 0.6 + Math.random() * 1.4, yaw: Math.random() * Math.PI * 2, vi: (Math.random() * 5) | 0 });
+    }
+    gltfLoader.load('../bosque-vr/models/rocks.glb', g => buildInstanced(extractVariants(g), rockPlace, 1.4));
+
+    // ---------- obstáculos (tronco das árvores + base das pedras): não dá pra atravessar ----------
+    // raio de colisão pequeno (o tronco/base, não a copa) — as posições já são conhecidas, não esperam o GLB
+    const obstacles = [];
+    for (const p of broad) obstacles.push({ x: p.x, z: p.z, r: 0.5 + p.s * 0.28 });
+    for (const p of pine)  obstacles.push({ x: p.x, z: p.z, r: 0.45 + p.s * 0.25 });
+    for (const p of rockPlace) obstacles.push({ x: p.x, z: p.z, r: 0.4 + p.s * 0.5 });
+
+    // ---------- modelos animados CC0 (Kenney Cube Pets + Blocky Characters) ----------
+    // carregador com cache (cada GLB baixa 1x; depois é clonado por instância)
+    const _glbCache = {};
+    function getGLB(url) { return _glbCache[url] || (_glbCache[url] = gltfLoader.loadAsync(url)); }
+    const mixers = []; // todos os AnimationMixers, atualizados no loop
+    function bestClip(gltf, name) {
+      return THREE.AnimationClip.findByName(gltf.animations || [], name)
+        || (gltf.animations || []).find(a => new RegExp(name, 'i').test(a.name))
+        || (gltf.animations || []).find(a => /idle/i.test(a.name)) || (gltf.animations || [])[0] || null;
+    }
+    // cria uma instância (clone) de um gltf, escalada por altura-alvo, tocando um clipe; pés no y=0 do wrap
+    function spawnActor(gltf, clipName, targetH) {
+      const model = gltf.scene.clone(true);
+      const bb = new THREE.Box3().setFromObject(model), h = (bb.max.y - bb.min.y) || 1, sc = targetH / h;
+      model.position.y = -bb.min.y;
+      const wrap = new THREE.Group(); wrap.add(model); wrap.scale.setScalar(sc); scene.add(wrap);
+      const mixer = new THREE.AnimationMixer(model); mixers.push(mixer);
+      const clip = bestClip(gltf, clipName); let action = null;
+      if (clip) { action = mixer.clipAction(clip); action.play(); }
+      return { wrap, model, mixer, gltf, action };
+    }
+    // troca o clipe tocado de um ator (fade suave)
+    function playClip(actor, name) {
+      const clip = bestClip(actor.gltf, name); if (!clip) return;
+      const next = actor.mixer.clipAction(clip);
+      if (actor.action === next) return;
+      next.reset().fadeIn(0.2).play(); if (actor.action) actor.action.fadeOut(0.2);
+      actor.action = next;
+    }
+    // ponto aleatório em terra firme (fora do lago e do mundo)
+    function landPoint(maxR) {
+      for (let i = 0; i < 40; i++) {
+        const a = Math.random() * 6.2832, d = 6 + Math.random() * (maxR - 6), x = Math.cos(a) * d, z = Math.sin(a) * d;
+        if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 2) continue;
+        return { x, z };
+      }
+      return { x: 0, z: 12 };
+    }
+
+    // ---------- PETS (cube pets): um de cada tipo, vagando pelo bosque ----------
+    const PETS = ['beaver','bee','bunny','caterpillar','cat','chick','cow','crab','deer','dog','elephant','fish','fox','giraffe','hog','koala','lion','monkey','panda','parrot','penguin','pig','polar','tiger'];
+    const pets = [];
+    PETS.forEach((name, i) => {
+      getGLB(`../bosque-vr/pets/animal-${name}.glb`).then(gltf => {
+        const a = spawnActor(gltf, 'walk', 0.85);
+        const p = landPoint(WORLD_R - 12), tgt = landPoint(WORLD_R - 12);
+        a.wrap.position.set(p.x, heightAt(p.x, p.z), p.z);
+        a.wrap.userData = { tx: tgt.x, tz: tgt.z, sp: 0.7 + Math.random() * 0.7, wait: 0 };
+        pets.push(a);
+      }).catch(() => {});
+    });
+
+    // ---------- AVES voando (modelos de papagaio/passarinho do mesmo pack, em círculos) ----------
+    const flyers = [];
+    ['parrot','chick','parrot','bee'].forEach((name, i) => {
+      getGLB(`../bosque-vr/pets/animal-${name}.glb`).then(gltf => {
+        for (let k = 0; k < 3; k++) {
+          const a = spawnActor(gltf, 'idle', 0.55);
+          a.wrap.userData = { cx: (Math.random() - 0.5) * 200, cz: (Math.random() - 0.5) * 200, r: 12 + Math.random() * 34, h: 12 + Math.random() * 20, sp: 0.16 + Math.random() * 0.24, ph: Math.random() * 6.28 };
+          flyers.push(a);
+        }
+      }).catch(() => {});
+    });
+    const flyAhead = new THREE.Vector3();
+
+    // ---------- NPCs (blocky characters): bots com quem dá pra conversar ----------
+    const NPC_DATA = [
+      { f: 'a', nome: 'Dona Bené',   falas: ['Oi, criança! Bem-vindo ao Bosque.', 'Dizem que tem um lago lindo por aqui.', 'Cuide bem dos bichinhos, tá?'] },
+      { f: 'b', nome: 'Seu Joaquim', falas: ['Bom dia! Eu cuido das árvores daqui.', 'Já viu quantos pinheiros temos?'] },
+      { f: 'c', nome: 'Tião',        falas: ['E aí! Bora explorar?', 'Aperte o botão pra correr e o de pular!'] },
+      { f: 'd', nome: 'Lila',        falas: ['Que dia bonito pra um passeio!', 'Os passarinhos cantam a manhã toda.'] },
+      { f: 'e', nome: 'Capitã Aurora', falas: ['Em posição de sentido, recruta!', 'Sua missão: fazer amigos no bosque.', 'Boa sorte!'] },
+      { f: 'f', nome: 'Nina',        falas: ['Você viu o coelhinho passar?', 'Ele é rapidinho!'] },
+      { f: 'g', nome: 'Téo',         falas: ['Adoro construir cabanas.', 'Toca no martelo 🔨 e constrói também!'] },
+      { f: 'h', nome: 'Vó Cigana',   falas: ['Vejo um grande explorador em você...', 'O bosque guarda muitos segredos.'] },
+      { f: 'i', nome: 'Chico',       falas: ['Tô pescando no lago.', 'Já tem peixe nadando por lá!'] },
+      { f: 'j', nome: 'Mel',         falas: ['Zzzz... oi! Eu cuido das abelhas.', 'Olha pro céu, tem abelha voando!'] },
+      { f: 'k', nome: 'Bento',       falas: ['Os veados são tímidos.', 'Anda devagar que você vê todos os bichos.'] },
+      { f: 'l', nome: 'Dora',        falas: ['Quer ouvir uma história?', 'Era uma vez um bosque mágico...'] },
+      { f: 'm', nome: 'Gaspar',      falas: ['Grrr... brincadeira! Sou gente boa.', 'Vem cá bater um papo.'] },
+      { f: 'n', nome: 'Pituca',      falas: ['Eu colecciono pedrinhas!', 'Tem pedras espalhadas pelo bosque.'] },
+      { f: 'o', nome: 'Rui',         falas: ['Corre comigo até aquela árvore!', 'Quem chega primeiro ganha.'] },
+      { f: 'p', nome: 'Sofia',       falas: ['Os bichinhos adoram carinho.', 'Chega perto devagarinho deles.'] },
+      { f: 'q', nome: 'Vavá',        falas: ['Já deu uma volta no lago?', 'A água fica brilhando ao sol.'] },
+      { f: 'r', nome: 'Zeca',        falas: ['Esse bosque vai virar uma cidade!', 'Constrói umas casinhas com a gente.'] },
+    ];
+    const npcs = [];
+    NPC_DATA.forEach((d, i) => {
+      getGLB(`../bosque-vr/npcs/character-${d.f}.glb`).then(gltf => {
+        const a = spawnActor(gltf, 'idle', 1.5);
+        const ang = (i / NPC_DATA.length) * 6.2832, dist = 9 + (i % 3) * 5;
+        let x = Math.cos(ang) * dist, z = 40 + Math.sin(ang) * dist; // vila logo à frente de quem nasce
+        if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 3) { x = Math.cos(ang) * (dist + LAKE.r); z = Math.sin(ang) * (dist + LAKE.r); }
+        a.wrap.position.set(x, heightAt(x, z), z);
+        a.wrap.rotation.y = ang + Math.PI;
+        a.wrap.userData = { nome: d.nome, falas: d.falas, homeY: a.wrap.rotation.y };
+        obstacles.push({ x, z, r: 0.5 }); // dá pra esbarrar no NPC
+        npcs.push(a);
+      }).catch(() => {});
+    });
+
+    // balão de diálogo 3D (canvas → textura): aparece sobre o NPC, funciona em VR/PC/celular
+    const dlgCanvas = document.createElement('canvas'); dlgCanvas.width = 1024; dlgCanvas.height = 320;
+    const dlgCtx = dlgCanvas.getContext('2d');
+    const dlgTex = new THREE.CanvasTexture(dlgCanvas); dlgTex.colorSpace = THREE.SRGBColorSpace;
+    const dlgPlane = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.81),
+      new THREE.MeshBasicMaterial({ map: dlgTex, transparent: true, depthTest: false }));
+    dlgPlane.renderOrder = 999; dlgPlane.visible = false; scene.add(dlgPlane);
+    function rr(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+    function drawDialogue(nome, texto) {
+      const c = dlgCtx; c.clearRect(0, 0, 1024, 320);
+      c.fillStyle = 'rgba(8,22,16,0.92)'; rr(c, 8, 8, 1008, 304, 36); c.fill();
+      c.strokeStyle = 'rgba(160,230,180,0.6)'; c.lineWidth = 5; c.stroke();
+      c.fillStyle = '#bdf5c8'; c.font = 'bold 52px Arial'; c.fillText(nome, 44, 86);
+      c.fillStyle = '#fff'; c.font = '42px Arial';
+      const words = texto.split(' '); let line = '', y = 156;
+      for (const w of words) { if (c.measureText(line + w).width > 940) { c.fillText(line, 44, y); line = w + ' '; y += 56; } else line += w + ' '; }
+      c.fillText(line, 44, y);
+      c.fillStyle = '#8fdfa0'; c.font = '30px Arial'; c.fillText('▶ continuar', 44, 286);
+      dlgTex.needsUpdate = true;
+    }
+    let activeNPC = null, talkIdx = 0;
+    function startTalk(a) { activeNPC = a; talkIdx = 0; drawDialogue(a.wrap.userData.nome, a.wrap.userData.falas[0]); dlgPlane.visible = true; playClip(a, 'emote-yes'); }
+    function advanceTalk() {
+      if (!activeNPC) return;
+      talkIdx++;
+      const f = activeNPC.wrap.userData.falas;
+      if (talkIdx >= f.length) { dlgPlane.visible = false; playClip(activeNPC, 'idle'); activeNPC = null; return; }
+      drawDialogue(activeNPC.wrap.userData.nome, f[talkIdx]);
+    }
+    const npcTmp = new THREE.Vector3(), camTmp = new THREE.Vector3();
+    function nearestNPC() {
+      let best = null, bd = 3.2; const px = dolly.position.x, pz = dolly.position.z;
+      for (const a of npcs) { const d = Math.hypot(a.wrap.position.x - px, a.wrap.position.z - pz); if (d < bd) { bd = d; best = a; } }
+      return best;
+    }
+
+    // ---------- construção (Kenney Building Kit, CC0) ----------
+    const BUILD_PIECES = ['barricade-doorway-a','barricade-doorway-b','barricade-doorway-c','barricade-window-a','barricade-window-b','barricade-window-c','border-corner-diagonal','border-corner','border-corner-round','border-corner-small','border','border-high-corner-diagonal','border-high-corner','border-high-corner-round','border-high-corner-small','border-high','column','column-thin','column-wide','detail-pipe','door-rotate-round-a','door-rotate-round-b','door-rotate-round-c','door-rotate-round-d','door-rotate-square-a','door-rotate-square-b','door-rotate-square-c','door-rotate-square-d','floor-corner-diagonal','floor-corner-round','floor','floor-half','floor-quarter','gutter-vertical-bottom','gutter-vertical','gutter-vertical-short','gutter-vertical-top','gutter-vertical-wall','plating-detailed','plating-detailed-wide','plating','plating-wide','roof-flat-center','roof-flat-corner','roof-flat-corner-inner','roof-flat-patch','roof-flat-patch-large','roof-flat-side','roof-flat-square','stairs-center','stairs-center-short','stairs-closed','stairs-closed-short','stairs-open','stairs-open-short','stairs-sides','stairs-sides-short','wall-corner-column-bottom','wall-corner-column','wall-corner-column-small-bottom','wall-corner-column-small','wall-corner-diagonal','wall-corner','wall-corner-round','wall-doorway-round','wall-doorway-square','wall-doorway-wide-round','wall-doorway-wide-square','wall','wall-half','wall-low','wall-window-round-detailed','wall-window-round','wall-window-square-detailed','wall-window-square','wall-window-wide-round-detailed','wall-window-wide-round','wall-window-wide-square-detailed','wall-window-wide-square'];
+    // nomes em PT-BR (o nome interno/arquivo continua em inglês)
+    const BUILD_PT = {
+      'barricade-doorway-a': 'Barricada de porta A', 'barricade-doorway-b': 'Barricada de porta B', 'barricade-doorway-c': 'Barricada de porta C',
+      'barricade-window-a': 'Barricada de janela A', 'barricade-window-b': 'Barricada de janela B', 'barricade-window-c': 'Barricada de janela C',
+      'border-corner-diagonal': 'Beirada canto diagonal', 'border-corner': 'Beirada de canto', 'border-corner-round': 'Beirada canto arredondado', 'border-corner-small': 'Beirada canto pequeno', 'border': 'Beirada',
+      'border-high-corner-diagonal': 'Beirada alta canto diagonal', 'border-high-corner': 'Beirada alta de canto', 'border-high-corner-round': 'Beirada alta canto arredondado', 'border-high-corner-small': 'Beirada alta canto pequeno', 'border-high': 'Beirada alta',
+      'column': 'Coluna', 'column-thin': 'Coluna fina', 'column-wide': 'Coluna larga', 'detail-pipe': 'Cano',
+      'door-rotate-round-a': 'Porta redonda A', 'door-rotate-round-b': 'Porta redonda B', 'door-rotate-round-c': 'Porta redonda C', 'door-rotate-round-d': 'Porta redonda D',
+      'door-rotate-square-a': 'Porta quadrada A', 'door-rotate-square-b': 'Porta quadrada B', 'door-rotate-square-c': 'Porta quadrada C', 'door-rotate-square-d': 'Porta quadrada D',
+      'floor-corner-diagonal': 'Piso canto diagonal', 'floor-corner-round': 'Piso canto arredondado', 'floor': 'Piso', 'floor-half': 'Meio piso', 'floor-quarter': 'Piso pequeno',
+      'gutter-vertical-bottom': 'Calha vertical base', 'gutter-vertical': 'Calha vertical', 'gutter-vertical-short': 'Calha vertical curta', 'gutter-vertical-top': 'Calha vertical topo', 'gutter-vertical-wall': 'Calha vertical parede',
+      'plating-detailed': 'Chapa detalhada', 'plating-detailed-wide': 'Chapa detalhada larga', 'plating': 'Chapa', 'plating-wide': 'Chapa larga',
+      'roof-flat-center': 'Telhado centro', 'roof-flat-corner': 'Telhado canto', 'roof-flat-corner-inner': 'Telhado canto interno', 'roof-flat-patch': 'Telhado remendo', 'roof-flat-patch-large': 'Telhado remendo grande', 'roof-flat-side': 'Telhado lateral', 'roof-flat-square': 'Telhado quadrado',
+      'stairs-center': 'Escada central', 'stairs-center-short': 'Escada central curta', 'stairs-closed': 'Escada fechada', 'stairs-closed-short': 'Escada fechada curta', 'stairs-open': 'Escada aberta', 'stairs-open-short': 'Escada aberta curta', 'stairs-sides': 'Escada com laterais', 'stairs-sides-short': 'Escada laterais curta',
+      'wall-corner-column-bottom': 'Parede canto coluna base', 'wall-corner-column': 'Parede canto com coluna', 'wall-corner-column-small-bottom': 'Parede canto coluna pequena base', 'wall-corner-column-small': 'Parede canto coluna pequena',
+      'wall-corner-diagonal': 'Parede canto diagonal', 'wall-corner': 'Parede de canto', 'wall-corner-round': 'Parede canto arredondado',
+      'wall-doorway-round': 'Parede com porta redonda', 'wall-doorway-square': 'Parede com porta quadrada', 'wall-doorway-wide-round': 'Parede porta larga redonda', 'wall-doorway-wide-square': 'Parede porta larga quadrada',
+      'wall': 'Parede', 'wall-half': 'Meia parede', 'wall-low': 'Parede baixa',
+      'wall-window-round-detailed': 'Parede janela redonda detalhada', 'wall-window-round': 'Parede com janela redonda', 'wall-window-square-detailed': 'Parede janela quadrada detalhada', 'wall-window-square': 'Parede com janela quadrada',
+      'wall-window-wide-round-detailed': 'Parede janela larga redonda detalhada', 'wall-window-wide-round': 'Parede janela larga redonda', 'wall-window-wide-square-detailed': 'Parede janela larga quadrada detalhada', 'wall-window-wide-square': 'Parede janela larga quadrada',
+    };
+    const piecePT = n => BUILD_PT[n] || n.replace(/-/g, ' ');
+    const BUILD_SCALE = 2.4, BUILD_DIST = 4.5; // tamanho das peças e distância do fantasma à frente do jogador
+    const placedGroup = new THREE.Group(); scene.add(placedGroup);
+    let buildPiece = null, ghost = null, ghostRY = 0, buildLevel = 0, curFoot = null; // curFoot = tamanho da peça atual
+    let removeMode = false, removeTarget = null;
+    const placedBoxes = [];   // caixas (AABB) das peças colocadas, pra impedir sobreposição
+    const placedByKey = {};   // chave de posição -> objeto (remover/sincronizar)
+    const _footCache = {};    // tamanho real (footprint) por peça, em metros
+    const ghostMat = new THREE.MeshBasicMaterial({ color: 0x86ff9d, transparent: true, opacity: 0.5, depthWrite: false });
+    const server = { user: null, csrf: null };
+    // tamanho real da peça no mundo: largura (X), profundidade (Z), altura (Y) e base
+    function footprintOf(name, gltf) {
+      if (_footCache[name]) return _footCache[name];
+      const bb = new THREE.Box3().setFromObject(gltf.scene);
+      return (_footCache[name] = {
+        fw: (bb.max.x - bb.min.x) * BUILD_SCALE, fd: (bb.max.z - bb.min.z) * BUILD_SCALE,
+        fh: (bb.max.y - bb.min.y) * BUILD_SCALE, base: bb.min.y * BUILD_SCALE,
+      });
+    }
+    // passo do grid = TAMANHO da peça (com a rotação) → peças do mesmo tipo encaixam coladas, sem buracos
+    function stepFor(foot, ry) {
+      const c = Math.abs(Math.cos(ry)), s = Math.abs(Math.sin(ry));
+      return { sx: Math.max(0.3, c * foot.fw + s * foot.fd), sz: Math.max(0.3, s * foot.fw + c * foot.fd) };
+    }
+    function posKey(x, y, z) { return Math.round(x * 10) + ',' + Math.round(y * 10) + ',' + Math.round(z * 10); }
+    function boxAt(x, y, z, foot, ry) {
+      const st = stepFor(foot, ry), hx = st.sx / 2, hz = st.sz / 2;
+      return { minx: x - hx, maxx: x + hx, miny: y, maxy: y + foot.fh, minz: z - hz, maxz: z + hz };
+    }
+    function overlapsAny(b) {
+      const m = 0.2; // encostar não conta como sobrepor
+      for (const o of placedBoxes)
+        if (b.minx < o.maxx - m && b.maxx > o.minx + m && b.minz < o.maxz - m && b.maxz > o.minz + m && b.miny < o.maxy - m && b.maxy > o.miny + m) return true;
+      return false;
+    }
+    // encaixa a posição no grid do tamanho da peça; y = chão da coluna + nível*altura
+    function snapPlacement(rawx, rawz, level, foot, ry) {
+      const st = stepFor(foot, ry);
+      const x = Math.round(rawx / st.sx) * st.sx, z = Math.round(rawz / st.sz) * st.sz;
+      return { x, y: heightAt(x, z) + level * foot.fh - foot.base, z };
+    }
+    const raycaster = new THREE.Raycaster();
+    const rcPos = new THREE.Vector3(), rcDir = new THREE.Vector3(), rcQuat = new THREE.Quaternion();
+
+    function addPiece(name, x, y, z, ry, asGhost) {
+      return getGLB(`../bosque-vr/build/${name}.glb`).then(gltf => {
+        const foot = footprintOf(name, gltf);
+        const o = gltf.scene.clone(true); o.scale.setScalar(BUILD_SCALE);
+        o.position.set(x, y, z); o.rotation.y = ry;
+        if (asGhost) { o.traverse(m => { if (m.isMesh) m.material = ghostMat; }); } // material único pra recolorir (verde/vermelho)
+        else {
+          o.updateMatrixWorld(true); buildSolids.push(o); // colisão por raycast
+          const box = boxAt(x, y, z, foot, ry); box.obj = o; placedBoxes.push(box); // caixa pra anti-sobreposição
+          const key = posKey(x, y, z); o.userData.key = key; o.userData.piece = name; placedByKey[key] = o;
+        }
+        (asGhost ? scene : placedGroup).add(o);
+        return o;
+      });
+    }
+    // ---------- colisão das construções por raycast na geometria real ----------
+    const buildSolids = []; // peças colocadas (pra raycast de parede e de piso)
+    const downRay = new THREE.Raycaster(), fwdRay = new THREE.Raycaster();
+    const vDown = new THREE.Vector3(0, -1, 0), vTmp = new THREE.Vector3(), vDir = new THREE.Vector3();
+    const PRW = 0.4; // "raio" do jogador
+    // altura da superfície (terreno ou piso/escada de construção) sob o jogador
+    function floorHeightAt(x, z, feetY) {
+      let h = heightAt(x, z);
+      if (buildSolids.length) {
+        downRay.set(vTmp.set(x, feetY + 1.3, z), vDown); downRay.far = 6;
+        const hit = downRay.intersectObjects(buildSolids, true)[0];
+        if (hit && hit.point.y > h) h = hit.point.y; // sobe pro piso (até 1,3 m de degrau)
+      }
+      return h;
+    }
+    // tenta mover num eixo; se tiver parede à frente, para antes dela (permite deslizar)
+    function sweep(p, dx, dz) {
+      const dist = Math.hypot(dx, dz); if (dist < 1e-5) return;
+      if (buildSolids.length) {
+        vDir.set(dx, 0, dz).normalize();
+        fwdRay.set(vTmp.set(p.x, p.y + 0.9, p.z), vDir); fwdRay.far = dist + PRW;
+        const hit = fwdRay.intersectObjects(buildSolids, true)[0];
+        if (hit && hit.distance < dist + PRW) { const allow = Math.max(0, hit.distance - PRW); p.x += vDir.x * allow; p.z += vDir.z * allow; return; }
+      }
+      p.x += dx; p.z += dz;
+    }
+    function selectPiece(name) {
+      buildPiece = name; ghostRY = 0; buildLevel = 0; removeMode = false; removeBox.visible = false; curFoot = null;
+      if (ghost) { scene.remove(ghost); ghost = null; }
+      getGLB(`../bosque-vr/build/${name}.glb`).then(g => { curFoot = footprintOf(name, g); }); // tamanho pro encaixe
+      addPiece(name, 0, -999, 0, 0, true).then(o => { ghost = o; });
+      document.getElementById('buildMenu').classList.add('hidden');
+      document.getElementById('buildBar').classList.remove('hidden');
+    }
+    // raio de mira: no VR sai do controle direito; no PC/celular sai do centro da tela
+    function buildAimRay() {
+      if (renderer.xr.isPresenting && rightCtrl) {
+        rightCtrl.getWorldPosition(rcPos); rightCtrl.getWorldQuaternion(rcQuat);
+        rcDir.set(0, 0, -1).applyQuaternion(rcQuat);
+      } else { camera.getWorldPosition(rcPos); camera.getWorldDirection(rcDir); }
+      rcDir.normalize(); raycaster.set(rcPos, rcDir);
+    }
+    const _aimTargets = [];
+    function updateGhost() {
+      if (!ghost) return;
+      buildAimRay();
+      _aimTargets.length = 0; _aimTargets.push(ground); for (const b of buildSolids) _aimTargets.push(b); // mira no chão E nas construções (empilhar)
+      const hit = raycaster.intersectObjects(_aimTargets, true)[0];
+      let rx, rz;
+      if (hit && hit.distance < 80) { rx = hit.point.x; rz = hit.point.z; }
+      else { rx = rcPos.x + rcDir.x * BUILD_DIST; rz = rcPos.z + rcDir.z * BUILD_DIST; }
+      if (!curFoot) return;
+      const s = snapPlacement(rx, rz, buildLevel, curFoot, ghostRY); // encaixa no grid do tamanho da peça
+      ghost.position.set(s.x, s.y, s.z); ghost.rotation.y = ghostRY;
+      ghostMat.color.set(overlapsAny(boxAt(s.x, s.y, s.z, curFoot, ghostRY)) ? 0xff6b6b : 0x86ff9d); // vermelho = sobrepõe
+    }
+    function doPlace() {
+      if (!ghost || !buildPiece || !curFoot) return;
+      const x = ghost.position.x, y = ghost.position.y, z = ghost.position.z, ry = ghostRY;
+      if (overlapsAny(boxAt(x, y, z, curFoot, ry))) { flash('Já tem uma peça aqui 🙂'); return; } // sem sobrepor
+      addPiece(buildPiece, x, y, z, ry, false).then(o => { saveBuilding(buildPiece, x, y, z, ry).then(id => { if (id && o) o.userData.id = id; }); });
+      netSendBuild(buildPiece, x, y, z, ry); // mostra pra todo mundo na sala na hora
+    }
+    function cancelBuild() {
+      buildPiece = null; buildLevel = 0; if (ghost) { scene.remove(ghost); ghost = null; }
+      document.getElementById('buildBar').classList.add('hidden');
+    }
+    function changeLevel(d) { if (buildPiece) buildLevel = Math.max(-2, Math.min(20, buildLevel + d)); }
+    function saveBuilding(piece, x, y, z, ry) {
+      if (!server.user) { flash('Entre na sua conta no site pra salvar as construções 🙂'); return Promise.resolve(null); }
+      return fetch('../bosque-vr/buildings.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF': server.csrf || '' },
+        body: JSON.stringify({ piece, x, y, z, ry }) }).then(r => r.json()).then(d => (d && d.id) || null).catch(() => null);
+    }
+    // ---------- remover peças ----------
+    const removeBox = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xff5555, transparent: true, opacity: 0.3, depthWrite: false }));
+    removeBox.visible = false; scene.add(removeBox);
+    const _rb = new THREE.Box3(), _rbc = new THREE.Vector3(), _rbs = new THREE.Vector3();
+    function removePieceLocal(o) {
+      if (!o) return;
+      let i = buildSolids.indexOf(o); if (i >= 0) buildSolids.splice(i, 1);
+      i = placedBoxes.findIndex(b => b.obj === o); if (i >= 0) placedBoxes.splice(i, 1);
+      if (o.parent) o.parent.remove(o);
+      if (o.userData.key) delete placedByKey[o.userData.key];
+    }
+    function doRemove(o) {
+      if (!o) return;
+      const id = o.userData.id, key = o.userData.key;
+      removePieceLocal(o); removeBox.visible = false; removeTarget = null;
+      if (id) fetch('../bosque-vr/buildings.php?id=' + id, { method: 'DELETE' }).catch(() => {});
+      netSendRemove(key);
+    }
+    function removeByKey(key) { removePieceLocal(placedByKey[key]); }
+    function updateRemoveAim() {
+      buildAimRay();
+      const hit = raycaster.intersectObjects(buildSolids, true)[0];
+      let target = null;
+      if (hit) { let o = hit.object; while (o && o.parent && o.parent !== placedGroup) o = o.parent; if (o && o.parent === placedGroup) target = o; }
+      removeTarget = target;
+      if (target) { _rb.setFromObject(target); _rb.getCenter(_rbc); _rb.getSize(_rbs); removeBox.position.copy(_rbc); removeBox.scale.set(_rbs.x + 0.2, _rbs.y + 0.2, _rbs.z + 0.2); removeBox.visible = true; }
+      else removeBox.visible = false;
+    }
+    function toggleRemoveMode() {
+      removeMode = !removeMode;
+      if (removeMode) { cancelBuild(); if (menuOpen) closeMenu3D(); flash('Modo remover: mire numa peça e use o gatilho (VR), tecla X (PC) ou toque'); }
+      else { removeBox.visible = false; removeTarget = null; }
+      const rb = document.getElementById('removeBtn'); if (rb) rb.classList.toggle('on', removeMode);
+    }
+    function loadBuildings() {
+      fetch('../bosque-vr/buildings.php').then(r => r.json()).then(d => {
+        if (!d || !d.ok) return;
+        server.user = d.user || null; server.csrf = d.csrf || null;
+        (d.buildings || []).forEach(b => addPiece(b.piece, +b.x, +b.y, +b.z, +b.ry, false));
+      }).catch(() => {});
+    }
+    // (construção/persistência desligadas no RPG single-player)
+
+    // ---------- menu de construção 3D (grande, com ícones reais, pra usar no VR) ----------
+    const MENU_COLS = 3, MENU_ROWS = 5, MENU_PER = MENU_COLS * (MENU_ROWS - 1); // linha 0 = navegação, 4 linhas de itens (12/página)
+    const MENU_W = 2.8; // largura/altura do painel em metros (bem maior que antes)
+    const menuPages = Math.ceil(BUILD_PIECES.length / MENU_PER);
+    let menuOpen = false, menuPage = 0, menuHover = -1;
+    const mCanvas = document.createElement('canvas'); mCanvas.width = 1024; mCanvas.height = 1024;
+    const mCtx = mCanvas.getContext('2d');
+    const mTex = new THREE.CanvasTexture(mCanvas); mTex.colorSpace = THREE.SRGBColorSpace;
+    const menuPlane = new THREE.Mesh(new THREE.PlaneGeometry(MENU_W, MENU_W), new THREE.MeshBasicMaterial({ map: mTex, transparent: true }));
+    menuPlane.visible = false; scene.add(menuPlane); // respeita profundidade pra os ícones 3D ficarem na frente
+    const menuIcons = new THREE.Group(); scene.add(menuIcons); // mini-modelos 3D (os "ícones")
+    function wrapCenter(c, text, cx, cy, maxW, lh) {
+      const words = text.split(' '), lines = []; let line = '';
+      for (const w of words) { if (c.measureText(line + w).width > maxW && line) { lines.push(line.trim()); line = w + ' '; } else line += w + ' '; }
+      lines.push(line.trim());
+      const y0 = cy - (lines.length - 1) * lh / 2;
+      for (let i = 0; i < lines.length; i++) c.fillText(lines[i], cx, y0 + i * lh);
+    }
+    function drawMenu() {
+      const c = mCtx, W = 1024, cw = W / MENU_COLS, ch = W / MENU_ROWS;
+      c.clearRect(0, 0, W, W);
+      c.fillStyle = 'rgba(8,22,16,0.92)'; rr(c, 4, 4, W - 8, W - 8, 30); c.fill();
+      c.strokeStyle = 'rgba(160,230,180,0.6)'; c.lineWidth = 6; c.stroke();
+      c.textAlign = 'center'; c.textBaseline = 'middle';
+      const nav = ['◀', '✕ Sair · pág ' + (menuPage + 1) + '/' + menuPages, '▶'];
+      for (let col = 0; col < MENU_COLS; col++) {
+        const x = col * cw;
+        if (menuHover === col) { c.fillStyle = 'rgba(120,220,150,0.4)'; rr(c, x + 8, 8, cw - 16, ch - 16, 14); c.fill(); }
+        c.fillStyle = '#bdf5c8'; c.font = 'bold ' + (col === 1 ? 30 : 52) + 'px Arial'; c.fillText(nav[col], x + cw / 2, ch / 2);
+      }
+      for (let i = 0; i < MENU_PER; i++) {
+        const idx = menuPage * MENU_PER + i; if (idx >= BUILD_PIECES.length) break;
+        const row = 1 + Math.floor(i / MENU_COLS), col = i % MENU_COLS, x = col * cw, y = row * ch, cell = row * MENU_COLS + col;
+        c.fillStyle = menuHover === cell ? 'rgba(120,220,150,0.4)' : 'rgba(255,255,255,0.06)';
+        rr(c, x + 8, y + 8, cw - 16, ch - 16, 16); c.fill();
+        c.strokeStyle = 'rgba(160,230,180,0.18)'; c.lineWidth = 2; c.stroke();
+        c.fillStyle = '#eaffee'; c.font = '22px Arial'; // rótulo no rodapé da célula (o ícone 3D fica acima)
+        wrapCenter(c, piecePT(BUILD_PIECES[idx]), x + cw / 2, y + ch - 36, cw - 24, 24);
+      }
+      c.textAlign = 'left'; c.textBaseline = 'alphabetic'; mTex.needsUpdate = true;
+    }
+    function clearIcons() { for (let i = menuIcons.children.length - 1; i >= 0; i--) menuIcons.remove(menuIcons.children[i]); }
+    function iconWorld(row, col) { // centro (parte de cima) da célula, em coordenadas de mundo
+      const cw = 1 / MENU_COLS, ch = 1 / MENU_ROWS;
+      const ux = (col + 0.5) * cw, uy = (row + 0.4) * ch; // 0..1 no canvas (y pra baixo)
+      return menuPlane.localToWorld(new THREE.Vector3((ux - 0.5) * MENU_W, (0.5 - uy) * MENU_W, 0.12));
+    }
+    function buildIcons() {
+      clearIcons(); if (!menuOpen) return;
+      menuPlane.updateMatrixWorld(true); // garante posição correta das células antes do localToWorld
+      for (let i = 0; i < MENU_PER; i++) {
+        const idx = menuPage * MENU_PER + i; if (idx >= BUILD_PIECES.length) break;
+        const row = 1 + Math.floor(i / MENU_COLS), col = i % MENU_COLS;
+        const holder = new THREE.Group(); holder.position.copy(iconWorld(row, col)); holder.quaternion.copy(menuPlane.quaternion); holder.rotateX(-0.42);
+        menuIcons.add(holder);
+        getGLB(`../bosque-vr/build/${BUILD_PIECES[idx]}.glb`).then(g => {
+          if (!menuOpen || !holder.parent) return;
+          const o = g.scene.clone(true);
+          const bb = new THREE.Box3().setFromObject(o), sz = new THREE.Vector3(); bb.getSize(sz);
+          const mx = Math.max(sz.x, sz.y, sz.z) || 1, s = (MENU_W / MENU_COLS) * 0.40 / mx;
+          o.scale.setScalar(s); const ctr = new THREE.Vector3(); bb.getCenter(ctr); o.position.set(-ctr.x * s, -ctr.y * s, -ctr.z * s);
+          const spin = new THREE.Group(); spin.add(o); holder.add(spin);
+        }).catch(() => {});
+      }
+    }
+    function openMenu3D() {
+      menuOpen = true; menuHover = -1; removeMode = false; removeBox.visible = false;
+      camera.getWorldPosition(rcPos); camera.getWorldDirection(rcDir); rcDir.y = 0; rcDir.normalize();
+      menuPlane.position.set(rcPos.x + rcDir.x * 2.3, rcPos.y, rcPos.z + rcDir.z * 2.3);
+      menuPlane.lookAt(rcPos.x, rcPos.y, rcPos.z); menuPlane.visible = true; drawMenu(); buildIcons();
+    }
+    function closeMenu3D() { menuOpen = false; menuPlane.visible = false; clearIcons(); }
+    function toggleMenu3D() { menuOpen ? closeMenu3D() : openMenu3D(); }
+    function menuPick() {
+      buildAimRay();
+      const hit = raycaster.intersectObject(menuPlane, false)[0];
+      if (!hit || !hit.uv) return -1;
+      const col = Math.min(MENU_COLS - 1, Math.max(0, Math.floor(hit.uv.x * MENU_COLS)));
+      const row = Math.min(MENU_ROWS - 1, Math.max(0, Math.floor((1 - hit.uv.y) * MENU_ROWS)));
+      return row * MENU_COLS + col;
+    }
+    function menuSelect(cell) {
+      if (cell < 0) return;
+      const col = cell % MENU_COLS, row = (cell / MENU_COLS) | 0;
+      if (row === 0) {
+        if (col === 0) { menuPage = (menuPage - 1 + menuPages) % menuPages; drawMenu(); buildIcons(); }
+        else if (col === 2) { menuPage = (menuPage + 1) % menuPages; drawMenu(); buildIcons(); }
+        else { closeMenu3D(); cancelBuild(); }
+        return;
+      }
+      const idx = menuPage * MENU_PER + (row - 1) * MENU_COLS + col;
+      if (idx < BUILD_PIECES.length) { selectPiece(BUILD_PIECES[idx]); closeMenu3D(); }
+    }
+
+    // ---------- entrada VR ----------
+    renderer.xr.setReferenceSpaceType('local-floor');
+    document.body.appendChild(VRButton.createButton(renderer));
+    renderer.xr.addEventListener('sessionstart', () => { camera.position.set(0, 0, 0); });
+    renderer.xr.addEventListener('sessionend', () => { camera.position.set(0, 1.6, 0); });
+
+    // ---------- controles desktop/touch ----------
+    const keys = {};
+    addEventListener('keydown', e => { keys[e.code] = true; });
+    addEventListener('keyup', e => { keys[e.code] = false; });
+    let yaw = dolly.rotation.y, pitch = 0, locked = false;
+    const cv = renderer.domElement;
+    cv.addEventListener('click', () => { if (!renderer.xr.isPresenting && cv.requestPointerLock) cv.requestPointerLock(); });
+    document.addEventListener('pointerlockchange', () => { locked = (document.pointerLockElement === cv); });
+    addEventListener('mousemove', e => { if (!locked) return; yaw -= e.movementX * 0.0022; pitch -= e.movementY * 0.0022; pitch = Math.max(-1.3, Math.min(1.3, pitch)); });
+
+    // toque: direcional anda, arrastar (fora do direcional) olha
+    const joy = { x: 0, y: 0, id: null, cx: 0, cy: 0 };
+    const joyEl = document.getElementById('joy'), stickEl = document.getElementById('stick');
+    joyEl.addEventListener('touchstart', e => { const t = e.changedTouches[0]; joy.id = t.identifier; const r = joyEl.getBoundingClientRect(); joy.cx = r.left + r.width / 2; joy.cy = r.top + r.height / 2; e.preventDefault(); }, { passive: false });
+    let look = { id: null, x: 0, y: 0 };
+    addEventListener('touchstart', e => { for (const t of e.changedTouches) { if (t.identifier === joy.id) continue; if (look.id === null) { look.id = t.identifier; look.x = t.clientX; look.y = t.clientY; } } }, { passive: false });
+    addEventListener('touchmove', e => {
+      for (const t of e.changedTouches) {
+        if (t.identifier === joy.id) { joy.x = Math.max(-1, Math.min(1, (t.clientX - joy.cx) / 54)); joy.y = Math.max(-1, Math.min(1, (t.clientY - joy.cy) / 54)); stickEl.style.transform = `translate(${joy.x * 34}px,${joy.y * 34}px)`; }
+        else if (t.identifier === look.id) { yaw -= (t.clientX - look.x) * 0.005; pitch -= (t.clientY - look.y) * 0.005; pitch = Math.max(-1.3, Math.min(1.3, pitch)); look.x = t.clientX; look.y = t.clientY; }
+      }
+    }, { passive: false });
+    addEventListener('touchend', e => { for (const t of e.changedTouches) { if (t.identifier === joy.id) { joy.id = null; joy.x = joy.y = 0; stickEl.style.transform = ''; } if (t.identifier === look.id) look.id = null; } });
+
+    // ---------- thumbstick do VR ----------
+    let turned = false;
+    function readSticks() {
+      const s = { x: 0, y: 0, tx: 0, ty: 0, run: false, jump: false }, sess = renderer.xr.getSession(); if (!sess) return s;
+      for (const src of sess.inputSources) {
+        const gp = src.gamepad; if (!gp) continue; const ax = gp.axes, bt = gp.buttons;
+        const sx = ax[2] !== undefined ? ax[2] : (ax[0] || 0), sy = ax[3] !== undefined ? ax[3] : (ax[1] || 0);
+        if (src.handedness === 'right') {
+          s.tx = sx; s.ty = sy;
+          if (bt[0] && bt[0].pressed) s.interact = true; // gatilho direito = conversar / colocar / escolher / remover
+          if (bt[4] && bt[4].pressed) s.rot = true;      // botão A (direito) = girar a peça
+          if (bt[5] && bt[5].pressed) s.rem = true;      // botão B (direito) = modo remover
+        } else {
+          s.x = sx; s.y = sy;
+          if (bt[0] && bt[0].pressed) s.run = true;  // gatilho (controle esquerdo) = correr
+          if (bt[1] && bt[1].pressed) s.jump = true; // botão lateral/grip (controle esquerdo) = pular
+          if (bt[5] && bt[5].pressed) s.menu = true; // botão Y (controle esquerdo) = menu de construção
+        }
+      }
+      return s;
+    }
+
+    // ---------- interação (conversar com NPC) e avisos ----------
+    const talkHint = document.getElementById('talkHint');
+    function interact() { if (activeNPC) advanceTalk(); else { const n = nearestNPC(); if (n) startTalk(n); } }
+    addEventListener('keydown', e => {
+      if (e.code === 'KeyE' && !e.repeat) interact();
+      if (e.code === 'KeyT' && !e.repeat) { const o = ['bosque', 'ermo', 'semente']; travelEra(o[(o.indexOf(currentEra) + 1) % 3]); } // TEMP: ciclar eras
+      if (e.code === 'KeyR' && !e.repeat && buildPiece) ghostRY += Math.PI / 4;
+      if (e.code === 'KeyX' && !e.repeat && removeMode) doRemove(removeTarget);
+    });
+    talkHint.addEventListener('click', interact);
+    let interactWas = false, rotWas = false, menuWas = false, remWas = false, liftWas = false;
+    let toastT = 0;
+    function flash(msg) { const el = document.getElementById('toast'); el.textContent = msg; el.style.opacity = '1'; clearTimeout(toastT); toastT = setTimeout(() => el.style.opacity = '0', 2800); }
+
+    // ---------- loop ----------
+    const fwd = new THREE.Vector3(), right = new THREE.Vector3(), mv = new THREE.Vector3();
+    let last = 0, jumpOff = 0, jumpVel = 0, jumpHeld = false;
+    function frame(t) {
+      const dt = last ? Math.min((t - last) / 1000, 0.05) : 0; last = t;
+      const vr = renderer.xr.isPresenting;
+      let mx = 0, mz = 0;
+      let run = !!(keys['ShiftLeft'] || keys['ShiftRight']);   // correr: Shift no PC, botão X no VR
+      let wantJump = !!keys['Space'];                          // pular: Espaço no PC, grip esquerdo no VR
+      if (vr) {
+        const s = readSticks(); const dz = v => Math.abs(v) < 0.15 ? 0 : v;
+        mx = dz(s.x); mz = dz(s.y);
+        run = run || s.run; wantJump = wantJump || s.jump;
+        // botão Y (esq) abre/fecha o menu de construção
+        if (s.menu && !menuWas) toggleMenu3D(); menuWas = !!s.menu;
+        // botão B (dir) liga/desliga o modo remover
+        if (s.rem && !remWas) toggleRemoveMode(); remWas = !!s.rem;
+        // gatilho direito: menu=escolher; removendo=remover; construindo=colocar; senão=conversar
+        if (s.interact && !interactWas) { if (menuOpen) menuSelect(menuHover); else if (removeMode) doRemove(removeTarget); else if (buildPiece) doPlace(); else interact(); }
+        interactWas = !!s.interact;
+        // botão A (dir) gira a peça
+        if (s.rot && !rotWas && buildPiece) ghostRY += Math.PI / 4; rotWas = !!s.rot;
+        // analógico direito (eixo Y) muda o NÍVEL da peça (1 nível por empurrão)
+        if (buildPiece && !menuOpen) { if (s.ty < -0.6 && !liftWas) { changeLevel(1); liftWas = true; } else if (s.ty > 0.6 && !liftWas) { changeLevel(-1); liftWas = true; } else if (Math.abs(s.ty) < 0.3) liftWas = false; }
+        if (!menuOpen && Math.abs(s.tx) > 0.7 && !turned) {
+          if (buildPiece) ghostRY -= Math.sign(s.tx) * Math.PI / 4; // construindo: analógico gira a peça
+          else dolly.rotation.y -= Math.sign(s.tx) * Math.PI / 6;   // senão: gira o jogador
+          turned = true;
+        }
+        if (Math.abs(s.tx) < 0.3) turned = false;
+      } else {
+        dolly.rotation.y = yaw; camera.rotation.x = pitch;
+        mx = (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0) + joy.x;
+        mz = (keys['KeyS'] ? 1 : 0) - (keys['KeyW'] ? 1 : 0) + (keys['ArrowDown'] ? 1 : 0) - (keys['ArrowUp'] ? 1 : 0) + joy.y;
+      }
+      const len = Math.hypot(mx, mz);
+      if (len > 0.01) {
+        if (len > 1) { mx /= len; mz /= len; }
+        camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize();
+        right.set(-fwd.z, 0, fwd.x); // vetor "direita" do jogador (estava invertido)
+        const spd = SPEED * dt * (run ? 1.9 : 1);
+        mv.set(0, 0, 0).addScaledVector(fwd, -mz * spd).addScaledVector(right, mx * spd);
+        const p = dolly.position;
+        sweep(p, mv.x, 0); sweep(p, 0, mv.z); // colisão com paredes (raycast nos eixos, pra deslizar)
+        // limites: mundo + lago
+        const r = Math.hypot(p.x, p.z);
+        if (r > WORLD_R) { p.x *= WORLD_R / r; p.z *= WORLD_R / r; }
+        const dx = p.x - LAKE.x, dz2 = p.z - LAKE.z, ld = Math.hypot(dx, dz2), min = LAKE.r + 0.8;
+        if (ld < min) { const k = min / (ld || 1); p.x = LAKE.x + dx * k; p.z = LAKE.z + dz2 * k; }
+        // colisão: não atravessar troncos de árvore nem pedras
+        const PR = 0.4;
+        for (const o of obstacles) {
+          const ox = p.x - o.x, oz = p.z - o.z, od = Math.hypot(ox, oz), md = o.r + PR;
+          if (od < md) { const k = md / (od || 1); p.x = o.x + ox * k; p.z = o.z + oz * k; }
+        }
+        stepDist += Math.hypot(mv.x, mv.z); if (stepDist > 1.7 && jumpOff <= 0.001) { stepDist = 0; step(); }
+      }
+      // pulo: dispara na borda (não repete enquanto segura) e cai com gravidade
+      if (wantJump && !jumpHeld && jumpOff <= 0.001) { jumpVel = 3.7; }
+      jumpHeld = wantJump;
+      if (jumpVel !== 0 || jumpOff > 0) {
+        jumpOff += jumpVel * dt; jumpVel -= 11 * dt;
+        if (jumpOff < 0) { jumpOff = 0; jumpVel = 0; }
+      }
+      // segue o relevo do terreno OU o piso/escada de construção (+ altura do pulo)
+      dolly.position.y = floorHeightAt(dolly.position.x, dolly.position.z, dolly.position.y) + jumpOff;
+      // brilho leve do lago
+      lake.material.opacity = 0.8 + Math.sin(t * 0.001) * 0.06;
+      // animações de todos os bichos/NPCs
+      for (const mx of mixers) mx.update(dt);
+      // aves voando em círculos
+      for (const b of flyers) {
+        const u = b.wrap.userData, a = t * 0.001 * u.sp + u.ph, a2 = a + 0.05;
+        b.wrap.position.set(u.cx + Math.cos(a) * u.r, u.h + Math.sin(a * 2) * 1.4, u.cz + Math.sin(a) * u.r);
+        flyAhead.set(u.cx + Math.cos(a2) * u.r, u.h + Math.sin(a2 * 2) * 1.4, u.cz + Math.sin(a2) * u.r); b.wrap.lookAt(flyAhead);
+      }
+      // pets vagando pelo bosque
+      for (const p of pets) {
+        const u = p.wrap.userData, pos = p.wrap.position;
+        if (u.wait > 0) { u.wait -= dt; }
+        else {
+          const dx = u.tx - pos.x, dz = u.tz - pos.z, dd = Math.hypot(dx, dz);
+          if (dd < 0.6) { const np = landPoint(WORLD_R - 12); u.tx = np.x; u.tz = np.z; u.wait = 0.5 + Math.random() * 2.5; }
+          else { const step2 = Math.min(dd, u.sp * dt); pos.x += dx / dd * step2; pos.z += dz / dd * step2; p.wrap.rotation.y = Math.atan2(dx, dz); }
+        }
+        pos.y = heightAt(pos.x, pos.z);
+      }
+      // balão de diálogo: sobe acima do NPC ativo e olha pra câmera
+      if (activeNPC) {
+        camera.getWorldPosition(camTmp); activeNPC.wrap.getWorldPosition(npcTmp);
+        dlgPlane.position.set(npcTmp.x, npcTmp.y + 2.2, npcTmp.z); dlgPlane.lookAt(camTmp);
+      }
+      // construção: fantasma encaixa no grid (ou mira de remoção)
+      if (removeMode) updateRemoveAim();
+      else if (ghost && !menuOpen) updateGhost();
+      // menu de construção 3D: destaque conforme a mira + gira os ícones
+      if (menuOpen) {
+        const hcell = menuPick(); if (hcell !== menuHover) { menuHover = hcell; drawMenu(); }
+        for (const h of menuIcons.children) { const s = h.children[0]; if (s) s.rotation.y += dt * 0.9; }
+      }
+      // dica de "conversar" quando perto de um NPC
+      const near = activeNPC ? null : nearestNPC();
+      talkHint.style.display = near ? 'block' : 'none';
+      // multiplayer: sincroniza jogadores remotos e envia meu estado
+      netTick(t, dt);
+      renderer.render(scene, camera);
+    }
+    renderer.setAnimationLoop(frame);
+
+    addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
+
+    // ---------- som ambiente (vento + pássaros + passos) ----------
+    let actx = null, stepDist = 0, stepBufs = [];
+    function startAudio() {
+      if (actx) { actx.resume(); return; }
+      try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+      // vento: ruído filtrado, bem suave
+      const buf = actx.createBuffer(1, actx.sampleRate * 2, actx.sampleRate), d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      const wind = actx.createBufferSource(); wind.buffer = buf; wind.loop = true;
+      const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420;
+      const wg = actx.createGain(); wg.gain.value = 0.05;
+      wind.connect(lp).connect(wg).connect(actx.destination); wind.start();
+      // passos: amostras reais CC0 (Kenney RPG Audio), carregadas e tocadas aleatoriamente
+      if (!stepBufs.length) for (let n = 0; n < 10; n++) {
+        fetch(`../bosque-vr/sounds/footstep0${n}.ogg`).then(r => r.arrayBuffer()).then(b => actx.decodeAudioData(b)).then(b => stepBufs.push(b)).catch(() => {});
+      }
+      scheduleBird();
+    }
+    // passo na grama: toca uma amostra real aleatória, com leve variação de tom/volume
+    function step() {
+      if (!actx || !stepBufs.length) return;
+      const src = actx.createBufferSource(); src.buffer = stepBufs[(Math.random() * stepBufs.length) | 0];
+      src.playbackRate.value = 0.88 + Math.random() * 0.24;
+      const g = actx.createGain(); g.gain.value = 0.45 + Math.random() * 0.25;
+      src.connect(g).connect(actx.destination); src.start();
+    }
+    function chirp(t, base) {
+      const o = actx.createOscillator(), g = actx.createGain(); o.type = 'sine';
+      o.frequency.setValueAtTime(base, t); o.frequency.linearRampToValueAtTime(base * 1.5, t + 0.07); o.frequency.linearRampToValueAtTime(base * 0.85, t + 0.16);
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.05, t + 0.02); g.gain.linearRampToValueAtTime(0, t + 0.19);
+      o.connect(g).connect(actx.destination); o.start(t); o.stop(t + 0.22);
+    }
+    function scheduleBird() {
+      if (!actx) return;
+      const t0 = actx.currentTime + 0.1, n = 2 + (Math.random() * 3 | 0), base = 1500 + Math.random() * 1500;
+      for (let k = 0; k < n; k++) chirp(t0 + k * 0.12, base * (1 + (Math.random() * 0.12 - 0.06)));
+      setTimeout(scheduleBird, 1800 + Math.random() * 4500);
+    }
+    renderer.xr.addEventListener('sessionstart', startAudio);
+
+    // ---------- UI de construção ----------
+    const buildMenu = document.getElementById('buildMenu'), buildGrid = document.getElementById('buildGrid');
+    BUILD_PIECES.forEach(name => { const b = document.createElement('button'); b.textContent = piecePT(name); b.addEventListener('click', () => selectPiece(name)); buildGrid.appendChild(b); });
+    document.getElementById('buildBtn').addEventListener('click', () => buildMenu.classList.toggle('hidden'));
+    document.getElementById('bRot').addEventListener('click', () => { ghostRY += Math.PI / 4; });
+    document.getElementById('bPlace').addEventListener('click', doPlace);
+    document.getElementById('bCancel').addEventListener('click', cancelBuild);
+    document.getElementById('bUp').addEventListener('click', () => changeLevel(1));
+    document.getElementById('bDown').addEventListener('click', () => changeLevel(-1));
+    addEventListener('wheel', e => { if (buildPiece) changeLevel(-Math.sign(e.deltaY)); }, { passive: true });
+    document.getElementById('removeBtn').addEventListener('click', toggleRemoveMode);
+
+    // ---------- multiplayer (P2P via PeerJS, estrela host-autoritativa, até 5) ----------
+    const ROOM_PREFIX = 'jubis-bosque-';
+    const net = { mode: 'solo', peer: null, conns: [], hostConn: null, id: Math.random().toString(36).slice(2, 8), name: 'Jogador', avatar: (Math.random() * 18) | 0, peerStates: {}, acc: 0 };
+    const remotes = {};
+    function rndCode() { const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s = ''; for (let i = 0; i < 4; i++) s += a[(Math.random() * a.length) | 0]; return s; }
+    function makeNameTag(name) {
+      const cv2 = document.createElement('canvas'); cv2.width = 256; cv2.height = 64; const x = cv2.getContext('2d');
+      x.fillStyle = 'rgba(8,22,16,0.82)'; rr(x, 2, 2, 252, 60, 16); x.fill();
+      x.fillStyle = '#bdf5c8'; x.font = 'bold 30px Arial'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText((name || 'Jogador').slice(0, 12), 128, 33);
+      const tex = new THREE.CanvasTexture(cv2); tex.colorSpace = THREE.SRGBColorSpace;
+      const sp = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 0.33), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false }));
+      sp.renderOrder = 998; scene.add(sp); return sp;
+    }
+    function ensureRemote(p) {
+      let r = remotes[p.id]; if (r) return r;
+      r = remotes[p.id] = { tx: p.x, tz: p.z, tyaw: p.yaw || 0, lastx: p.x, lastz: p.z, wrap: null, actor: null, tag: makeNameTag(p.name) };
+      const ch = String.fromCharCode(97 + ((p.avatar || 0) % 18));
+      getGLB(`../bosque-vr/npcs/character-${ch}.glb`).then(g => {
+        if (!remotes[p.id]) return;
+        const a = spawnActor(g, 'idle', 1.6); a.wrap.position.set(p.x, heightAt(p.x, p.z), p.z);
+        r.actor = a; r.wrap = a.wrap;
+      }).catch(() => {});
+      return r;
+    }
+    function removeRemote(id) {
+      const r = remotes[id]; if (!r) return;
+      if (r.wrap) scene.remove(r.wrap);
+      if (r.actor) { const i = mixers.indexOf(r.actor.mixer); if (i >= 0) mixers.splice(i, 1); }
+      if (r.tag) scene.remove(r.tag);
+      delete remotes[id];
+    }
+    function applyPlayers(players) {
+      const seen = {};
+      for (const p of players) { if (p.id === net.id) continue; seen[p.id] = 1; const r = ensureRemote(p); r.tx = p.x; r.tz = p.z; r.tyaw = p.yaw || 0; }
+      for (const id in remotes) if (!seen[id]) removeRemote(id);
+    }
+    function netSendBuild(piece, x, y, z, ry) {
+      if (net.mode === 'solo') return;
+      const msg = { t: 'build', piece, x, y, z, ry };
+      if (net.mode === 'guest') { if (net.hostConn && net.hostConn.open) net.hostConn.send(msg); }
+      else for (const c of net.conns) if (c.open) c.send(msg);
+    }
+    function netSendRemove(key) {
+      if (net.mode === 'solo' || !key) return;
+      const msg = { t: 'removeKey', key };
+      if (net.mode === 'guest') { if (net.hostConn && net.hostConn.open) net.hostConn.send(msg); }
+      else for (const c of net.conns) if (c.open) c.send(msg);
+    }
+    function onHostData(c, d) {
+      if (!d || !d.t) return;
+      if (d.t === 'state') { d.id = d.id || c.peer; net.peerStates[d.id] = d; c._pid = d.id; }
+      else if (d.t === 'build') { addPiece(d.piece, +d.x, +d.y, +d.z, +d.ry, false); for (const o of net.conns) if (o !== c && o.open) o.send(d); }
+      else if (d.t === 'removeKey') { removeByKey(d.key); for (const o of net.conns) if (o !== c && o.open) o.send(d); }
+    }
+    function onGuestData(d) {
+      if (!d || !d.t) return;
+      if (d.t === 'all') applyPlayers(d.players || []);
+      else if (d.t === 'build') addPiece(d.piece, +d.x, +d.y, +d.z, +d.ry, false);
+      else if (d.t === 'removeKey') removeByKey(d.key);
+    }
+    function createRoom() {
+      net.mode = 'host';
+      const code = rndCode(); net.peer = new Peer(ROOM_PREFIX + code);
+      net.peer.on('open', () => { const el = document.getElementById('roomCode'); el.textContent = '🌐 Sala: ' + code; el.style.display = 'block'; });
+      net.peer.on('error', () => flash('Falha ao criar sala. Recarregue e tente de novo.'));
+      net.peer.on('connection', c => {
+        if (net.conns.length >= 4) { c.on('open', () => c.close()); return; }
+        net.conns.push(c);
+        c.on('data', d => onHostData(c, d));
+        c.on('close', () => { net.conns = net.conns.filter(x => x !== c); if (c._pid) { removeRemote(c._pid); delete net.peerStates[c._pid]; } });
+        c.on('error', () => {});
+      });
+    }
+    function joinRoom(code) {
+      net.mode = 'guest'; net.peer = new Peer();
+      net.peer.on('open', () => {
+        net.hostConn = net.peer.connect(ROOM_PREFIX + code.toUpperCase().trim(), { reliable: true });
+        net.hostConn.on('open', () => flash('Conectado ao bosque! 🌳'));
+        net.hostConn.on('data', onGuestData);
+        net.hostConn.on('close', () => { flash('A sala foi encerrada.'); for (const id of Object.keys(remotes)) removeRemote(id); });
+        net.hostConn.on('error', () => flash('Não achei a sala. Confira o código.'));
+      });
+      net.peer.on('error', () => flash('Não achei a sala. Confira o código.'));
+    }
+    function netTick(t, dt) {
+      if (net.mode === 'solo' || !net.peer) return;
+      const k = Math.min(1, dt * 10);
+      for (const id in remotes) {
+        const r = remotes[id]; if (!r.wrap) continue;
+        r.wrap.position.x += (r.tx - r.wrap.position.x) * k;
+        r.wrap.position.z += (r.tz - r.wrap.position.z) * k;
+        r.wrap.position.y = heightAt(r.wrap.position.x, r.wrap.position.z);
+        let dy = r.tyaw - r.wrap.rotation.y; while (dy > Math.PI) dy -= 6.2832; while (dy < -Math.PI) dy += 6.2832;
+        r.wrap.rotation.y += dy * k;
+        const moving = Math.hypot(r.tx - r.lastx, r.tz - r.lastz) > 0.008; if (r.actor) playClip(r.actor, moving ? 'walk' : 'idle');
+        r.lastx = r.tx; r.lastz = r.tz;
+        if (r.tag) { r.tag.position.set(r.wrap.position.x, r.wrap.position.y + 2.4, r.wrap.position.z); camera.getWorldPosition(camTmp); r.tag.lookAt(camTmp); }
+      }
+      net.acc += dt;
+      if (net.acc >= 0.1) {
+        net.acc = 0;
+        const me = { t: 'state', id: net.id, name: net.name, avatar: net.avatar, x: dolly.position.x, z: dolly.position.z, yaw: dolly.rotation.y };
+        if (net.mode === 'guest') { if (net.hostConn && net.hostConn.open) net.hostConn.send(me); }
+        else { net.peerStates[net.id] = me; const players = Object.values(net.peerStates); const msg = { t: 'all', players }; for (const c of net.conns) if (c.open) c.send(msg); applyPlayers(players); }
+      }
+    }
+
+    // ---------- início (solo ou multiplayer) ----------
+    function startGame() {
+      startAudio();
+      document.getElementById('intro').classList.add('hidden');
+      document.getElementById('hint').style.display = 'block';
+      // RPG: botões de construir/remover ficam ocultos
+      if (!renderer.xr.isPresenting && cv.requestPointerLock && !('ontouchstart' in window)) cv.requestPointerLock();
+      setTimeout(() => { document.getElementById('hint').style.display = 'none'; }, 6000);
+    }
+    document.getElementById('goBtn').addEventListener('click', startGame);
+  </script>
+</body>
+</html>

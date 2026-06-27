@@ -321,6 +321,7 @@
       brotoca: { nome: 'Brotoca', glb: 'caterpillar', tint: 0x7fcf4a, hp: 12, atk: 3, def: 2, agi: 6, xp: 4, h: 0.8, ess: 'folha' },
       lobinho: { nome: 'Lobinho de Musgo', glb: 'dog', tint: 0x6f8f5a, hp: 22, atk: 5, def: 4, agi: 11, xp: 6, h: 0.95, ess: 'folha' },
       cinzela: { nome: 'Cinzela', glb: 'caterpillar', tint: 0x9a9aa2, hp: 16, atk: 4, def: 3, agi: 8, xp: 5, h: 0.8, ess: 'cinza' },
+      murcha: { nome: 'Murcha, a Mariposa', glb: 'bee', tint: 0x9a8ab0, hp: 70, atk: 7, def: 5, agi: 7, xp: 40, h: 2.4, ess: 'cinza', boss: true },
     };
     // Roda das Essências: a chave vence (×2) os valores; fraqueza inversa = ×0.5
     const ESS_STRONG = { sol: ['folha', 'cinza'], agua: ['sol', 'cinza'], folha: ['agua'], cinza: ['folha'] };
@@ -383,7 +384,11 @@
       c.fillStyle = 'rgba(8,22,16,0.92)'; rr(c, 4, 4, W - 8, W - 8, 26); c.fill();
       c.strokeStyle = 'rgba(160,230,180,0.6)'; c.lineWidth = 5; c.stroke();
       c.textAlign = 'center'; c.textBaseline = 'middle';
-      if (!battle.sub) {
+      if (battle.faseBatalha === 'acalanto') {
+        c.fillStyle = battle.hover >= 0 ? 'rgba(120,220,150,0.5)' : 'rgba(255,255,255,0.08)'; rr(c, 40, 150, W - 80, W - 300, 22); c.fill();
+        c.fillStyle = '#ffe6a0'; c.font = 'bold 56px Arial'; c.fillText('🎵 Cantar', W / 2, W / 2 - 20);
+        c.fillStyle = '#bdf5c8'; c.font = '28px Arial'; c.fillText('ninar a Murcha  (' + (battle.cantar || 0) + '/3)', W / 2, W / 2 + 50);
+      } else if (!battle.sub) {
         const cw = W / 2;
         for (let i = 0; i < 4; i++) {
           const col = i % 2, row = (i / 2) | 0, x = col * cw, y = row * cw;
@@ -412,6 +417,7 @@
     function closeBattleMenu() { if (battle) { battle.menuOpen = false; battle.sub = null; } battlePanel.visible = false; }
     function battlePick() {
       buildAimRay(); const hit = raycaster.intersectObject(battlePanel, false)[0]; if (!hit || !hit.uv) return -1;
+      if (battle.faseBatalha === 'acalanto') return 0; // só "Cantar"
       if (!battle.sub) { const col = hit.uv.x < 0.5 ? 0 : 1, row = hit.uv.y > 0.5 ? 0 : 1; return row * 2 + col; }
       const items = battleMenuItems(), n = items.length, top = 56, rh = (512 - top - 24) / Math.max(n, 1);
       const cy = (1 - hit.uv.y) * 512, idx = Math.floor((cy - top) / rh); return idx >= 0 && idx < n ? idx : -1;
@@ -420,6 +426,7 @@
     function resetHeroTurn() { battle.heroAtb = 0; battle.ready = false; }
     function battleSelect(i) {
       if (i < 0 || !battle) return;
+      if (battle.faseBatalha === 'acalanto') { closeBattleMenu(); cantar(); return; }
       if (!battle.sub) {
         const k = BAT_ACTIONS[i].k;
         if (k === 'atacar') { closeBattleMenu(); heroAttack(aliveEnemy()); }
@@ -495,6 +502,7 @@
       }
     }
     function defeatEnemy(e) {
+      if (e.boss && battle && battle.faseBatalha !== 'acalanto') { e.hp = 1; e.alive = true; setAcalanto(); return; } // a Murcha não morre: vira o Acalanto
       if (e.bar) e.actor.wrap.remove(e.bar);
       puff(e.actor.wrap.position); sfx('poof');
       e.actor.defeated = true; e.actor.wrap.userData.dyT = 0; dyingActors.push({ wrap: e.actor.wrap, mixer: e.actor.mixer, t: 0, shrink: true });
@@ -515,6 +523,59 @@
       if (battle) for (const e of battle.enemies) if (e.alive && e.bar) e.actor.wrap.remove(e.bar);
       if (battle && battle.ally && battle.ally.actor) { scene.remove(battle.ally.actor.wrap); const mi = mixers.indexOf(battle.ally.actor.mixer); if (mi >= 0) mixers.splice(mi, 1); }
       battle = null; heroHud.visible = false;
+    }
+
+    // ===================== CHEFE: MURCHA, a Mariposa =====================
+    function checkBoss() {
+      if (inBattle || game.flags.bossDone) return;
+      if (currentEra === 'ermo' && game.fase >= 6 && Math.hypot(dolly.position.x - PORTAL.x, dolly.position.z - PORTAL.z) < 14) startBossBattle();
+    }
+    function startBossBattle() {
+      iniciarFase(7);
+      getGLB('../bosque-vr/pets/animal-bee.glb').then(g => {
+        const d = ENEMY_DEF.murcha, a = spawnActor(g, 'idle', d.h);
+        camera.getWorldDirection(rcDir); rcDir.y = 0; rcDir.normalize();
+        const ex = dolly.position.x + rcDir.x * 6, ez = dolly.position.z + rcDir.z * 6;
+        a.wrap.position.set(ex, heightAt(ex, ez) + 1.5, ez);
+        const tint = mm => { const c = mm.clone(); if (c.color) c.color.setHex(d.tint); return c; };
+        a.wrap.traverse(o => { if (o.isMesh && o.material) o.material = Array.isArray(o.material) ? o.material.map(tint) : tint(o.material); });
+        a.enemyKey = 'murcha';
+        const e = { actor: a, def: d, hp: d.hp, hpMax: d.hp, atb: 0.2, alive: true, bar: makeBar(), boss: true };
+        e.bar.position.set(0, d.h + 0.7, 0); a.wrap.add(e.bar); drawBar(e.bar, 1, d.nome + ' ' + d.hp);
+        inBattle = true;
+        battle = { enemies: [e], ally: null, heroAtb: 0, ready: false, menuOpen: false, hover: -1, ring: null, boss: e, faseBatalha: 'luta', cantar: 0 };
+        if (game.flags.fagulha) { /* aliada entra também */
+          getGLB('../bosque-vr/pets/animal-fox.glb').then(g2 => {
+            if (!battle) return; const fa = spawnActor(g2, 'idle', 0.85);
+            const ax = dolly.position.x - rcDir.z * 1.7, az = dolly.position.z + rcDir.x * 1.7; fa.wrap.position.set(ax, heightAt(ax, az), az);
+            const al = { actor: fa, nome: 'Fagulha', hp: 15 + hero.lvl * 2, hpMax: 15 + hero.lvl * 2, def: 2 + hero.lvl, mag: 5 + hero.lvl, agi: 13, atb: 0, alive: true, ess: 'sol', bar: makeBar() };
+            al.bar.position.set(0, 1.3, 0); fa.wrap.add(al.bar); drawBar(al.bar, 1, 'Fagulha ' + al.hp); battle.ally = al;
+          }).catch(() => {});
+        }
+        const ring = new THREE.Mesh(new THREE.RingGeometry(5.0, 5.8, 48), new THREE.MeshBasicMaterial({ color: 0xb09ad0, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false }));
+        ring.rotation.x = -Math.PI / 2; ring.position.set(dolly.position.x, heightAt(dolly.position.x, dolly.position.z) + 0.12, dolly.position.z); scene.add(ring); battle.ring = ring;
+        heroHud.visible = true; updateHeroHud(); sfx('start'); setObjetivo('Vença a Murcha… mas talvez vencer seja CUIDAR.');
+        flash('🦋 A Murcha aparece — de frio e sozinha, roendo a seiva do Vovô.');
+      }).catch(() => {});
+    }
+    function setAcalanto() {
+      battle.faseBatalha = 'acalanto'; battle.cantar = 0; const b = battle.boss; b.alive = true; b.hp = 1;
+      startNarration('Fagulha', ['Espera… esse jeito torto de asa, esse pó… ela não tá brava.', 'Ela tá com FRIO e sozinha faz tempo demais. Não dá pra bater nela — dá pra CANTAR pra ela. 🎵'], () => { flash('🎵 Abra o menu e escolha CANTAR (3×).'); });
+    }
+    function cantar() {
+      battle.cantar++; sfx('ready'); flash('🎵 lá… lá… lá…  (' + battle.cantar + '/3)'); resetHeroTurn();
+      if (battle.cantar >= 3) bossSleep();
+    }
+    function bossSleep() {
+      const b = battle.boss; b.alive = false; if (b.bar) b.actor.wrap.remove(b.bar);
+      b.actor.wrap.userData.dyT = 0; dyingActors.push({ wrap: b.actor.wrap, mixer: b.actor.mixer, t: 0, shrink: true });
+      game.flags.bossDone = true; endBattle(); sfx('fanfare'); reverdecerErmo();
+      startNarration('', ['Ah… que sono bom… que fresquinho.', '…Obrigada por cantar pra mim.', 'A Murcha encolhe num docinho de sono. E o Vovô, lá no futuro, floresce.', 'O Ermo reverdece diante dos seus olhos. Você curou o amanhã. 🌳'], () => { iniciarFase(8); });
+    }
+    function reverdecerErmo() { // o futuro cura em tempo real
+      ERAS.ermo.bg = 0x9ed0f2; ERAS.ermo.fog = [0xbfe0f5, 60, 230]; ERAS.ermo.sun = [0xfff4d6, 1.3]; ERAS.ermo.hemi = [0xdfeeff, 0x5a6b40, 0.45];
+      ERAS.ermo.ground = 0xffffff; ERAS.ermo.water = 0x2f7fc4; ERAS.ermo.waterOp = 0.86; ERAS.ermo.tree = 0xffffff;
+      if (currentEra === 'ermo') applyEra('ermo');
     }
 
     function spawnEnemy(key, x, z) {
@@ -558,10 +619,15 @@
     }
     function updateBattle(dt) {
       const b = battle; if (!b) return;
-      if (!b.menuOpen) {
+      // chefe: ao baixar a vida, vira a fase do ACALANTO (cantar, não bater)
+      if (b.boss && b.faseBatalha === 'luta' && b.boss.alive && b.boss.hp <= b.boss.hpMax * 0.3) setAcalanto();
+      const acalanto = b.faseBatalha === 'acalanto';
+      if (!b.menuOpen && !narration) {
         if (!b.ready) { b.heroAtb += dt * (0.30 + hero.agi / 300); if (b.heroAtb >= 1) { b.heroAtb = 1; b.ready = true; sfx('ready'); } }
-        for (const e of b.enemies) { if (!e.alive) continue; e.atb += dt * (0.16 + e.def.agi / 220); if (e.atb >= 1) enemyAttack(e); }
-        if (b.ally && b.ally.alive) { b.ally.atb += dt * (0.16 + b.ally.agi / 200); if (b.ally.atb >= 1) { b.ally.atb = 0; allyAct(b.ally); } } // Fagulha age sozinha (IA)
+        if (!acalanto) { // no Acalanto a Murcha só treme de frio, não ataca
+          for (const e of b.enemies) { if (!e.alive) continue; e.atb += dt * (0.16 + e.def.agi / 220); if (e.atb >= 1) enemyAttack(e); }
+          if (b.ally && b.ally.alive) { b.ally.atb += dt * (0.16 + b.ally.agi / 200); if (b.ally.atb >= 1) { b.ally.atb = 0; allyAct(b.ally); } }
+        }
       }
       camera.getWorldPosition(camW);
       for (const e of b.enemies) { if (!e.alive) continue; e.actor.wrap.lookAt(dolly.position.x, e.actor.wrap.position.y, dolly.position.z); if (e.bar.userData.last !== e.hp) { e.bar.userData.last = e.hp; drawBar(e.bar, e.hp / e.hpMax, e.def.nome + ' ' + Math.max(0, e.hp)); } e.bar.lookAt(camW); }
@@ -749,7 +815,7 @@
     // ---------- NPCs (blocky characters): bots com quem dá pra conversar ----------
     // ======================= MOTOR DE HISTÓRIA (10 fases) =======================
     const game = { fase: 0, vovoFalou: false, objetivo: '', vistoMudanca: false, flags: { lanterna: false, fagulha: false, momento: false, semente: false, sementePlantada: false } };
-    const FASE_TITULOS = { 1: 'O Bosque Doente', 2: 'A Lanterna-Vagalume', 3: 'O Ermo', 4: 'A Semente do Passado', 5: 'O Amanhã Plantado', 6: 'A Cura Começa' };
+    const FASE_TITULOS = { 1: 'O Bosque Doente', 2: 'A Lanterna-Vagalume', 3: 'O Ermo', 4: 'A Semente do Passado', 5: 'O Amanhã Plantado', 6: 'A Cura Começa', 7: 'O Coração da Murcha', 8: 'Epílogo' };
     function setObjetivo(txt) {
       game.objetivo = txt; const q = document.getElementById('questBar');
       if (q) { q.textContent = 'Fase ' + game.fase + ' · ' + (FASE_TITULOS[game.fase] || '') + ' — ' + txt; q.style.display = 'block'; }
@@ -761,7 +827,8 @@
       else if (n === 3) setObjetivo('Toque o Vovô e viaje ao 🥀 Ermo (futuro)');
       else if (n === 4) { setObjetivo('Viaje ao 🌱 Semente (passado) e plante a Semente-do-Amanhã'); criarSementeMundo(); }
       else if (n === 5) setObjetivo('Volte ao 🌳 Bosque (presente) e veja o que mudou!');
-      else if (n === 6) setObjetivo('Você curou um pedaço do futuro! A aventura continua… 🌟');
+      else if (n === 6) setObjetivo('Volte ao 🥀 Ermo (futuro) e encare o que está secando o Vovô');
+      else if (n === 8) setObjetivo('🌟 Você curou o amanhã! Fim da aventura — por enquanto. Obrigado por jogar! 💚');
     }
     // NPCs da trama: diálogo condicional (falasFn) + ação ao terminar (onEnd); visíveis só na sua era
     const STORY_NPCS = [
@@ -1378,7 +1445,7 @@
       updateFade(dt);
       if (eraMenuOpen) { const h = eraPick(); if (h !== eraHover) { eraHover = h; drawEraMenu(); } }
       // COMBATE: tick da batalha ou checa aproximação de inimigo; efeitos morrendo
-      if (inBattle) updateBattle(dt); else checkAggro();
+      if (inBattle) updateBattle(dt); else { checkAggro(); checkBoss(); }
       updateDying(dt);
       // dica de interação (contextual)
       if (inBattle) {

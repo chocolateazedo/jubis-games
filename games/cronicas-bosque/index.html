@@ -279,7 +279,7 @@
       if (fade >= 1) {
         fade = 1; fadeDir = -1;
         if (pendingEra) {
-          const arrived = pendingEra; applyEra(arrived); if (typeof flash === 'function') flash(ERA_NOME[arrived]); pendingEra = null;
+          const arrived = pendingEra; applyEra(arrived); if (typeof flash === 'function') flash(ERA_NOME[arrived]); updateMusicTrack(); pendingEra = null;
           if (arrived === 'ermo' && game.flags.lanterna && !game.flags.momento) { game.flags.momento = true; setTimeout(momentoErmo, 700); } // o MOMENTO
           if (arrived === 'bosque' && game.flags.sementePlantada && !game.vistoMudanca) { game.vistoMudanca = true; setTimeout(() => startNarration('', ['Olha! O cinza diminuiu… e nasceu um broto novo bem ali.', 'Você mexeu no passado e o presente mudou. É assim que se cura o amanhã. 🌱'], () => { iniciarFase(6); }), 700); }
         }
@@ -533,7 +533,7 @@
     }
     function loseBattle() { flash('😴 Você cochilou no Bosque…'); endBattle(); hero.hp = hero.hpMax; hero.mp = hero.mpMax; dolly.position.set(10, heightAt(10, 64), 64); travelEra(currentEra); }
     function endBattle() {
-      inBattle = false; closeBattleMenu();
+      inBattle = false; closeBattleMenu(); updateMusicTrack();
       if (battle && battle.ring) scene.remove(battle.ring);
       if (battle) for (const e of battle.enemies) if (e.alive && e.bar) e.actor.wrap.remove(e.bar);
       if (battle && battle.ally && battle.ally.actor) { scene.remove(battle.ally.actor.wrap); const mi = mixers.indexOf(battle.ally.actor.mixer); if (mi >= 0) mixers.splice(mi, 1); }
@@ -557,7 +557,7 @@
         a.enemyKey = 'murcha';
         const e = { actor: a, def: d, hp: d.hp, hpMax: d.hp, atb: 0.2, alive: true, bar: makeBar(), boss: true };
         e.bar.position.set(0, d.h + 0.7, 0); a.wrap.add(e.bar); drawBar(e.bar, 1, d.nome + ' ' + d.hp);
-        inBattle = true;
+        inBattle = true; updateMusicTrack();
         battle = { enemies: [e], ally: null, heroAtb: 0, ready: false, menuOpen: false, hover: -1, ring: null, boss: e, faseBatalha: 'luta', cantar: 0 };
         if (game.flags.fagulha) { /* aliada entra também */
           getGLB('../bosque-vr/pets/animal-fox.glb').then(g2 => {
@@ -605,7 +605,7 @@
       }).catch(() => {});
     }
     function startBattle(actor) {
-      inBattle = true;
+      inBattle = true; updateMusicTrack();
       camera.getWorldDirection(rcDir); rcDir.y = 0; rcDir.normalize();
       const ex = dolly.position.x + rcDir.x * 5, ez = dolly.position.z + rcDir.z * 5;
       actor.wrap.position.set(ex, heightAt(ex, ez), ez);
@@ -1508,7 +1508,7 @@
       if (!stepBufs.length) for (let n = 0; n < 10; n++) {
         fetch(`../bosque-vr/sounds/footstep0${n}.ogg`).then(r => r.arrayBuffer()).then(b => actx.decodeAudioData(b)).then(b => stepBufs.push(b)).catch(() => {});
       }
-      scheduleBird();
+      scheduleBird(); startMusic();
     }
     // passo na grama: toca uma amostra real aleatória, com leve variação de tom/volume
     function step() {
@@ -1529,6 +1529,41 @@
       const t0 = actx.currentTime + 0.1, n = 2 + (Math.random() * 3 | 0), base = 1500 + Math.random() * 1500;
       for (let k = 0; k < n; k++) chirp(t0 + k * 0.12, base * (1 + (Math.random() * 0.12 - 0.06)));
       setTimeout(scheduleBird, 1800 + Math.random() * 4500);
+    }
+    // ---------- TRILHA PROCEDURAL por era (WebAudio, 100% CC0) ----------
+    const SCALE_MAJ = [0, 2, 4, 5, 7, 9, 11], SCALE_MIN = [0, 2, 3, 5, 7, 8, 10];
+    const TRACKS = {
+      bosque:  { bpm: 72,  root: 57, wave: 'triangle', scale: SCALE_MAJ, chord: [0, 4, 7], prog: [0, 5, 7, 5], mel: [4, -1, 2, 4, -1, 0, 2, -1, 4, -1, 7, -1, 4, 2, 0, -1] },
+      semente: { bpm: 108, root: 69, wave: 'sine',     scale: SCALE_MAJ, chord: [0, 4, 7], prog: [0, 7, 5, 7], mel: [0, 2, 4, -1, 7, -1, 4, 2, 0, 4, 7, 9, 7, -1, 4, -1] },
+      ermo:    { bpm: 50,  root: 53, wave: 'sine',     scale: SCALE_MIN, chord: [0, 3, 7], prog: [0, 0, 5, 3], mel: [7, -1, -1, 5, -1, -1, 3, -1, 2, -1, -1, 0, -1, -1, -1, -1] },
+      batalha: { bpm: 138, root: 57, wave: 'sawtooth', scale: SCALE_MIN, chord: [0, 3, 7], prog: [0, 0, 5, 3], mel: [0, 7, 0, 7, 3, 7, 3, 7, 5, 7, 5, 7, 0, 3, 5, 7] },
+    };
+    let musicBus = null, curTrack = 'bosque', step16 = 0, nextNoteT = 0, musicTimer = null;
+    function m2f(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+    function mvoz(freq, t, dur, gain, wave) {
+      const o = actx.createOscillator(), g = actx.createGain(); o.type = wave; o.frequency.value = freq;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + 0.03); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g).connect(musicBus); o.start(t); o.stop(t + dur + 0.05);
+    }
+    function musicScheduler() {
+      if (!musicBus) return;
+      const T = TRACKS[curTrack], spb = 60 / T.bpm, six = spb / 4;
+      while (nextNoteT < actx.currentTime + 0.18) {
+        const t = nextNoteT, s = step16 % 16, bar = Math.floor(step16 / 16) % T.prog.length, rootM = T.root + T.prog[bar];
+        if (s % 8 === 0) mvoz(m2f(rootM - 12), t, spb * 0.95, 0.10, 'sine');                       // baixo
+        if (s === 0) for (const iv of T.chord) mvoz(m2f(rootM + iv), t, spb * 3.6, 0.028, 'sine');  // acorde/pad
+        const deg = T.mel[s]; if (deg >= 0) mvoz(m2f(rootM + 12 + T.scale[deg]), t, six * 1.7, 0.07, T.wave); // melodia
+        nextNoteT += six; step16++;
+      }
+    }
+    function setTrack(name) { if (name !== curTrack) { curTrack = name; step16 = 0; nextNoteT = Math.max(nextNoteT, actx.currentTime + 0.05); } }
+    function updateMusicTrack() { if (musicBus) setTrack(inBattle ? 'batalha' : (TRACKS[currentEra] ? currentEra : 'bosque')); }
+    function startMusic() {
+      if (!actx || musicBus) return;
+      musicBus = actx.createGain(); musicBus.gain.value = 0.0001; musicBus.connect(actx.destination);
+      musicBus.gain.setTargetAtTime(0.5, actx.currentTime, 1.5); // fade-in suave
+      nextNoteT = actx.currentTime + 0.1; step16 = 0; updateMusicTrack();
+      musicTimer = setInterval(musicScheduler, 30);
     }
     renderer.xr.addEventListener('sessionstart', startAudio);
 

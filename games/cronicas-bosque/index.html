@@ -266,6 +266,7 @@
         if (pendingEra) {
           const arrived = pendingEra; applyEra(arrived); if (typeof flash === 'function') flash(ERA_NOME[arrived]); pendingEra = null;
           if (arrived === 'ermo' && game.flags.lanterna && !game.flags.momento) { game.flags.momento = true; setTimeout(momentoErmo, 700); } // o MOMENTO
+          if (arrived === 'bosque' && game.flags.sementePlantada && !game.vistoMudanca) { game.vistoMudanca = true; setTimeout(() => startNarration('', ['Olha! O cinza diminuiu… e nasceu um broto novo bem ali.', 'Você mexeu no passado e o presente mudou. É assim que se cura o amanhã. 🌱'], () => { iniciarFase(6); }), 700); }
         }
       }
       else if (fade <= 0) { fade = 0; fadeDir = 0; }
@@ -747,8 +748,8 @@
 
     // ---------- NPCs (blocky characters): bots com quem dá pra conversar ----------
     // ======================= MOTOR DE HISTÓRIA (10 fases) =======================
-    const game = { fase: 0, vovoFalou: false, objetivo: '', flags: { lanterna: false, fagulha: false, momento: false } };
-    const FASE_TITULOS = { 1: 'O Bosque Doente', 2: 'A Lanterna-Vagalume', 3: 'O Ermo' };
+    const game = { fase: 0, vovoFalou: false, objetivo: '', vistoMudanca: false, flags: { lanterna: false, fagulha: false, momento: false, semente: false, sementePlantada: false } };
+    const FASE_TITULOS = { 1: 'O Bosque Doente', 2: 'A Lanterna-Vagalume', 3: 'O Ermo', 4: 'A Semente do Passado', 5: 'O Amanhã Plantado', 6: 'A Cura Começa' };
     function setObjetivo(txt) {
       game.objetivo = txt; const q = document.getElementById('questBar');
       if (q) { q.textContent = 'Fase ' + game.fase + ' · ' + (FASE_TITULOS[game.fase] || '') + ' — ' + txt; q.style.display = 'block'; }
@@ -757,7 +758,10 @@
       game.fase = n; flash('✨ Fase ' + n + ': ' + (FASE_TITULOS[n] || ''));
       if (n === 1) { setObjetivo('Fale com o Seu Cogu 🍄'); criarFagulhaNpc(); }
       else if (n === 2) { setObjetivo('Ache a Lanterna-Vagalume ✨ (perto do Vovô)'); criarLanterna(); }
-      else if (n === 3) setObjetivo('Você viu o futuro murcho… a aventura continua! 🌱');
+      else if (n === 3) setObjetivo('Toque o Vovô e viaje ao 🥀 Ermo (futuro)');
+      else if (n === 4) { setObjetivo('Viaje ao 🌱 Semente (passado) e plante a Semente-do-Amanhã'); criarSementeMundo(); }
+      else if (n === 5) setObjetivo('Volte ao 🌳 Bosque (presente) e veja o que mudou!');
+      else if (n === 6) setObjetivo('Você curou um pedaço do futuro! A aventura continua… 🌟');
     }
     // NPCs da trama: diálogo condicional (falasFn) + ação ao terminar (onEnd); visíveis só na sua era
     const STORY_NPCS = [
@@ -844,7 +848,7 @@
       else openEraMenu();
     }
     function momentoErmo() {
-      startNarration('', ['Aqui foi o bosque.', 'O lago virou pó. O céu esqueceu de ser azul.', 'No galho mais alto, o ninho está vazio — frio faz muito tempo.', 'Mas olha: uma folhinha verde, teimosa, ainda segura no galho.', 'Uma folha é pouco. Uma folha é tudo o que o futuro precisa pra recomeçar.'], () => { iniciarFase(3); });
+      startNarration('Vovô Carvalho (murcho)', ['Aqui foi o bosque… o lago virou pó, o céu esqueceu de ser azul.', 'No galho mais alto, o ninho está vazio — frio faz muito tempo.', 'Mas olha: uma folhinha verde, teimosa, ainda segura no galho.', 'Uma folha é tudo o que o futuro precisa pra recomeçar. Toma essa semente, broto.', 'Planta ela quando eu ainda era pequenininho. O que você conserta lá… floresce aqui.'], () => { game.flags.semente = true; iniciarFase(4); });
     }
     // ---------- companheira Fagulha (raposa): recrutar ----------
     let foxNpc = null;
@@ -860,6 +864,33 @@
       game.flags.fagulha = true;
       if (foxNpc) { scene.remove(foxNpc.wrap); const mi = mixers.indexOf(foxNpc.mixer); if (mi >= 0) mixers.splice(mi, 1); foxNpc = null; }
       startNarration('Fagulha', ['Ai, esses espinhos!… Ufa, obrigada, broto!', 'Você também sente o bosque ficando triste? Eu vou com você — e na luta eu solto faísca de ☀️ Sol!'], () => { flash('🦊 Fagulha entrou no grupo!'); });
+    }
+    // ---------- CAUSALIDADE: plantar no passado muda o presente ----------
+    let covinha = null, manchaCinza = null, brotoNovo = null;
+    function criarSementeMundo() {
+      if (covinha) return;
+      const cx = 9, cz = 50;
+      covinha = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.95, 0.4, 12), new THREE.MeshStandardMaterial({ color: 0x7a5a36, roughness: 1 }));
+      covinha.position.set(cx, heightAt(cx, cz) + 0.12, cz); covinha.userData = { cx, cz }; scene.add(covinha);
+      getGLB('../bosque-vr/npcs/character-c.glb').then(g => {
+        const a = spawnActor(g, 'idle', 1.2); a.wrap.position.set(cx - 2.2, heightAt(cx - 2.2, cz), cz); a.wrap.rotation.y = Math.PI;
+        a.wrap.userData = { nome: 'Broto', falasFn: () => game.flags.sementePlantada ? ['UAU! Esse carvalhinho vai virar o avô de todas as árvores!'] : ['Oi oi! Põe a Semente-do-Amanhã aqui na covinha — toca em mim de novo… ou chega na terra e aperta!'] };
+        a.story = { era: 'semente' }; obstacles.push({ x: cx - 2.2, z: cz, r: 0.5 }); npcs.push(a);
+      }).catch(() => {});
+      const mx = 8, mz = 32;
+      manchaCinza = new THREE.Mesh(new THREE.CircleGeometry(3.4, 24), new THREE.MeshBasicMaterial({ color: 0x6a6a6a, transparent: true, opacity: 0.55, depthWrite: false }));
+      manchaCinza.rotation.x = -Math.PI / 2; manchaCinza.position.set(mx, heightAt(mx, mz) + 0.06, mz); scene.add(manchaCinza);
+      brotoNovo = new THREE.Group();
+      brotoNovo.add(new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.15, 1.2, 8), new THREE.MeshStandardMaterial({ color: 0x6b4f2a })));
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(0.7, 10, 8), new THREE.MeshStandardMaterial({ color: 0x4caf50 })); cap.position.y = 1.0; brotoNovo.add(cap);
+      brotoNovo.position.set(mx, heightAt(mx, mz) + 0.6, mz); brotoNovo.visible = false; scene.add(brotoNovo);
+    }
+    function nearCovinha() { return covinha && currentEra === 'semente' && game.flags.semente && !game.flags.sementePlantada && Math.hypot(dolly.position.x - covinha.userData.cx, dolly.position.z - covinha.userData.cz) < 3; }
+    function plantarSemente() {
+      game.flags.semente = false; game.flags.sementePlantada = true; sfx('fanfare');
+      const b = new THREE.Mesh(new THREE.ConeGeometry(0.45, 1.1, 8), new THREE.MeshStandardMaterial({ color: 0x6abf4f }));
+      b.position.set(covinha.userData.cx, heightAt(covinha.userData.cx, covinha.userData.cz) + 0.65, covinha.userData.cz); scene.add(b);
+      startNarration('Broto', ['Você plantou! Olha ele crescendo…', 'Esse carvalhinho vai virar o Vovô de todas as árvores. Cuida dele no teu tempo, tá?'], () => { iniciarFase(5); });
     }
 
     // ---------- construção (Kenney Building Kit, CC0) ----------
@@ -1213,6 +1244,7 @@
       if (narration) { advanceNarration(); return; }
       if (eraMenuOpen) { eraSelect(eraHover); return; }
       if (activeNPC) { advanceTalk(); return; }
+      if (nearCovinha()) { plantarSemente(); return; }
       if (nearFox()) { recruitFagulha(); return; }
       if (nearLantern()) { pickLantern(); return; }
       if (nearPortal()) { tocarVovo(); return; }
@@ -1328,6 +1360,10 @@
       // NPCs visíveis só na sua era; a Lanterna boia e gira
       for (const a of npcs) if (a.story) a.wrap.visible = a.story.era === currentEra;
       if (lanternItem) { lanternItem.position.y = heightAt(lanternItem.position.x, lanternItem.position.z) + 1.1 + Math.sin(t * 0.004) * 0.12; lanternItem.rotation.y += dt; }
+      // causalidade visível: a covinha (passado), a mancha cinza some / o broto nasce (presente)
+      if (covinha) covinha.visible = currentEra === 'semente';
+      if (manchaCinza) manchaCinza.visible = currentEra === 'bosque' && !game.flags.sementePlantada;
+      if (brotoNovo) brotoNovo.visible = currentEra === 'bosque' && game.flags.sementePlantada;
       // construção: fantasma encaixa no grid (ou mira de remoção)
       if (removeMode) updateRemoveAim();
       else if (ghost && !menuOpen) updateGhost();
@@ -1352,7 +1388,8 @@
       } else if (narration) { talkHint.textContent = '▶ Continuar (E / gatilho / toque)'; talkHint.style.display = 'block'; }
       else {
         const livre = !activeNPC && !eraMenuOpen;
-        if (livre && nearFox()) { talkHint.textContent = '🦊 Libertar a Fagulha (E / gatilho)'; talkHint.style.display = 'block'; }
+        if (livre && nearCovinha()) { talkHint.textContent = '🌱 Plantar a Semente-do-Amanhã (E / gatilho)'; talkHint.style.display = 'block'; }
+        else if (livre && nearFox()) { talkHint.textContent = '🦊 Libertar a Fagulha (E / gatilho)'; talkHint.style.display = 'block'; }
         else if (livre && nearLantern()) { talkHint.textContent = '✨ Pegar a Lanterna-Vagalume (E / gatilho)'; talkHint.style.display = 'block'; }
         else if (livre && nearPortal()) { talkHint.textContent = '🌳 Tocar o Vovô Carvalho (E / gatilho)'; talkHint.style.display = 'block'; }
         else if (livre && nearestNPC()) { talkHint.textContent = '💬 Conversar (E / gatilho)'; talkHint.style.display = 'block'; }

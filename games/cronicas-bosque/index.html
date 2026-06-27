@@ -296,6 +296,203 @@
     function eraPick() { buildAimRay(); const hit = raycaster.intersectObject(eraPanel, false)[0]; if (!hit || !hit.uv) return -1; return Math.max(0, Math.min(2, Math.floor(hit.uv.x * 3))); }
     function eraSelect(c) { if (c < 0) return; const k = ERA_KEYS[c]; closeEraMenu(); if (k !== currentEra) travelEra(k); else if (typeof flash === 'function') flash('Você já está ' + ERA_SUB[c] + '.'); }
 
+    // ============================================================
+    //  COMBATE ATB (por turnos, no próprio mapa — à la Chrono Trigger)
+    // ============================================================
+    const hero = { lvl: 1, xp: 0, xpNext: 8, hp: 20, hpMax: 20, mp: 5, mpMax: 5, atk: 4, def: 3, mag: 4, agi: 8, defending: false };
+    const ENEMY_DEF = {
+      brotoca: { nome: 'Brotoca', glb: 'caterpillar', tint: 0x7fcf4a, hp: 12, atk: 3, def: 2, agi: 6, xp: 4, h: 0.8 },
+      cinzela: { nome: 'Cinzela', glb: 'caterpillar', tint: 0x9a9aa2, hp: 16, atk: 4, def: 3, agi: 8, xp: 5, h: 0.8 },
+    };
+    const overworldEnemies = [], dyingActors = [], dmgPops = [];
+    let inBattle = false, battle = null;
+    const camW = new THREE.Vector3();
+
+    // -- billboards (barra de vida do inimigo) --
+    function makeBar() {
+      const cv = document.createElement('canvas'); cv.width = 160; cv.height = 26;
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.24), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthTest: false }));
+      mesh.renderOrder = 997; mesh.userData = { cv, ctx: cv.getContext('2d'), last: -1 };
+      return mesh;
+    }
+    function drawBar(bar, frac, label) {
+      const c = bar.userData.ctx; c.clearRect(0, 0, 160, 26);
+      c.fillStyle = 'rgba(0,0,0,0.55)'; rr(c, 0, 0, 160, 26, 8); c.fill();
+      c.fillStyle = frac > 0.3 ? '#5be07a' : '#e05b5b'; c.fillRect(3, 3, 154 * Math.max(0, frac), 20);
+      c.fillStyle = '#fff'; c.font = 'bold 14px Arial'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(label, 80, 14);
+      c.textAlign = 'left'; c.textBaseline = 'alphabetic'; bar.material.map.needsUpdate = true;
+    }
+
+    // -- HUD do herói (painel preso à câmera; HP/MP/ATB/nível) --
+    const hudCv = document.createElement('canvas'); hudCv.width = 512; hudCv.height = 150;
+    const hudCtx = hudCv.getContext('2d');
+    const hudTex = new THREE.CanvasTexture(hudCv); hudTex.colorSpace = THREE.SRGBColorSpace;
+    const heroHud = new THREE.Mesh(new THREE.PlaneGeometry(0.52, 0.152), new THREE.MeshBasicMaterial({ map: hudTex, transparent: true, depthTest: false }));
+    heroHud.position.set(0, -0.40, -1.0); heroHud.renderOrder = 1500; heroHud.visible = false; camera.add(heroHud);
+    function updateHeroHud() {
+      const c = hudCtx, W = 512; c.clearRect(0, 0, W, 150);
+      c.fillStyle = 'rgba(8,22,16,0.85)'; rr(c, 0, 0, W, 150, 18); c.fill();
+      c.strokeStyle = 'rgba(160,230,180,0.5)'; c.lineWidth = 3; c.stroke();
+      c.fillStyle = '#eaffee'; c.font = 'bold 26px Arial'; c.textAlign = 'left'; c.textBaseline = 'middle';
+      c.fillText('Você  ·  Nv ' + hero.lvl, 20, 26);
+      const bar = (y, frac, col, txt) => { c.fillStyle = 'rgba(0,0,0,.5)'; rr(c, 150, y - 13, 340, 26, 8); c.fill(); c.fillStyle = col; c.fillRect(153, y - 10, 334 * Math.max(0, Math.min(1, frac)), 20); c.fillStyle = '#fff'; c.font = 'bold 17px Arial'; c.fillText(txt, 162, y + 1); };
+      c.fillStyle = '#bdf5c8'; c.font = 'bold 20px Arial'; c.fillText('HP', 20, 56); bar(56, hero.hp / hero.hpMax, '#5be07a', hero.hp + '/' + hero.hpMax);
+      c.fillStyle = '#bdf5c8'; c.fillText('MP', 20, 92); bar(92, hero.mp / hero.mpMax, '#5aa0ff', hero.mp + '/' + hero.mpMax);
+      c.fillStyle = '#bdf5c8'; c.fillText('AÇÃO', 20, 128); bar(128, battle ? battle.heroAtb : 0, battle && battle.ready ? '#ffd86b' : '#c98a4a', battle && battle.ready ? 'PRONTO!' : '');
+      c.textAlign = 'left'; hudTex.needsUpdate = true;
+    }
+
+    // -- menu de batalha (painel 2x2 mirado pelo raio) --
+    const batCv = document.createElement('canvas'); batCv.width = 512; batCv.height = 512;
+    const batCtx = batCv.getContext('2d');
+    const batTex = new THREE.CanvasTexture(batCv); batTex.colorSpace = THREE.SRGBColorSpace;
+    const battlePanel = new THREE.Mesh(new THREE.PlaneGeometry(1.05, 1.05), new THREE.MeshBasicMaterial({ map: batTex, transparent: true }));
+    battlePanel.visible = false; scene.add(battlePanel);
+    const BAT_ACTIONS = [{ k: 'atacar', t: '⚔ Atacar' }, { k: 'tecnica', t: '✨ Técnica' }, { k: 'item', t: '🎒 Item' }, { k: 'defender', t: '🛡 Defender' }];
+    function drawBattleMenu() {
+      const c = batCtx, W = 512, cw = W / 2;
+      c.clearRect(0, 0, W, W);
+      c.fillStyle = 'rgba(8,22,16,0.92)'; rr(c, 4, 4, W - 8, W - 8, 26); c.fill();
+      c.strokeStyle = 'rgba(160,230,180,0.6)'; c.lineWidth = 5; c.stroke();
+      c.textAlign = 'center'; c.textBaseline = 'middle';
+      for (let i = 0; i < 4; i++) {
+        const col = i % 2, row = (i / 2) | 0, x = col * cw, y = row * cw;
+        c.fillStyle = battle && battle.hover === i ? 'rgba(120,220,150,0.45)' : 'rgba(255,255,255,0.06)';
+        rr(c, x + 14, y + 14, cw - 28, cw - 28, 18); c.fill();
+        c.fillStyle = '#eaffee'; c.font = '40px Arial'; c.fillText(BAT_ACTIONS[i].t, x + cw / 2, y + cw / 2);
+      }
+      c.textAlign = 'left'; c.textBaseline = 'alphabetic'; batTex.needsUpdate = true;
+    }
+    function openBattleMenu() {
+      hero.defending = false; battle.menuOpen = true; battle.hover = -1;
+      camera.getWorldPosition(rcPos); camera.getWorldDirection(rcDir); rcDir.y = 0; rcDir.normalize();
+      battlePanel.position.set(rcPos.x + rcDir.x * 1.6, rcPos.y - 0.1, rcPos.z + rcDir.z * 1.6); battlePanel.lookAt(rcPos.x, rcPos.y - 0.1, rcPos.z);
+      battlePanel.visible = true; drawBattleMenu();
+    }
+    function closeBattleMenu() { if (battle) battle.menuOpen = false; battlePanel.visible = false; }
+    function battlePick() { buildAimRay(); const hit = raycaster.intersectObject(battlePanel, false)[0]; if (!hit || !hit.uv) return -1; const col = hit.uv.x < 0.5 ? 0 : 1, row = hit.uv.y > 0.5 ? 0 : 1; return row * 2 + col; }
+    function aliveEnemy() { return battle && battle.enemies.find(e => e.alive); }
+    function resetHeroTurn() { battle.heroAtb = 0; battle.ready = false; }
+    function battleSelect(i) {
+      if (i < 0 || !battle) return;
+      const k = BAT_ACTIONS[i].k;
+      if (k === 'atacar') { closeBattleMenu(); heroAttack(aliveEnemy()); }
+      else if (k === 'defender') { closeBattleMenu(); hero.defending = true; flash('🛡 Você se protegeu!'); resetHeroTurn(); }
+      else flash('Em breve, broto! 😊');
+    }
+    function battleInteract() { if (battle.menuOpen) battleSelect(battle.hover); else if (battle.ready) openBattleMenu(); }
+
+    function spawnDmg(p, n, hexcol) {
+      const cv = document.createElement('canvas'); cv.width = 128; cv.height = 72; const c = cv.getContext('2d');
+      c.fillStyle = '#' + hexcol.toString(16).padStart(6, '0'); c.font = 'bold 56px Arial'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.strokeStyle = 'rgba(0,0,0,0.6)'; c.lineWidth = 6; c.strokeText(n, 64, 38); c.fillText(n, 64, 38);
+      const sp = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.4), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthTest: false }));
+      sp.renderOrder = 1600; sp.position.copy(p).add(new THREE.Vector3(0, 1.6, 0)); scene.add(sp); dmgPops.push({ sp, t: 0 });
+    }
+    function puff(p) { // fumacinha fofa (sem violência)
+      const g = new THREE.Group();
+      for (let i = 0; i < 6; i++) { const s = new THREE.Mesh(new THREE.SphereGeometry(0.2 + Math.random() * 0.2, 7, 6), new THREE.MeshBasicMaterial({ color: 0xeaf6ea, transparent: true, opacity: 0.85, depthWrite: false })); s.position.set((Math.random() - 0.5), 0.4 + Math.random(), (Math.random() - 0.5)); g.add(s); }
+      g.position.copy(p); scene.add(g); dyingActors.push({ wrap: g, t: 0, puff: true });
+    }
+
+    function heroAttack(e) {
+      if (!e) return;
+      const dmg = Math.max(1, Math.round((hero.atk * 2 - e.def.def) * (0.9 + Math.random() * 0.2)));
+      e.hp -= dmg; sfx('hit'); spawnDmg(e.actor.wrap.position, dmg, 0xffffff); playClip(e.actor, 'eat');
+      if (e.hp <= 0) { e.alive = false; defeatEnemy(e); } resetHeroTurn();
+    }
+    function enemyAttack(e) {
+      let dmg = Math.max(1, Math.round((e.def.atk * 2 - hero.def) * (0.9 + Math.random() * 0.2)));
+      if (hero.defending) dmg = Math.max(1, Math.round(dmg * 0.5));
+      hero.hp = Math.max(0, hero.hp - dmg); sfx('hurt'); spawnDmg(dolly.position.clone().add(new THREE.Vector3(0, -0.5, 0)), dmg, 0xff6b6b);
+      playClip(e.actor, 'gesture-negative'); e.atb = 0; updateHeroHud();
+      if (hero.hp <= 0) loseBattle();
+    }
+    function defeatEnemy(e) {
+      if (e.bar) e.actor.wrap.remove(e.bar);
+      puff(e.actor.wrap.position); sfx('poof');
+      e.actor.defeated = true; e.actor.wrap.userData.dyT = 0; dyingActors.push({ wrap: e.actor.wrap, mixer: e.actor.mixer, t: 0, shrink: true });
+      const i = overworldEnemies.indexOf(e.actor); if (i >= 0) overworldEnemies.splice(i, 1);
+      if (battle.enemies.every(x => !x.alive)) winBattle();
+    }
+    function levelUp() { hero.lvl++; hero.xpNext = Math.round(hero.xpNext * 1.7); hero.hpMax += 6; hero.mpMax += 2; hero.atk += 2; hero.def += 1; hero.mag += 1; hero.hp = hero.hpMax; hero.mp = hero.mpMax; }
+    function winBattle() {
+      const xp = battle.enemies.reduce((s, e) => s + e.def.xp, 0); hero.xp += xp; sfx('fanfare');
+      let msg = '🎉 Você venceu! +' + xp + ' XP';
+      while (hero.xp >= hero.xpNext) { hero.xp -= hero.xpNext; levelUp(); msg += ' · subiu pro Nível ' + hero.lvl + '!'; }
+      endBattle(); flash(msg);
+    }
+    function loseBattle() { flash('😴 Você cochilou no Bosque…'); endBattle(); hero.hp = hero.hpMax; hero.mp = hero.mpMax; dolly.position.set(10, heightAt(10, 64), 64); travelEra(currentEra); }
+    function endBattle() {
+      inBattle = false; closeBattleMenu();
+      if (battle && battle.ring) scene.remove(battle.ring);
+      if (battle) for (const e of battle.enemies) if (e.alive && e.bar) e.actor.wrap.remove(e.bar);
+      battle = null; heroHud.visible = false;
+    }
+
+    function spawnEnemy(key, x, z) {
+      const d = ENEMY_DEF[key];
+      getGLB(`../bosque-vr/pets/animal-${d.glb}.glb`).then(g => {
+        const a = spawnActor(g, 'walk', d.h);
+        a.wrap.position.set(x, heightAt(x, z), z);
+        const tint = mm => { const c = mm.clone(); if (c.color) c.color.setHex(d.tint); return c; };
+        a.wrap.traverse(o => { if (o.isMesh && o.material) o.material = Array.isArray(o.material) ? o.material.map(tint) : tint(o.material); });
+        a.enemyKey = key; overworldEnemies.push(a);
+      }).catch(() => {});
+    }
+    function startBattle(actor) {
+      inBattle = true;
+      camera.getWorldDirection(rcDir); rcDir.y = 0; rcDir.normalize();
+      const ex = dolly.position.x + rcDir.x * 5, ez = dolly.position.z + rcDir.z * 5;
+      actor.wrap.position.set(ex, heightAt(ex, ez), ez);
+      const d = ENEMY_DEF[actor.enemyKey], e = { actor, def: d, hp: d.hp, hpMax: d.hp, atb: Math.random() * 0.3, alive: true, bar: makeBar() };
+      e.bar.position.set(0, d.h + 0.7, 0); actor.wrap.add(e.bar);
+      battle = { enemies: [e], heroAtb: 0, ready: false, menuOpen: false, hover: -1, ring: null };
+      const ring = new THREE.Mesh(new THREE.RingGeometry(4.6, 5.3, 48), new THREE.MeshBasicMaterial({ color: 0xffd86b, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false }));
+      ring.rotation.x = -Math.PI / 2; ring.position.set(dolly.position.x, heightAt(dolly.position.x, dolly.position.z) + 0.12, dolly.position.z); scene.add(ring); battle.ring = ring;
+      heroHud.visible = true; updateHeroHud(); sfx('start'); flash('⚔ ' + d.nome + ' apareceu! Encha a barra de AÇÃO e aperte pra agir.');
+    }
+    function checkAggro() {
+      if (inBattle) return;
+      for (const a of overworldEnemies) { if (a.defeated) continue; if (Math.hypot(dolly.position.x - a.wrap.position.x, dolly.position.z - a.wrap.position.z) < 4.5) { startBattle(a); break; } }
+    }
+    function updateBattle(dt) {
+      const b = battle; if (!b) return;
+      if (!b.menuOpen) {
+        if (!b.ready) { b.heroAtb += dt * (0.30 + hero.agi / 300); if (b.heroAtb >= 1) { b.heroAtb = 1; b.ready = true; sfx('ready'); } }
+        for (const e of b.enemies) { if (!e.alive) continue; e.atb += dt * (0.16 + e.def.agi / 220); if (e.atb >= 1) enemyAttack(e); }
+      }
+      camera.getWorldPosition(camW);
+      for (const e of b.enemies) { if (!e.alive) continue; e.actor.wrap.lookAt(dolly.position.x, e.actor.wrap.position.y, dolly.position.z); if (e.bar.userData.last !== e.hp) { e.bar.userData.last = e.hp; drawBar(e.bar, e.hp / e.hpMax, e.def.nome + ' ' + Math.max(0, e.hp)); } e.bar.lookAt(camW); }
+      if (b.menuOpen) { const h = battlePick(); if (h !== b.hover) { b.hover = h; drawBattleMenu(); } }
+      updateHeroHud();
+    }
+    function updateDying(dt) {
+      camera.getWorldPosition(camW);
+      for (let i = dyingActors.length - 1; i >= 0; i--) {
+        const d = dyingActors[i]; d.t += dt;
+        if (d.shrink) { const s = Math.max(0, 1 - d.t * 2); d.wrap.scale.setScalar(s); if (d.mixer) d.mixer.update(dt); }
+        if (d.puff) { d.wrap.position.y += dt * 1.2; d.wrap.children.forEach(c => { c.material.opacity = Math.max(0, 0.85 - d.t * 1.2); }); }
+        if (d.t > 0.9) { scene.remove(d.wrap); if (d.mixer) { const mi = mixers.indexOf(d.mixer); if (mi >= 0) mixers.splice(mi, 1); } dyingActors.splice(i, 1); }
+      }
+      for (let i = dmgPops.length - 1; i >= 0; i--) {
+        const p = dmgPops[i]; p.t += dt; p.sp.position.y += dt * 1.1; p.sp.material.opacity = Math.max(0, 1 - p.t); p.sp.lookAt(camW);
+        if (p.t > 1) { scene.remove(p.sp); dmgPops.splice(i, 1); }
+      }
+    }
+    // SFX procedurais de batalha (reusa o actx do startAudio)
+    function sfx(kind) {
+      if (typeof actx === 'undefined' || !actx) return;
+      const t = actx.currentTime, o = actx.createOscillator(), g = actx.createGain(); o.connect(g).connect(actx.destination);
+      if (kind === 'hit') { o.type = 'square'; o.frequency.setValueAtTime(420, t); o.frequency.exponentialRampToValueAtTime(90, t + 0.12); g.gain.setValueAtTime(0.18, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.14); o.start(t); o.stop(t + 0.15); }
+      else if (kind === 'hurt') { o.type = 'sawtooth'; o.frequency.setValueAtTime(200, t); o.frequency.exponentialRampToValueAtTime(70, t + 0.18); g.gain.setValueAtTime(0.16, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.2); o.start(t); o.stop(t + 0.2); }
+      else if (kind === 'poof') { o.type = 'sine'; o.frequency.setValueAtTime(700, t); o.frequency.exponentialRampToValueAtTime(1400, t + 0.18); g.gain.setValueAtTime(0.12, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.22); o.start(t); o.stop(t + 0.23); }
+      else if (kind === 'ready') { o.type = 'triangle'; o.frequency.setValueAtTime(880, t); g.gain.setValueAtTime(0.001, t); g.gain.exponentialRampToValueAtTime(0.1, t + 0.02); g.gain.exponentialRampToValueAtTime(0.001, t + 0.18); o.start(t); o.stop(t + 0.2); }
+      else if (kind === 'start') { o.type = 'sawtooth'; o.frequency.setValueAtTime(120, t); o.frequency.exponentialRampToValueAtTime(640, t + 0.3); g.gain.setValueAtTime(0.12, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.35); o.start(t); o.stop(t + 0.36); }
+      else if (kind === 'fanfare') { [523, 659, 784, 1047].forEach((f, k) => { const oo = actx.createOscillator(), gg = actx.createGain(); oo.type = 'triangle'; oo.frequency.value = f; oo.connect(gg).connect(actx.destination); const tt = t + k * 0.12; gg.gain.setValueAtTime(0.001, tt); gg.gain.exponentialRampToValueAtTime(0.14, tt + 0.02); gg.gain.exponentialRampToValueAtTime(0.001, tt + 0.4); oo.start(tt); oo.stop(tt + 0.42); }); }
+    }
+    // (os inimigos de teste são criados junto com os pets, onde getGLB já existe)
+
     // ---------- árvores e pedras: modelos 3D CC0 (Quaternius), instanciados ----------
     const TREES = 240;
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), scl = new THREE.Vector3(), ID = new THREE.Quaternion();
@@ -429,6 +626,10 @@
         pets.push(a);
       }).catch(() => {});
     });
+
+    // inimigos de teste da Fase 1 (mesmo getGLB que os pets, já inicializado aqui)
+    spawnEnemy('brotoca', 10, 50);
+    spawnEnemy('brotoca', 4, 46);
 
     // ---------- AVES voando (modelos de papagaio/passarinho do mesmo pack, em círculos) ----------
     const flyers = [];
@@ -862,6 +1063,7 @@
     // ---------- interação (conversar com NPC) e avisos ----------
     const talkHint = document.getElementById('talkHint');
     function interact() {
+      if (inBattle) { battleInteract(); return; }
       if (eraMenuOpen) { eraSelect(eraHover); return; }
       if (activeNPC) { advanceTalk(); return; }
       if (nearPortal()) { openEraMenu(); return; }
@@ -913,6 +1115,7 @@
         mx = (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0) + joy.x;
         mz = (keys['KeyS'] ? 1 : 0) - (keys['KeyW'] ? 1 : 0) + (keys['ArrowDown'] ? 1 : 0) - (keys['ArrowUp'] ? 1 : 0) + joy.y;
       }
+      if (inBattle) { mx = 0; mz = 0; wantJump = false; } // na batalha o jogador fica parado
       const len = Math.hypot(mx, mz);
       if (len > 0.01) {
         if (len > 1) { mx /= len; mz /= len; }
@@ -983,12 +1186,21 @@
       vovo.userData.ring.material.opacity = 0.4 + Math.sin(t * 0.003) * 0.15;
       updateFade(dt);
       if (eraMenuOpen) { const h = eraPick(); if (h !== eraHover) { eraHover = h; drawEraMenu(); } }
-      // dica de interação: perto do Vovô = portal; perto de NPC = conversar
-      const portalPerto = !activeNPC && !eraMenuOpen && nearPortal();
-      const near = !activeNPC && !eraMenuOpen && !portalPerto && nearestNPC();
-      if (portalPerto) { talkHint.textContent = '🌳 Tocar o Vovô Carvalho (E / gatilho)'; talkHint.style.display = 'block'; }
-      else if (near) { talkHint.textContent = '💬 Conversar (E / gatilho)'; talkHint.style.display = 'block'; }
-      else talkHint.style.display = 'none';
+      // COMBATE: tick da batalha ou checa aproximação de inimigo; efeitos morrendo
+      if (inBattle) updateBattle(dt); else checkAggro();
+      updateDying(dt);
+      // dica de interação (contextual)
+      if (inBattle) {
+        if (battle && battle.ready && !battle.menuOpen) { talkHint.textContent = '⚔ Agir! (E / gatilho / toque)'; talkHint.style.display = 'block'; }
+        else if (battle && battle.menuOpen) { talkHint.textContent = 'Mire e confirme (E / gatilho / toque)'; talkHint.style.display = 'block'; }
+        else talkHint.style.display = 'none';
+      } else {
+        const portalPerto = !activeNPC && !eraMenuOpen && nearPortal();
+        const near = !activeNPC && !eraMenuOpen && !portalPerto && nearestNPC();
+        if (portalPerto) { talkHint.textContent = '🌳 Tocar o Vovô Carvalho (E / gatilho)'; talkHint.style.display = 'block'; }
+        else if (near) { talkHint.textContent = '💬 Conversar (E / gatilho)'; talkHint.style.display = 'block'; }
+        else talkHint.style.display = 'none';
+      }
       renderer.render(scene, camera);
     }
     renderer.setAnimationLoop(frame);

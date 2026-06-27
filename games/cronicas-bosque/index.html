@@ -299,11 +299,17 @@
     // ============================================================
     //  COMBATE ATB (por turnos, no próprio mapa — à la Chrono Trigger)
     // ============================================================
-    const hero = { lvl: 1, xp: 0, xpNext: 8, hp: 20, hpMax: 20, mp: 5, mpMax: 5, atk: 4, def: 3, mag: 4, agi: 8, defending: false };
+    const hero = { lvl: 1, xp: 0, xpNext: 8, hp: 20, hpMax: 20, mp: 5, mpMax: 5, atk: 4, def: 3, mag: 4, agi: 8, defending: false, tecnicas: ['raio', 'brotar'], itens: { mel: 2 } };
     const ENEMY_DEF = {
-      brotoca: { nome: 'Brotoca', glb: 'caterpillar', tint: 0x7fcf4a, hp: 12, atk: 3, def: 2, agi: 6, xp: 4, h: 0.8 },
-      cinzela: { nome: 'Cinzela', glb: 'caterpillar', tint: 0x9a9aa2, hp: 16, atk: 4, def: 3, agi: 8, xp: 5, h: 0.8 },
+      brotoca: { nome: 'Brotoca', glb: 'caterpillar', tint: 0x7fcf4a, hp: 12, atk: 3, def: 2, agi: 6, xp: 4, h: 0.8, ess: 'folha' },
+      lobinho: { nome: 'Lobinho de Musgo', glb: 'dog', tint: 0x6f8f5a, hp: 22, atk: 5, def: 4, agi: 11, xp: 6, h: 0.95, ess: 'folha' },
+      cinzela: { nome: 'Cinzela', glb: 'caterpillar', tint: 0x9a9aa2, hp: 16, atk: 4, def: 3, agi: 8, xp: 5, h: 0.8, ess: 'cinza' },
     };
+    // Roda das Essências: a chave vence (×2) os valores; fraqueza inversa = ×0.5
+    const ESS_STRONG = { sol: ['folha', 'cinza'], agua: ['sol', 'cinza'], folha: ['agua'], cinza: ['folha'] };
+    function essMult(atk, tgt) { if (!atk || !tgt) return 1; if (ESS_STRONG[atk] && ESS_STRONG[atk].includes(tgt)) return 2; if (ESS_STRONG[tgt] && ESS_STRONG[tgt].includes(atk)) return 0.5; return 1; }
+    const TECNICAS = { raio: { nome: '☀️ Raiozinho', ess: 'sol', mp: 2, poder: 5, tipo: 'atk' }, brotar: { nome: '🍃 Brotar', ess: 'folha', mp: 3, poder: 7, tipo: 'cura' } };
+    const ITENS = { mel: { nome: '🍯 Mel-do-Bosque', cura: 15 } };
     const overworldEnemies = [], dyingActors = [], dmgPops = [];
     let inBattle = false, battle = null;
     const camW = new THREE.Vector3();
@@ -349,38 +355,87 @@
     const battlePanel = new THREE.Mesh(new THREE.PlaneGeometry(1.05, 1.05), new THREE.MeshBasicMaterial({ map: batTex, transparent: true }));
     battlePanel.visible = false; scene.add(battlePanel);
     const BAT_ACTIONS = [{ k: 'atacar', t: '⚔ Atacar' }, { k: 'tecnica', t: '✨ Técnica' }, { k: 'item', t: '🎒 Item' }, { k: 'defender', t: '🛡 Defender' }];
+    // itens do submenu atual (Técnica ou Item) + "Voltar"
+    function battleMenuItems() {
+      if (battle.sub === 'tecnica') { const a = hero.tecnicas.map(k => ({ key: k, t: TECNICAS[k].nome + '  (' + TECNICAS[k].mp + ' MP)', dim: hero.mp < TECNICAS[k].mp })); a.push({ back: true, t: '← Voltar' }); return a; }
+      if (battle.sub === 'item') { const a = Object.keys(hero.itens).filter(k => hero.itens[k] > 0).map(k => ({ key: k, t: ITENS[k].nome + '  ×' + hero.itens[k] })); a.push({ back: true, t: '← Voltar' }); return a; }
+      return [];
+    }
     function drawBattleMenu() {
-      const c = batCtx, W = 512, cw = W / 2;
-      c.clearRect(0, 0, W, W);
+      const c = batCtx, W = 512; c.clearRect(0, 0, W, W);
       c.fillStyle = 'rgba(8,22,16,0.92)'; rr(c, 4, 4, W - 8, W - 8, 26); c.fill();
       c.strokeStyle = 'rgba(160,230,180,0.6)'; c.lineWidth = 5; c.stroke();
       c.textAlign = 'center'; c.textBaseline = 'middle';
-      for (let i = 0; i < 4; i++) {
-        const col = i % 2, row = (i / 2) | 0, x = col * cw, y = row * cw;
-        c.fillStyle = battle && battle.hover === i ? 'rgba(120,220,150,0.45)' : 'rgba(255,255,255,0.06)';
-        rr(c, x + 14, y + 14, cw - 28, cw - 28, 18); c.fill();
-        c.fillStyle = '#eaffee'; c.font = '40px Arial'; c.fillText(BAT_ACTIONS[i].t, x + cw / 2, y + cw / 2);
+      if (!battle.sub) {
+        const cw = W / 2;
+        for (let i = 0; i < 4; i++) {
+          const col = i % 2, row = (i / 2) | 0, x = col * cw, y = row * cw;
+          c.fillStyle = battle.hover === i ? 'rgba(120,220,150,0.45)' : 'rgba(255,255,255,0.06)';
+          rr(c, x + 14, y + 14, cw - 28, cw - 28, 18); c.fill();
+          c.fillStyle = '#eaffee'; c.font = '40px Arial'; c.fillText(BAT_ACTIONS[i].t, x + cw / 2, y + cw / 2);
+        }
+      } else {
+        const items = battleMenuItems(), n = items.length, top = 56, rh = (W - top - 24) / Math.max(n, 1);
+        c.fillStyle = '#bdf5c8'; c.font = 'bold 28px Arial'; c.fillText(battle.sub === 'tecnica' ? '✨ Técnica' : '🎒 Item', W / 2, 32);
+        for (let i = 0; i < n; i++) {
+          const y = top + i * rh;
+          c.fillStyle = battle.hover === i ? 'rgba(120,220,150,0.45)' : 'rgba(255,255,255,0.06)';
+          rr(c, 22, y, W - 44, rh - 8, 12); c.fill();
+          c.fillStyle = items[i].dim ? '#7c9a86' : '#eaffee'; c.font = '30px Arial'; c.fillText(items[i].t, W / 2, y + (rh - 8) / 2);
+        }
       }
       c.textAlign = 'left'; c.textBaseline = 'alphabetic'; batTex.needsUpdate = true;
     }
     function openBattleMenu() {
-      hero.defending = false; battle.menuOpen = true; battle.hover = -1;
+      hero.defending = false; battle.menuOpen = true; battle.hover = -1; battle.sub = null;
       camera.getWorldPosition(rcPos); camera.getWorldDirection(rcDir); rcDir.y = 0; rcDir.normalize();
       battlePanel.position.set(rcPos.x + rcDir.x * 1.6, rcPos.y - 0.1, rcPos.z + rcDir.z * 1.6); battlePanel.lookAt(rcPos.x, rcPos.y - 0.1, rcPos.z);
       battlePanel.visible = true; drawBattleMenu();
     }
-    function closeBattleMenu() { if (battle) battle.menuOpen = false; battlePanel.visible = false; }
-    function battlePick() { buildAimRay(); const hit = raycaster.intersectObject(battlePanel, false)[0]; if (!hit || !hit.uv) return -1; const col = hit.uv.x < 0.5 ? 0 : 1, row = hit.uv.y > 0.5 ? 0 : 1; return row * 2 + col; }
+    function closeBattleMenu() { if (battle) { battle.menuOpen = false; battle.sub = null; } battlePanel.visible = false; }
+    function battlePick() {
+      buildAimRay(); const hit = raycaster.intersectObject(battlePanel, false)[0]; if (!hit || !hit.uv) return -1;
+      if (!battle.sub) { const col = hit.uv.x < 0.5 ? 0 : 1, row = hit.uv.y > 0.5 ? 0 : 1; return row * 2 + col; }
+      const items = battleMenuItems(), n = items.length, top = 56, rh = (512 - top - 24) / Math.max(n, 1);
+      const cy = (1 - hit.uv.y) * 512, idx = Math.floor((cy - top) / rh); return idx >= 0 && idx < n ? idx : -1;
+    }
     function aliveEnemy() { return battle && battle.enemies.find(e => e.alive); }
     function resetHeroTurn() { battle.heroAtb = 0; battle.ready = false; }
     function battleSelect(i) {
       if (i < 0 || !battle) return;
-      const k = BAT_ACTIONS[i].k;
-      if (k === 'atacar') { closeBattleMenu(); heroAttack(aliveEnemy()); }
-      else if (k === 'defender') { closeBattleMenu(); hero.defending = true; flash('🛡 Você se protegeu!'); resetHeroTurn(); }
-      else flash('Em breve, broto! 😊');
+      if (!battle.sub) {
+        const k = BAT_ACTIONS[i].k;
+        if (k === 'atacar') { closeBattleMenu(); heroAttack(aliveEnemy()); }
+        else if (k === 'defender') { closeBattleMenu(); hero.defending = true; flash('🛡 Você se protegeu!'); resetHeroTurn(); }
+        else if (k === 'tecnica') { battle.sub = 'tecnica'; battle.hover = -1; drawBattleMenu(); }
+        else if (k === 'item') { if (!Object.keys(hero.itens).some(x => hero.itens[x] > 0)) { flash('Você não tem itens.'); return; } battle.sub = 'item'; battle.hover = -1; drawBattleMenu(); }
+      } else {
+        const it = battleMenuItems()[i]; if (!it) return;
+        if (it.back) { battle.sub = null; battle.hover = -1; drawBattleMenu(); return; }
+        if (it.dim) { flash('MP insuficiente!'); return; }
+        if (battle.sub === 'tecnica') { closeBattleMenu(); heroTecnica(it.key, aliveEnemy()); }
+        else { closeBattleMenu(); heroItem(it.key); }
+      }
     }
     function battleInteract() { if (battle.menuOpen) battleSelect(battle.hover); else if (battle.ready) openBattleMenu(); }
+    function heroTecnica(key, target) {
+      const tc = TECNICAS[key]; if (hero.mp < tc.mp) { flash('MP insuficiente!'); return; }
+      hero.mp -= tc.mp;
+      if (tc.tipo === 'cura') { const h = Math.round(tc.poder + hero.mag); hero.hp = Math.min(hero.hpMax, hero.hp + h); sfx('ready'); spawnDmg(dolly.position.clone().add(new THREE.Vector3(0, -0.4, 0)), '+' + h, 0x5be07a); flash(tc.nome + '! +' + h + ' HP'); }
+      else if (target) {
+        const mult = essMult(tc.ess, target.def.ess), dmg = Math.max(1, Math.round((tc.poder + hero.mag - target.def.def / 2) * (0.9 + Math.random() * 0.2) * mult));
+        target.hp -= dmg; sfx('hit'); spawnDmg(target.actor.wrap.position, dmg, mult >= 2 ? 0xffe24a : 0xffffff);
+        if (mult >= 2) flash('✨ Acertou a fraqueza! ×2'); playClip(target.actor, 'eat');
+        if (target.hp <= 0) { target.alive = false; defeatEnemy(target); }
+      }
+      resetHeroTurn(); updateHeroHud();
+    }
+    function heroItem(key) {
+      if (!hero.itens[key] || hero.itens[key] <= 0) { flash('Sem esse item.'); return; }
+      hero.itens[key]--; const it = ITENS[key];
+      if (it.cura) { hero.hp = Math.min(hero.hpMax, hero.hp + it.cura); spawnDmg(dolly.position.clone().add(new THREE.Vector3(0, -0.4, 0)), '+' + it.cura, 0x5be07a); flash(it.nome + '! +' + it.cura + ' HP'); sfx('ready'); }
+      resetHeroTurn(); updateHeroHud();
+    }
 
     function spawnDmg(p, n, hexcol) {
       const cv = document.createElement('canvas'); cv.width = 128; cv.height = 72; const c = cv.getContext('2d');

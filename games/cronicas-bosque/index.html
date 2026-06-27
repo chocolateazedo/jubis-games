@@ -472,12 +472,26 @@
       e.hp -= dmg; sfx('hit'); spawnDmg(e.actor.wrap.position, dmg, 0xffffff); playClip(e.actor, 'eat');
       if (e.hp <= 0) { e.alive = false; defeatEnemy(e); } resetHeroTurn();
     }
+    function allyAct(al) {
+      const alvos = battle.enemies.filter(x => x.alive); if (!alvos.length) return;
+      const tgt = alvos[(Math.random() * alvos.length) | 0];
+      const mult = essMult(al.ess, tgt.def.ess), dmg = Math.max(1, Math.round((al.mag + 4 - tgt.def.def / 2) * (0.9 + Math.random() * 0.2) * mult));
+      tgt.hp -= dmg; sfx('hit'); spawnDmg(tgt.actor.wrap.position, dmg, mult >= 2 ? 0xffe24a : 0xffd86b);
+      if (mult >= 2) flash('🦊 Fagulha acertou a fraqueza! ×2');
+      if (tgt.hp <= 0) { tgt.alive = false; defeatEnemy(tgt); }
+    }
     function enemyAttack(e) {
-      let dmg = Math.max(1, Math.round((e.def.atk * 2 - hero.def) * (0.9 + Math.random() * 0.2)));
-      if (hero.defending) dmg = Math.max(1, Math.round(dmg * 0.5));
-      hero.hp = Math.max(0, hero.hp - dmg); sfx('hurt'); spawnDmg(dolly.position.clone().add(new THREE.Vector3(0, -0.5, 0)), dmg, 0xff6b6b);
-      playClip(e.actor, 'gesture-negative'); e.atb = 0; updateHeroHud();
-      if (hero.hp <= 0) loseBattle();
+      const al = battle.ally, miraAliada = al && al.alive && Math.random() < 0.45;
+      let dmg = Math.max(1, Math.round((e.def.atk * 2 - (miraAliada ? al.def : hero.def)) * (0.9 + Math.random() * 0.2)));
+      sfx('hurt'); playClip(e.actor, 'gesture-negative'); e.atb = 0;
+      if (miraAliada) {
+        al.hp = Math.max(0, al.hp - dmg); spawnDmg(al.actor.wrap.position, dmg, 0xff6b6b);
+        if (al.hp <= 0) { al.alive = false; flash('🦊 Fagulha ficou tonta…'); puff(al.actor.wrap.position); if (al.bar) al.actor.wrap.remove(al.bar); al.actor.wrap.visible = false; }
+      } else {
+        if (hero.defending) dmg = Math.max(1, Math.round(dmg * 0.5));
+        hero.hp = Math.max(0, hero.hp - dmg); spawnDmg(dolly.position.clone().add(new THREE.Vector3(0, -0.5, 0)), dmg, 0xff6b6b); updateHeroHud();
+        if (hero.hp <= 0) loseBattle();
+      }
     }
     function defeatEnemy(e) {
       if (e.bar) e.actor.wrap.remove(e.bar);
@@ -498,6 +512,7 @@
       inBattle = false; closeBattleMenu();
       if (battle && battle.ring) scene.remove(battle.ring);
       if (battle) for (const e of battle.enemies) if (e.alive && e.bar) e.actor.wrap.remove(e.bar);
+      if (battle && battle.ally && battle.ally.actor) { scene.remove(battle.ally.actor.wrap); const mi = mixers.indexOf(battle.ally.actor.mixer); if (mi >= 0) mixers.splice(mi, 1); }
       battle = null; heroHud.visible = false;
     }
 
@@ -518,7 +533,20 @@
       actor.wrap.position.set(ex, heightAt(ex, ez), ez);
       const d = ENEMY_DEF[actor.enemyKey], e = { actor, def: d, hp: d.hp, hpMax: d.hp, atb: Math.random() * 0.3, alive: true, bar: makeBar() };
       e.bar.position.set(0, d.h + 0.7, 0); actor.wrap.add(e.bar);
-      battle = { enemies: [e], heroAtb: 0, ready: false, menuOpen: false, hover: -1, ring: null };
+      battle = { enemies: [e], ally: null, heroAtb: 0, ready: false, menuOpen: false, hover: -1, ring: null };
+      if (game.flags.fagulha) { // companheira entra na luta
+        const lvl = hero.lvl;
+        getGLB('../bosque-vr/pets/animal-fox.glb').then(g => {
+          if (!battle) return;
+          const fa = spawnActor(g, 'idle', 0.85);
+          camera.getWorldDirection(rcDir); rcDir.y = 0; rcDir.normalize();
+          const ax = dolly.position.x - rcDir.z * 1.7, az = dolly.position.z + rcDir.x * 1.7;
+          fa.wrap.position.set(ax, heightAt(ax, az), az);
+          const al = { actor: fa, nome: 'Fagulha', hp: 15 + lvl * 2, hpMax: 15 + lvl * 2, def: 2 + lvl, mag: 5 + lvl, agi: 13, atb: 0, alive: true, ess: 'sol', bar: makeBar() };
+          al.bar.position.set(0, 1.3, 0); fa.wrap.add(al.bar); drawBar(al.bar, 1, 'Fagulha ' + al.hp);
+          battle.ally = al;
+        }).catch(() => {});
+      }
       const ring = new THREE.Mesh(new THREE.RingGeometry(4.6, 5.3, 48), new THREE.MeshBasicMaterial({ color: 0xffd86b, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false }));
       ring.rotation.x = -Math.PI / 2; ring.position.set(dolly.position.x, heightAt(dolly.position.x, dolly.position.z) + 0.12, dolly.position.z); scene.add(ring); battle.ring = ring;
       heroHud.visible = true; updateHeroHud(); sfx('start'); flash('⚔ ' + d.nome + ' apareceu! Encha a barra de AÇÃO e aperte pra agir.');
@@ -532,9 +560,11 @@
       if (!b.menuOpen) {
         if (!b.ready) { b.heroAtb += dt * (0.30 + hero.agi / 300); if (b.heroAtb >= 1) { b.heroAtb = 1; b.ready = true; sfx('ready'); } }
         for (const e of b.enemies) { if (!e.alive) continue; e.atb += dt * (0.16 + e.def.agi / 220); if (e.atb >= 1) enemyAttack(e); }
+        if (b.ally && b.ally.alive) { b.ally.atb += dt * (0.16 + b.ally.agi / 200); if (b.ally.atb >= 1) { b.ally.atb = 0; allyAct(b.ally); } } // Fagulha age sozinha (IA)
       }
       camera.getWorldPosition(camW);
       for (const e of b.enemies) { if (!e.alive) continue; e.actor.wrap.lookAt(dolly.position.x, e.actor.wrap.position.y, dolly.position.z); if (e.bar.userData.last !== e.hp) { e.bar.userData.last = e.hp; drawBar(e.bar, e.hp / e.hpMax, e.def.nome + ' ' + Math.max(0, e.hp)); } e.bar.lookAt(camW); }
+      if (b.ally && b.ally.alive) { const al = b.ally, en = b.enemies.find(x => x.alive); if (en) al.actor.wrap.lookAt(en.actor.wrap.position.x, al.actor.wrap.position.y, en.actor.wrap.position.z); if (al.bar.userData.last !== al.hp) { al.bar.userData.last = al.hp; drawBar(al.bar, al.hp / al.hpMax, 'Fagulha ' + Math.max(0, al.hp)); } al.bar.lookAt(camW); }
       if (b.menuOpen) { const h = battlePick(); if (h !== b.hover) { b.hover = h; drawBattleMenu(); } }
       updateHeroHud();
     }
@@ -725,7 +755,7 @@
     }
     function iniciarFase(n) {
       game.fase = n; flash('✨ Fase ' + n + ': ' + (FASE_TITULOS[n] || ''));
-      if (n === 1) setObjetivo('Fale com o Seu Cogu 🍄');
+      if (n === 1) { setObjetivo('Fale com o Seu Cogu 🍄'); criarFagulhaNpc(); }
       else if (n === 2) { setObjetivo('Ache a Lanterna-Vagalume ✨ (perto do Vovô)'); criarLanterna(); }
       else if (n === 3) setObjetivo('Você viu o futuro murcho… a aventura continua! 🌱');
     }
@@ -815,6 +845,21 @@
     }
     function momentoErmo() {
       startNarration('', ['Aqui foi o bosque.', 'O lago virou pó. O céu esqueceu de ser azul.', 'No galho mais alto, o ninho está vazio — frio faz muito tempo.', 'Mas olha: uma folhinha verde, teimosa, ainda segura no galho.', 'Uma folha é pouco. Uma folha é tudo o que o futuro precisa pra recomeçar.'], () => { iniciarFase(3); });
+    }
+    // ---------- companheira Fagulha (raposa): recrutar ----------
+    let foxNpc = null;
+    function criarFagulhaNpc() {
+      if (game.flags.fagulha || foxNpc) return;
+      getGLB('../bosque-vr/pets/animal-fox.glb').then(g => {
+        const a = spawnActor(g, 'idle', 0.85); const fx = 15, fz = 60;
+        a.wrap.position.set(fx, heightAt(fx, fz), fz); foxNpc = a;
+      }).catch(() => {});
+    }
+    function nearFox() { return foxNpc && !game.flags.fagulha && Math.hypot(dolly.position.x - foxNpc.wrap.position.x, dolly.position.z - foxNpc.wrap.position.z) < 3; }
+    function recruitFagulha() {
+      game.flags.fagulha = true;
+      if (foxNpc) { scene.remove(foxNpc.wrap); const mi = mixers.indexOf(foxNpc.mixer); if (mi >= 0) mixers.splice(mi, 1); foxNpc = null; }
+      startNarration('Fagulha', ['Ai, esses espinhos!… Ufa, obrigada, broto!', 'Você também sente o bosque ficando triste? Eu vou com você — e na luta eu solto faísca de ☀️ Sol!'], () => { flash('🦊 Fagulha entrou no grupo!'); });
     }
 
     // ---------- construção (Kenney Building Kit, CC0) ----------
@@ -1168,6 +1213,7 @@
       if (narration) { advanceNarration(); return; }
       if (eraMenuOpen) { eraSelect(eraHover); return; }
       if (activeNPC) { advanceTalk(); return; }
+      if (nearFox()) { recruitFagulha(); return; }
       if (nearLantern()) { pickLantern(); return; }
       if (nearPortal()) { tocarVovo(); return; }
       const n = nearestNPC(); if (n) startTalk(n);
@@ -1306,7 +1352,8 @@
       } else if (narration) { talkHint.textContent = '▶ Continuar (E / gatilho / toque)'; talkHint.style.display = 'block'; }
       else {
         const livre = !activeNPC && !eraMenuOpen;
-        if (livre && nearLantern()) { talkHint.textContent = '✨ Pegar a Lanterna-Vagalume (E / gatilho)'; talkHint.style.display = 'block'; }
+        if (livre && nearFox()) { talkHint.textContent = '🦊 Libertar a Fagulha (E / gatilho)'; talkHint.style.display = 'block'; }
+        else if (livre && nearLantern()) { talkHint.textContent = '✨ Pegar a Lanterna-Vagalume (E / gatilho)'; talkHint.style.display = 'block'; }
         else if (livre && nearPortal()) { talkHint.textContent = '🌳 Tocar o Vovô Carvalho (E / gatilho)'; talkHint.style.display = 'block'; }
         else if (livre && nearestNPC()) { talkHint.textContent = '💬 Conversar (E / gatilho)'; talkHint.style.display = 'block'; }
         else talkHint.style.display = 'none';

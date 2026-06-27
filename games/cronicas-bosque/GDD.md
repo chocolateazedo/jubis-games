@@ -377,3 +377,27 @@ Reusa o `actx` de `startAudio()`. **Arquitetura única:** 1 compressor + 3 buses
 6. **Draw calls / uploads de canvas matando o frame rate.** → Orçamento explícito (alvo 72 fps); redesenhar `CanvasTexture` (HP/ATB/números) **só quando o valor muda**, com `texture.needsUpdate` pontual; instanciar billboards; teto de Points; **sem sombras dinâmicas**. Profilar no Quest a cada milestone, não só em M7.
 7. **Escopo vs. tempo (GDD de jogo completo vendido como fatia).** → Congelar o MVP da seção (c) como definição de "fatia vertical"; mover Semente, Toco, fase Casulo, 2 finais e equipamentos para um backlog "pós-fatia" explícito no §12; M6 atual vira "fatia estendida".
 8. **Loop de aggro / criança presa em batalha após fugir.** → Cooldown de re-aggro (inimigo "cochila" ~10 s e fica translúcido após fuga); raio de aggro menor (4 m) com indicador visual de perigo antes de disparar; fuga garantida já prevista — manter.
+
+---
+
+# 🎮 As 10 FASES (campanha completa)
+
+O jogo é uma campanha de **10 fases** encadeadas (cada fase = um objetivo claro + a história
+avança). Mostradas como "Fase N: <nome>" com o objetivo no topo. Mapeiam os beats do GDD:
+
+| # | Fase | Era | O que acontece | Sistema/causalidade |
+|---|---|---|---|---|
+| 1 | **O Bosque Doente** | 🌳 Bosque | Acorda, fala com Seu Cogu, **1ª batalha** (Brotoca) ensina ATB + essência. Chega ao Vovô. | tutorial de combate |
+| 2 | **A Lanterna-Vagalume** | 🌳 Bosque | Pega a **Lanterna** (acende o oco do Vovô = destrava a viagem). **Recruta Fagulha**. | item-chave + companheiro |
+| 3 | **O Ermo** | 🥀 Ermo | 1ª viagem; **o MOMENTO** (futuro murcho, Vovô apagado, a folhinha teimosa). Ganha a **Semente-do-Amanhã**. | viagem no tempo |
+| 4 | **A Semente** | 🌱 Semente | Chega ao passado (tudo jovem), conhece o **Broto**, explora as 2 causas. | nova era |
+| 5 | **Os Bichos-da-Soneca** | 🌱 Semente | Limpa a covinha (batalhas Brotoca/Abelhão) pra poder plantar. | combate |
+| 6 | **Plantar o Amanhã** | 🌱→🌳 | Planta a Semente. **Presente muda** (galho novo, mancha encolhe). **Recruta Toco**. | causa→efeito #1 |
+| 7 | **A Nascente** | 🌱 Semente | Com Toco, tira a pedra da nascente. **Presente:** lago transborda; **Ermo:** leito enche e abre o caminho. | causa→efeito #2 |
+| 8 | **O Caminho do Ermo** | 🥀 Ermo | Atravessa o Ermo (agora acessível) até a arena; combates mais duros (Lobinho, Cinzela). | combate/exploração |
+| 9 | **A Mariposa Murcha** | 🥀 Ermo | **Chefe** em fases + o **Acalanto (cantar)** = o clímax. Ermo reverdece. | chefe + o momento |
+| 10 | **A Escolha** | 🥀→🌳 | A escolha A/B (estilo Chrono Cross), **epílogo**, fanfarra, gancho. | final |
+
+> **Engine primeiro, fases depois:** construo os sistemas (eras✓, portal✓, áudio, ATB, diálogo/quest,
+> save) e então as 10 fases viram **dados** (`FASES[]`: objetivo, gatilhos, batalhas, diálogos) que
+> ligam tudo. Ordem de build segue o §12 + a crítica (primeiro jogável = ATB de pé na Fase 1).

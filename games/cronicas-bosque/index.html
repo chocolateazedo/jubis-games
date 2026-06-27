@@ -210,10 +210,11 @@
     // ---------- AS TRÊS ERAS (mesmo terreno, só troca pele: cor/luz/névoa) ----------
     // render baratíssimo: nada é reinstanciado; trocar de era é só ajustar materiais/luz/fog.
     const ERAS = {
-      bosque:  { bg: 0x9ed0f2, useEnv: true,  fog: [0xbfe0f5, 60, 230], sun: [0xfff4d6, 1.40], hemi: [0xdfeeff, 0x5a6b40, 0.40], ground: 0xffffff, shore: 0xd9c48b, water: 0x2f7fc4, waterOp: 0.86 },
-      ermo:    { bg: 0xcf9b5a, useEnv: false, fog: [0xc98a4a, 38, 150], sun: [0xffb066, 0.85], hemi: [0xe9c79a, 0x4a3a2a, 0.55], ground: 0x9a8358, shore: 0x8a7048, water: 0x6a5a3a, waterOp: 0.30 },
-      semente: { bg: 0xffe0c0, useEnv: false, fog: [0xffe6c8, 70, 260], sun: [0xffe6b0, 1.25], hemi: [0xfff0d8, 0x6f8f5a, 0.60], ground: 0xbfe6a0, shore: 0xe8d2a0, water: 0x4fd0c0, waterOp: 0.80 },
+      bosque:  { bg: 0x9ed0f2, useEnv: true,  fog: [0xbfe0f5, 60, 230], sun: [0xfff4d6, 1.40], hemi: [0xdfeeff, 0x5a6b40, 0.40], ground: 0xffffff, shore: 0xd9c48b, water: 0x2f7fc4, waterOp: 0.86, tree: 0xffffff },
+      ermo:    { bg: 0xcf9b5a, useEnv: false, fog: [0xc98a4a, 38, 150], sun: [0xffb066, 0.85], hemi: [0xe9c79a, 0x4a3a2a, 0.55], ground: 0x9a8358, shore: 0x8a7048, water: 0x6a5a3a, waterOp: 0.30, tree: 0x8a7a5c },
+      semente: { bg: 0xffe0c0, useEnv: false, fog: [0xffe6c8, 70, 260], sun: [0xffe6b0, 1.25], hemi: [0xfff0d8, 0x6f8f5a, 0.60], ground: 0xbfe6a0, shore: 0xe8d2a0, water: 0x4fd0c0, waterOp: 0.80, tree: 0xcfffcf },
     };
+    const treeMeshes = []; // árvores/pedras instanciadas, tingidas por era
     let currentEra = 'bosque';
     function applyEra(e) {
       const E = ERAS[e] || ERAS.bosque; currentEra = e;
@@ -226,10 +227,74 @@
       ground.material.color.setHex(E.ground);
       shore.material.color.setHex(E.shore);
       lake.material.color.setHex(E.water); lake.material.opacity = E.waterOp;
+      for (const tm of treeMeshes) tm.material.color.setHex(E.tree);
     }
     applyEra('bosque');
     const ERA_NOME = { bosque: '🌳 Bosque — agora', ermo: '🥀 Ermo — o futuro murcho', semente: '🌱 Semente — o passado' };
-    function travelEra(e) { applyEra(e); if (typeof flash === 'function') flash(ERA_NOME[e] || e); } // (clarão/crossfade de trilha entram numa próxima milestone)
+
+    // ---------- VOVÔ CARVALHO (o portal do tempo, que fala) ----------
+    const PORTAL = { x: 6, z: 22 };
+    const vovo = new THREE.Group();
+    {
+      const bark = new THREE.MeshStandardMaterial({ color: 0x6b4f2a, roughness: 1 });
+      const leaf = new THREE.MeshStandardMaterial({ color: 0x3f8f43, roughness: 0.9 });
+      const dark = new THREE.MeshStandardMaterial({ color: 0x241606 });
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 2.2, 7, 10), bark); trunk.position.y = 3.5; vovo.add(trunk);
+      for (const [cx, cy, cz, r] of [[0, 8.4, 0, 4.2], [-3, 7.2, 1, 3], [3, 7.5, -1, 3], [0, 10.4, 0, 2.6]]) { const c = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 10), leaf); c.position.set(cx, cy, cz); vovo.add(c); }
+      for (const ex of [-0.8, 0.8]) { const eye = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8), dark); eye.position.set(ex, 4.7, 2.0); vovo.add(eye); }
+      const sm = new THREE.Mesh(new THREE.TorusGeometry(0.75, 0.15, 8, 14, Math.PI), dark); sm.position.set(0, 4.0, 1.95); sm.rotation.x = Math.PI; vovo.add(sm);
+      const ring = new THREE.Mesh(new THREE.RingGeometry(3.4, 4.4, 44), new THREE.MeshBasicMaterial({ color: 0x9be8ff, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
+      ring.rotation.x = -Math.PI / 2; ring.position.y = 0.18; vovo.add(ring); vovo.userData.ring = ring;
+      vovo.position.set(PORTAL.x, heightAt(PORTAL.x, PORTAL.z), PORTAL.z); scene.add(vovo);
+    }
+    function nearPortal() { return Math.hypot(dolly.position.x - PORTAL.x, dolly.position.z - PORTAL.z) < 6; }
+
+    // ---------- clarão de transição (funciona em VR: quad preso à câmera) ----------
+    const fadeQuad = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 2.4), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthTest: false, depthWrite: false }));
+    fadeQuad.position.z = -0.4; fadeQuad.renderOrder = 2000; fadeQuad.frustumCulled = false; fadeQuad.visible = false; camera.add(fadeQuad);
+    let fade = 0, fadeDir = 0, pendingEra = null;
+    function travelEra(e) { pendingEra = e; fadeDir = 1; } // dispara o clarão; troca a era no auge
+    function updateFade(dt) {
+      if (fadeDir === 0) return;
+      fade += fadeDir * dt / 0.4;
+      if (fade >= 1) { fade = 1; fadeDir = -1; if (pendingEra) { applyEra(pendingEra); if (typeof flash === 'function') flash(ERA_NOME[pendingEra]); pendingEra = null; } }
+      else if (fade <= 0) { fade = 0; fadeDir = 0; }
+      fadeQuad.material.opacity = fade; fadeQuad.visible = fade > 0.001;
+    }
+
+    // ---------- menu "As Eras" (painel 3D, 3 botões, mirado pelo raio) ----------
+    const eraCanvas = document.createElement('canvas'); eraCanvas.width = 768; eraCanvas.height = 300;
+    const eraCtx = eraCanvas.getContext('2d');
+    const eraTex = new THREE.CanvasTexture(eraCanvas); eraTex.colorSpace = THREE.SRGBColorSpace;
+    const eraPanel = new THREE.Mesh(new THREE.PlaneGeometry(1.95, 0.76), new THREE.MeshBasicMaterial({ map: eraTex, transparent: true }));
+    eraPanel.visible = false; scene.add(eraPanel);
+    let eraMenuOpen = false, eraHover = -1;
+    const ERA_KEYS = ['semente', 'bosque', 'ermo'], ERA_TAG = ['🌱 Semente', '🌳 Bosque', '🥀 Ermo'], ERA_SUB = ['no passado', 'no agora', 'no futuro'];
+    function drawEraMenu() {
+      const c = eraCtx, W = 768, H = 300, cw = W / 3;
+      c.clearRect(0, 0, W, H);
+      c.fillStyle = 'rgba(8,22,16,0.93)'; rr(c, 4, 44, W - 8, H - 48, 22); c.fill();
+      c.strokeStyle = 'rgba(160,230,180,0.6)'; c.lineWidth = 5; c.stroke();
+      c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillStyle = '#bdf5c8'; c.font = 'bold 30px Arial'; c.fillText('Pra qual tempo, broto?', W / 2, 24);
+      for (let i = 0; i < 3; i++) {
+        const x = i * cw;
+        c.fillStyle = eraHover === i ? 'rgba(120,220,150,0.45)' : 'rgba(255,255,255,0.06)';
+        rr(c, x + 12, 60, cw - 24, H - 80, 16); c.fill();
+        c.fillStyle = currentEra === ERA_KEYS[i] ? '#ffe6a0' : '#eaffee'; c.font = '38px Arial'; c.fillText(ERA_TAG[i], x + cw / 2, H / 2);
+        c.fillStyle = '#9fdfae'; c.font = '22px Arial'; c.fillText(ERA_SUB[i], x + cw / 2, H / 2 + 46);
+      }
+      c.textAlign = 'left'; c.textBaseline = 'alphabetic'; eraTex.needsUpdate = true;
+    }
+    function openEraMenu() {
+      eraMenuOpen = true; eraHover = -1;
+      camera.getWorldPosition(rcPos); camera.getWorldDirection(rcDir); rcDir.y = 0; rcDir.normalize();
+      eraPanel.position.set(rcPos.x + rcDir.x * 1.8, rcPos.y, rcPos.z + rcDir.z * 1.8); eraPanel.lookAt(rcPos.x, rcPos.y, rcPos.z);
+      eraPanel.visible = true; drawEraMenu();
+    }
+    function closeEraMenu() { eraMenuOpen = false; eraPanel.visible = false; }
+    function eraPick() { buildAimRay(); const hit = raycaster.intersectObject(eraPanel, false)[0]; if (!hit || !hit.uv) return -1; return Math.max(0, Math.min(2, Math.floor(hit.uv.x * 3))); }
+    function eraSelect(c) { if (c < 0) return; const k = ERA_KEYS[c]; closeEraMenu(); if (k !== currentEra) travelEra(k); else if (typeof flash === 'function') flash('Você já está ' + ERA_SUB[c] + '.'); }
 
     // ---------- árvores e pedras: modelos 3D CC0 (Quaternius), instanciados ----------
     const TREES = 240;
@@ -286,9 +351,10 @@
         for (const part of v.parts) {
           const im = new THREE.InstancedMesh(part.geo, part.mat, list.length);
           list.forEach((p, k) => { q.setFromAxisAngle(UP, p.yaw); const s = p.s * base; m.compose(pos.set(p.x, p.y, p.z), q, scl.set(s, s, s)); im.setMatrixAt(k, m); });
-          im.instanceMatrix.needsUpdate = true; scene.add(im);
+          im.instanceMatrix.needsUpdate = true; scene.add(im); treeMeshes.push(im);
         }
       });
+      applyEra(currentEra); // re-aplica o tom da era nas árvores recém-carregadas
     }
 
     const gltfLoader = new GLTFLoader();
@@ -795,7 +861,12 @@
 
     // ---------- interação (conversar com NPC) e avisos ----------
     const talkHint = document.getElementById('talkHint');
-    function interact() { if (activeNPC) advanceTalk(); else { const n = nearestNPC(); if (n) startTalk(n); } }
+    function interact() {
+      if (eraMenuOpen) { eraSelect(eraHover); return; }
+      if (activeNPC) { advanceTalk(); return; }
+      if (nearPortal()) { openEraMenu(); return; }
+      const n = nearestNPC(); if (n) startTalk(n);
+    }
     addEventListener('keydown', e => {
       if (e.code === 'KeyE' && !e.repeat) interact();
       if (e.code === 'KeyT' && !e.repeat) { const o = ['bosque', 'ermo', 'semente']; travelEra(o[(o.indexOf(currentEra) + 1) % 3]); } // TEMP: ciclar eras
@@ -907,11 +978,17 @@
         const hcell = menuPick(); if (hcell !== menuHover) { menuHover = hcell; drawMenu(); }
         for (const h of menuIcons.children) { const s = h.children[0]; if (s) s.rotation.y += dt * 0.9; }
       }
-      // dica de "conversar" quando perto de um NPC
-      const near = activeNPC ? null : nearestNPC();
-      talkHint.style.display = near ? 'block' : 'none';
-      // multiplayer: sincroniza jogadores remotos e envia meu estado
-      netTick(t, dt);
+      // VOVÔ/eras: anel girando, clarão de transição, hover do menu das eras
+      vovo.userData.ring.rotation.z += dt * 0.6;
+      vovo.userData.ring.material.opacity = 0.4 + Math.sin(t * 0.003) * 0.15;
+      updateFade(dt);
+      if (eraMenuOpen) { const h = eraPick(); if (h !== eraHover) { eraHover = h; drawEraMenu(); } }
+      // dica de interação: perto do Vovô = portal; perto de NPC = conversar
+      const portalPerto = !activeNPC && !eraMenuOpen && nearPortal();
+      const near = !activeNPC && !eraMenuOpen && !portalPerto && nearestNPC();
+      if (portalPerto) { talkHint.textContent = '🌳 Tocar o Vovô Carvalho (E / gatilho)'; talkHint.style.display = 'block'; }
+      else if (near) { talkHint.textContent = '💬 Conversar (E / gatilho)'; talkHint.style.display = 'block'; }
+      else talkHint.style.display = 'none';
       renderer.render(scene, camera);
     }
     renderer.setAnimationLoop(frame);

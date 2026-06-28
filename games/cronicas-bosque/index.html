@@ -101,6 +101,7 @@
     #shop .sbuy.dim { opacity: .4; }
     #shop .sclose { display: block; margin: 12px auto 0; border: none; border-radius: 12px; padding: 10px 22px; font-weight: 800; cursor: pointer; color: #06321b; background: linear-gradient(90deg, #7be88f, #43d977); }
     body.inbattle #shop { display: none !important; }
+    #hurt { position: fixed; inset: 0; z-index: 35; pointer-events: none; opacity: 0; transition: opacity .12s ease-out; background: radial-gradient(circle at 50% 50%, rgba(200,0,0,0) 38%, rgba(190,0,0,.55) 100%); }
     #journalBtn { position: fixed; z-index: 27; top: max(50px, calc(env(safe-area-inset-top) + 38px)); left: max(12px, env(safe-area-inset-left)); display: none;
       width: 42px; height: 42px; border: 1px solid rgba(255,225,140,.5); background: rgba(8,24,16,.78); border-radius: 12px; font-size: 20px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
     #journal { position: fixed; z-index: 33; left: 50%; top: 50%; transform: translate(-50%, -50%); display: none; width: min(94vw, 480px); max-height: 80vh; overflow-y: auto;
@@ -177,6 +178,7 @@
   <div id="eraMenu"><div class="emtitle">Pra qual tempo, broto?</div><div class="embtns"></div></div>
   <div id="battleStatus"></div>
   <div id="shop"><div class="shead">🛒 Loja da Vila — ✨ <b id="shopCoins">0</b> Frutos de Luz</div><div class="sitems"></div><button class="sclose" id="shopClose">Fechar</button></div>
+  <div id="hurt"></div>
   <div id="toast"></div>
 
   <div id="intro">
@@ -525,7 +527,13 @@
     // Roda das Essências: a chave vence (×2) os valores; fraqueza inversa = ×0.5
     const ESS_STRONG = { sol: ['folha', 'cinza'], agua: ['sol', 'cinza'], folha: ['agua'], cinza: ['folha'] };
     function essMult(atk, tgt) { if (!atk || !tgt) return 1; if (ESS_STRONG[atk] && ESS_STRONG[atk].includes(tgt)) return 2; if (ESS_STRONG[tgt] && ESS_STRONG[tgt].includes(atk)) return 0.5; return 1; }
-    const TECNICAS = { raio: { nome: '☀️ Raiozinho', ess: 'sol', mp: 2, poder: 5, tipo: 'atk' }, brotar: { nome: '🍃 Brotar', ess: 'folha', mp: 3, poder: 7, tipo: 'cura' } };
+    const TECNICAS = {
+      raio: { nome: '☀️ Raiozinho', ess: 'sol', mp: 2, poder: 5, tipo: 'atk' },
+      brotar: { nome: '🍃 Brotar', ess: 'folha', mp: 3, poder: 7, tipo: 'cura' },
+      vendaval: { nome: '🍃 Vendaval (todos)', ess: 'folha', mp: 4, poder: 6, tipo: 'area' },
+      jato: { nome: '💧 Jato-d\'Água', ess: 'agua', mp: 3, poder: 8, tipo: 'atk' },
+      solzao: { nome: '☀️ Solzão', ess: 'sol', mp: 5, poder: 12, tipo: 'atk' },
+    };
     const ITENS = { mel: { nome: '🍯 Mel-do-Bosque', cura: 15 } };
     const overworldEnemies = [], dyingActors = [], dmgPops = [];
     let inBattle = false, battle = null;
@@ -695,6 +703,14 @@
       const tc = TECNICAS[key]; if (hero.mp < tc.mp) { flash('MP insuficiente!'); return; }
       hero.mp -= tc.mp;
       if (tc.tipo === 'cura') { const h = Math.round(tc.poder + hero.mag); hero.hp = Math.min(hero.hpMax, hero.hp + h); sfx('ready'); spawnDmg(dolly.position.clone().add(new THREE.Vector3(0, -0.4, 0)), '+' + h, 0x5be07a); flash(tc.nome + '! +' + h + ' HP'); }
+      else if (tc.tipo === 'area') {
+        sfx('hit'); flash(tc.nome + '! Atingiu todos!');
+        for (const en of battle.enemies.filter(x => x.alive)) {
+          const mult = essMult(tc.ess, en.def.ess), dmg = Math.max(1, Math.round((tc.poder + hero.mag - en.def.def / 2) * (0.85 + Math.random() * 0.3) * mult));
+          en.hp -= dmg; spawnDmg(en.actor.wrap.position, dmg, mult >= 2 ? 0xffe24a : 0xffffff); playClip(en.actor, 'eat');
+          if (en.hp <= 0) { en.alive = false; defeatEnemy(en); }
+        }
+      }
       else if (target) {
         const mult = essMult(tc.ess, target.def.ess), dmg = Math.max(1, Math.round((tc.poder + hero.mag - target.def.def / 2) * (0.9 + Math.random() * 0.2) * mult));
         target.hp -= dmg; sfx('hit'); spawnDmg(target.actor.wrap.position, dmg, mult >= 2 ? 0xffe24a : 0xffffff);
@@ -722,6 +738,8 @@
       for (let i = 0; i < 6; i++) { const s = new THREE.Mesh(new THREE.SphereGeometry(0.2 + Math.random() * 0.2, 7, 6), new THREE.MeshBasicMaterial({ color: 0xeaf6ea, transparent: true, opacity: 0.85, depthWrite: false })); s.position.set((Math.random() - 0.5), 0.4 + Math.random(), (Math.random() - 0.5)); g.add(s); }
       g.position.copy(p); scene.add(g); dyingActors.push({ wrap: g, t: 0, puff: true });
     }
+    let hurtT = 0;
+    function hurtFlash() { const el = document.getElementById('hurt'); if (!el) return; el.style.opacity = '0.85'; clearTimeout(hurtT); hurtT = setTimeout(() => { el.style.opacity = '0'; }, 150); } // clarão vermelho ao levar dano
 
     function heroAttack(e) {
       if (!e) return;
@@ -746,7 +764,7 @@
         if (al.hp <= 0) { al.alive = false; flash('🦊 Fagulha ficou tonta…'); puff(al.actor.wrap.position); if (al.bar) al.actor.wrap.remove(al.bar); al.actor.wrap.visible = false; }
       } else {
         if (hero.defending) dmg = Math.max(1, Math.round(dmg * 0.5));
-        hero.hp = Math.max(0, hero.hp - dmg); spawnDmg(dolly.position.clone().add(new THREE.Vector3(0, -0.5, 0)), dmg, 0xff6b6b); updateHeroHud();
+        hero.hp = Math.max(0, hero.hp - dmg); spawnDmg(dolly.position.clone().add(new THREE.Vector3(0, -0.5, 0)), dmg, 0xff6b6b); updateHeroHud(); hurtFlash();
         if (hero.hp <= 0) loseBattle();
       }
     }
@@ -756,9 +774,15 @@
       puff(e.actor.wrap.position); sfx('poof');
       e.actor.defeated = true; e.actor.wrap.userData.dyT = 0; dyingActors.push({ wrap: e.actor.wrap, mixer: e.actor.mixer, t: 0, shrink: true });
       const i = overworldEnemies.indexOf(e.actor); if (i >= 0) overworldEnemies.splice(i, 1);
+      if (e.def.miniboss) flash('🏆 Você derrotou o ' + e.def.nome + '!');
+      if (e.def.reward === 'amuleto') { hero.hpMax += 10; hero.mpMax += 4; hero.hp = hero.hpMax; hero.mp = hero.mpMax; setTimeout(() => flash('🏅 Amuleto do Lobão: +10 HP e +4 MP máximos!'), 900); }
       if (battle.enemies.every(x => !x.alive)) winBattle();
     }
-    function levelUp() { hero.lvl++; hero.xpNext = Math.round(hero.xpNext * 1.7); hero.hpMax += 6; hero.mpMax += 2; hero.atk += 2; hero.def += 1; hero.mag += 1; hero.hp = hero.hpMax; hero.mp = hero.mpMax; sfx('levelup'); }
+    function levelUp() {
+      hero.lvl++; hero.xpNext = Math.round(hero.xpNext * 1.7); hero.hpMax += 6; hero.mpMax += 2; hero.atk += 2; hero.def += 1; hero.mag += 1; hero.hp = hero.hpMax; hero.mp = hero.mpMax; sfx('levelup');
+      const aprende = { 2: 'vendaval', 3: 'jato', 4: 'solzao' }[hero.lvl];
+      if (aprende && !hero.tecnicas.includes(aprende)) { hero.tecnicas.push(aprende); setTimeout(() => flash('✨ Nova técnica: ' + TECNICAS[aprende].nome + '!'), 600); }
+    }
     function winBattle() {
       const xp = battle.enemies.reduce((s, e) => s + e.def.xp, 0); hero.xp += xp; sfx('fanfare');
       let msg = '🎉 Você venceu! +' + xp + ' XP';
@@ -866,6 +890,14 @@
     function checkAggro() {
       if (inBattle) return;
       for (const a of overworldEnemies) { if (a.defeated) continue; if (Math.hypot(dolly.position.x - a.wrap.position.x, dolly.position.z - a.wrap.position.z) < 4.5) { startBattle(a); break; } }
+    }
+    function updateOverworldEnemies(dt) { // inimigos perto caminham na sua direção (mais ação)
+      const px = dolly.position.x, pz = dolly.position.z;
+      for (const a of overworldEnemies) {
+        if (a.defeated) continue;
+        const dx = px - a.wrap.position.x, dz = pz - a.wrap.position.z, d = Math.hypot(dx, dz);
+        if (d < 15 && d > 1.0) { const sp = (0.5 + (ENEMY_DEF[a.enemyKey].agi || 6) * 0.06) * dt; a.wrap.position.x += dx / d * sp; a.wrap.position.z += dz / d * sp; a.wrap.position.y = heightAt(a.wrap.position.x, a.wrap.position.z); a.wrap.rotation.y = Math.atan2(dx, dz); }
+      }
     }
     function updateBattle(dt) {
       const b = battle; if (!b) return;
@@ -1059,8 +1091,11 @@
     });
 
     // inimigos de teste da Fase 1 (mesmo getGLB que os pets, já inicializado aqui)
-    spawnEnemy('brotoca', 10, 50);
-    spawnEnemy('brotoca', 4, 46);
+    // inimigos espalhados (mais ação): perto do início são fracos; longe e na trilha da Vila, mais fortes
+    spawnEnemy('brotoca', 10, 50); spawnEnemy('brotoca', 4, 46); spawnEnemy('cinzela', -14, 40);
+    spawnEnemy('lobinho', 22, 28); spawnEnemy('caranguejo', LAKE.x + 16, LAKE.z + 6); spawnEnemy('macaco', -34, 60);
+    spawnEnemy('corvo', 34, -8); spawnEnemy('javali', -42, 6); spawnEnemy('corvo', -10, -30); spawnEnemy('javali', -52, -28);
+    spawnEnemy('lobao', -26, -22); // mini-chefe guardando o caminho da Vila do Carvalho
 
     // ---------- FRUTOS DE LUZ (colecionáveis espalhados pelo mapa) ----------
     const COLLECT_N = 16, collectibles = [];
@@ -1996,7 +2031,7 @@
       updateFade(dt);
       if (eraMenuOpen && !onTouchUI()) { const h = eraPick(); if (h !== eraHover) { eraHover = h; drawEraMenu(); } }
       // COMBATE: tick da batalha ou checa aproximação de inimigo; efeitos morrendo
-      if (inBattle) updateBattle(dt); else { checkAggro(); checkBoss(); }
+      if (inBattle) updateBattle(dt); else if (mount === 'aviao') { /* voando: paz, sem encrenca */ } else { updateOverworldEnemies(dt); checkAggro(); checkBoss(); }
       updateDying(dt);
       // dica de interação (contextual) — a narração tem prioridade (até no meio da batalha)
       if (narration) setHint(onTouchUI() ? '' : '▶ Continuar (' + actHint() + ')'); // no celular a caixa HTML já mostra "continuar"

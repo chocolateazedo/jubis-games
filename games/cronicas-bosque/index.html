@@ -848,14 +848,14 @@
       if (currentEra === 'ermo') applyEra('ermo');
     }
 
-    function spawnEnemy(key, x, z) {
+    function spawnEnemy(key, x, z, cb) {
       const d = ENEMY_DEF[key];
       getGLB(`../bosque-vr/pets/animal-${d.glb}.glb`).then(g => {
         const a = spawnActor(g, 'walk', d.h);
         a.wrap.position.set(x, heightAt(x, z), z);
         const tint = mm => { const c = mm.clone(); if (c.color) c.color.setHex(d.tint); return c; };
         a.wrap.traverse(o => { if (o.isMesh && o.material) o.material = Array.isArray(o.material) ? o.material.map(tint) : tint(o.material); });
-        a.enemyKey = key; overworldEnemies.push(a);
+        a.enemyKey = key; overworldEnemies.push(a); if (cb) cb(a);
       }).catch(() => {});
     }
     function startBattle(actor) {
@@ -901,7 +901,7 @@
       if (b.boss && b.faseBatalha === 'luta' && b.boss.alive && b.boss.hp <= b.boss.hpMax * 0.3) setAcalanto();
       const acalanto = b.faseBatalha === 'acalanto';
       if (!b.menuOpen && !narration) {
-        if (!b.ready) { b.heroAtb += dt * (0.30 + hero.agi / 300); if (b.heroAtb >= 1) { b.heroAtb = 1; b.ready = true; sfx('ready'); } }
+        if (!b.ready) { b.heroAtb += dt * (0.30 + hero.agi / 300); if (b.heroAtb >= 1) { b.heroAtb = 1; b.ready = true; sfx('ready'); if (game.flags.folho && hero.hp < hero.hpMax) { hero.hp = Math.min(hero.hpMax, hero.hp + 1); } } } // Folho cuida do herói
         if (!acalanto) { // no Acalanto a Murcha só treme de frio, não ataca
           for (const e of b.enemies) { if (!e.alive) continue; e.atb += dt * (0.16 + e.def.agi / 220); if (e.atb >= 1) enemyAttack(e); }
           if (b.ally && b.ally.alive) { b.ally.atb += dt * (0.16 + b.ally.agi / 200); if (b.ally.atb >= 1) { b.ally.atb = 0; allyAct(b.ally); } }
@@ -1171,7 +1171,7 @@
       { char: 'd', nome: 'Tonico', dx: VILA.x - 7, dz: VILA.z + 5, falas: ['Cê veio de avião?! Que demais!', 'Quando crescer eu vou ser piloto, igual você!'] },
       { char: 'e', nome: 'Vovó Samambaia', dx: VILA.x + 4, dz: VILA.z - 8,
         falasFn: () => (game.flags.cogu && !game.flags.vila)
-          ? ['Então o cinza voltou a subir… eu já temia, criança.', 'O Vovô Carvalho é a árvore-mãe de tudo. As raízes dele tocam o ONTEM e o AMANHÃ ao mesmo tempo.', 'Esse cinza não nasce aqui: ele VAZA de um futuro murcho. Pra fechar a fenda, você vai ter que atravessar o tempo pela raiz do Vovô.', 'Vá tocar nele. E leve a Lanterna-Vagalume — sem luz, ninguém pisa no Ermo.']
+          ? ['Então o cinza voltou a subir… eu já temia, criança.', 'O Vovô Carvalho é a árvore-mãe de tudo. As raízes dele tocam o ONTEM e o AMANHÃ ao mesmo tempo.', 'Esse cinza não nasce aqui: ele VAZA de um futuro murcho. Pra fechar a fenda, você vai ter que atravessar o tempo pela raiz do Vovô.', 'Antigamente, a gente fazia as estações virarem CANTANDO — a Canção das Quatro Folhas: uma pra Primavera 🍃, uma pro Verão ☀️, uma pras Chuvas 💧 e uma pro Inverno 🩶. Mas uma cantora ficou sozinha e engoliu o último verso. Desde então o frio não passa.', 'Reaprenda os versos viajando no tempo, broto — comece procurando a Folha da Primavera lá no passado. Mas cuidado: mexer no ontem mexe no agora. E leve a Lanterna — sem luz, ninguém pisa no Ermo.']
           : ['No meu tempo a gente subia no Vovô pra colher estrela…', 'Junta os Frutos de Luz, criança. Eles guardam o brilho do amanhã.'],
         onEnd: () => { if (game.flags.cogu && !game.flags.vila) { game.flags.vila = true; sfx('fanfare'); setObjetivo('Volte ao bosque e toque o Vovô Carvalho 🌳'); } } },
       { char: 'g', nome: 'Mestre Cipó', dx: VILA.x - 5, dz: VILA.z - 6, falas: ['Cuida do bosque que ele cuida de você.', 'Dizem que o futuro tá ficando cinza… mas semente teimosa sempre acha um jeito de brotar.'] },
@@ -1232,7 +1232,7 @@
     // ======================= MOTOR DE HISTÓRIA (10 fases) =======================
     const game = { fase: 0, vovoFalou: false, objetivo: '', vistoMudanca: false, coletados: 0,
       harmonia: 100, lacos: {}, folhas: [], sidequests: {}, // [2.0] Teia de Causalidade + Canção das Quatro Folhas (estado base; conteúdo vem nos Atos)
-      flags: { cogu: false, vila: false, vilaVista: false, lanterna: false, fagulha: false, momento: false, semente: false, sementePlantada: false } };
+      flags: { cogu: false, vila: false, vilaVista: false, lanterna: false, fagulha: false, folho: false, momento: false, semente: false, sementePlantada: false } };
     const FASE_TITULOS = { 1: 'O Bosque Doente', 2: 'A Lanterna-Vagalume', 3: 'O Ermo', 4: 'A Semente do Passado', 5: 'O Amanhã Plantado', 6: 'A Cura Começa', 7: 'O Coração da Murcha', 8: 'Epílogo' };
     function setObjetivo(txt) {
       game.objetivo = txt; const q = document.getElementById('questBar');
@@ -1284,6 +1284,7 @@
       if (!game.flags.fagulha) criarFagulhaNpc();
       if (game.fase >= 2 && !game.flags.lanterna) criarLanterna();
       if (game.fase >= 4) criarSementeMundo();
+      if (game.lacos.riacho === 'ativo') abrirFenda(); // [2.0] restaura a Fenda Temporal se o laço ficou em aberto
       for (let i = 0; i < game.coletados && collectibles.length; i++) { const m = collectibles.pop(); scene.remove(m); } // tira os Frutos já coletados (mantém 16 no total)
     }
     function applyLoadedState(s) {
@@ -1450,6 +1451,63 @@
       if (treeVariants.length) { const t = buildTreeFromVariant(treeVariants[0], 1.7, true); t.position.set(cx, heightAt(cx, cz), cz); scene.add(t); }
       brotoGrow = 0;
       startNarration('Broto', ['Você plantou! Olha ele crescendo…', 'Esse carvalhinho vai virar o Vovô de todas as árvores. Cuida dele no teu tempo, tá?'], () => { iniciarFase(5); });
+    }
+
+    // ===================== TEIA DE CAUSALIDADE — Laço 1: O Riacho Represado [2.0] =====================
+    const TEIA = { pedra: { x: -16, z: 44 }, folha: { x: -17, z: 35 }, cavar: { x: -23, z: 46 }, fenda: { x: 34, z: 2 } };
+    let teiaPedra = null, teiaRiacho = null, teiaFolha = null, teiaCavar = null, fendaMesh = null;
+    const fendaEnemies = [];
+    function criarTeiaSemente() { // objetos do laço, visíveis só na era Semente (passado)
+      const riGeo = new THREE.BoxGeometry(2.0, 0.1, 11);
+      teiaRiacho = new THREE.Mesh(riGeo, new THREE.MeshStandardMaterial({ color: 0x4fd0c0, transparent: true, opacity: 0.8, roughness: 0.2 }));
+      teiaRiacho.position.set(TEIA.pedra.x, heightAt(TEIA.pedra.x, TEIA.pedra.z) + 0.08, TEIA.pedra.z - 3.5); scene.add(teiaRiacho);
+      teiaPedra = new THREE.Mesh(new THREE.DodecahedronGeometry(1.4, 0), new THREE.MeshStandardMaterial({ color: 0x8a8a82, roughness: 1, flatShading: true }));
+      teiaPedra.position.set(TEIA.pedra.x, heightAt(TEIA.pedra.x, TEIA.pedra.z) + 0.7, TEIA.pedra.z); scene.add(teiaPedra);
+      teiaFolha = new THREE.Mesh(new THREE.IcosahedronGeometry(0.62, 0), new THREE.MeshStandardMaterial({ color: 0x6cdc5a, emissive: 0x4faa3a, emissiveIntensity: 0.9, flatShading: true }));
+      teiaFolha.scale.set(1, 0.4, 1.5); teiaFolha.position.set(TEIA.folha.x, heightAt(TEIA.folha.x, TEIA.folha.z) + 1.2, TEIA.folha.z); scene.add(teiaFolha);
+      teiaCavar = new THREE.Mesh(new THREE.ConeGeometry(0.9, 0.6, 6), new THREE.MeshStandardMaterial({ color: 0x7a5a36, roughness: 1, flatShading: true }));
+      teiaCavar.position.set(TEIA.cavar.x, heightAt(TEIA.cavar.x, TEIA.cavar.z) + 0.3, TEIA.cavar.z); scene.add(teiaCavar);
+      teiaPedra.visible = teiaRiacho.visible = teiaFolha.visible = teiaCavar.visible = false;
+    }
+    criarTeiaSemente();
+    function nearTeiaP(p) { return currentEra === 'semente' && Math.hypot(dolly.position.x - p.x, dolly.position.z - p.z) < 3; }
+    function nearPedra() { return teiaPedra && !game.lacos.riacho && nearTeiaP(TEIA.pedra); }
+    function nearFolhaPrimavera() { return teiaFolha && !game.folhas.includes('primavera') && game.lacos.riacho && nearTeiaP(TEIA.folha); }
+    function nearCavar() { return game.lacos.riacho === 'ativo' && nearTeiaP(TEIA.cavar); }
+    function moveRiachoPedra() {
+      game.lacos.riacho = 'ativo'; game.harmonia = 70; sfx('poof'); abrirFenda(); updateHarmonia(); renderJournal(); saveGame('auto');
+      startNarration('', ['Você empurra a pedra… o riacho corre livre e abre caminho pra Folha verde lá adiante.', 'Mas longe dali, no AGORA, algo treme: a água que você desvia aqui faz falta noutro tempo. Volte ao 🌳 Bosque e veja o que mudou.'], () => { });
+    }
+    function collectFolhaPrimavera() {
+      if (game.folhas.includes('primavera')) return;
+      game.folhas.push('primavera'); teiaFolha.visible = false; sfx('fanfare'); renderJournal(); updateHarmonia(); saveGame('auto');
+      if (!game.flags.folho) { game.flags.folho = true;
+        startNarration('Folho', ['🍃 Você cantou a Folha da Primavera! Eu… eu lembrei dela!', 'Pra te ajudar? Eu? Mas sou só um brotinho medroso… ah, tá bom. Mas só se a gente for juntinho.', 'Enquanto eu tô no grupo, eu cuido de você na batalha — um carinho de HP a cada turno. 💚'], () => { flash('🐛 Folho entrou no grupo!'); });
+      }
+    }
+    function equilibrarRiacho() {
+      game.lacos.riacho = 'equilibrado'; game.harmonia = 100; sfx('fanfare'); fecharFenda(); updateHarmonia(); renderJournal(); saveGame('auto');
+      flash('💧 Você cavou um novo curso — a água voltou ao presente e a fenda se fechou! Harmonia restaurada.');
+    }
+    function abrirFenda() {
+      if (fendaMesh) return;
+      fendaMesh = new THREE.Mesh(new THREE.CircleGeometry(3, 24), new THREE.MeshBasicMaterial({ color: 0x9a6ad0, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false }));
+      fendaMesh.rotation.x = -Math.PI / 2; fendaMesh.position.set(TEIA.fenda.x, heightAt(TEIA.fenda.x, TEIA.fenda.z) + 0.12, TEIA.fenda.z); scene.add(fendaMesh);
+      for (const [k, dx, dz] of [['cinzela', 3, 1.5], ['corvo', -3, -1.5]]) spawnEnemy(k, TEIA.fenda.x + dx, TEIA.fenda.z + dz, a => { a._fenda = true; fendaEnemies.push(a); });
+    }
+    function fecharFenda() {
+      if (fendaMesh) { scene.remove(fendaMesh); fendaMesh = null; }
+      for (const a of fendaEnemies) { if (a && a.wrap) { scene.remove(a.wrap); a.defeated = true; const i = overworldEnemies.indexOf(a); if (i >= 0) overworldEnemies.splice(i, 1); } }
+      fendaEnemies.length = 0;
+    }
+    function updateTeia(t) { // visibilidade por era + animação + lago seco no presente (consequência)
+      const sem = currentEra === 'semente';
+      if (teiaPedra) teiaPedra.visible = sem && !game.lacos.riacho;
+      if (teiaRiacho) teiaRiacho.visible = sem;
+      if (teiaFolha) { teiaFolha.visible = sem && !!game.lacos.riacho && !game.folhas.includes('primavera'); if (teiaFolha.visible) { teiaFolha.rotation.y += 0.02; teiaFolha.position.y = heightAt(TEIA.folha.x, TEIA.folha.z) + 1.2 + Math.sin(t * 0.003) * 0.15; } }
+      if (teiaCavar) teiaCavar.visible = sem && game.lacos.riacho === 'ativo';
+      if (fendaMesh) { fendaMesh.visible = currentEra === 'bosque'; fendaMesh.rotation.z += 0.01; fendaMesh.material.opacity = 0.45 + Math.sin(t * 0.004) * 0.15; }
+      if (currentEra === 'bosque' && game.lacos.riacho === 'ativo') { lake.material.color.setHex(0x6a5a3a); lake.material.opacity = 0.22; } // lago secou
     }
 
     // ---------- construção (Kenney Building Kit, CC0) ----------
@@ -1836,6 +1894,9 @@
       if (mount) { dismount(); return; }                         // dirigindo → desce
       const vm = nearMount(); if (vm) { enterMount(vm); return; } // perto de um transporte → entra
       if (activeNPC) { advanceTalk(); return; }
+      if (nearPedra()) { moveRiachoPedra(); return; }                  // [2.0] laço do riacho
+      if (nearFolhaPrimavera()) { collectFolhaPrimavera(); return; }
+      if (nearCavar()) { equilibrarRiacho(); return; }
       if (nearCovinha()) { plantarSemente(); return; }
       if (nearFox()) { recruitFagulha(); return; }
       if (nearLantern()) { pickLantern(); return; }
@@ -2075,6 +2136,7 @@
       if (brotoNovo) { brotoNovo.visible = currentEra === 'bosque' && game.flags.sementePlantada;
         if (brotoNovo.visible && brotoGrow < 1) { brotoGrow = Math.min(1, brotoGrow + dt * 0.5); const e = 1 - Math.pow(1 - brotoGrow, 3); brotoNovo.scale.setScalar(0.06 + 0.94 * e); } }
       updateCollectibles(dt, t); // frutos de luz giram, boiam e são coletados ao chegar perto
+      updateTeia(t); // [2.0] Teia de Causalidade: laço do riacho (objetos por era, fenda, lago seco)
       if (shopOpen && !nearShop()) closeShop(); // saiu de perto da banca → fecha a loja
       if (!game.flags.vilaVista && currentEra === 'bosque' && Math.hypot(dolly.position.x - VILA.x, dolly.position.z - VILA.z) < 24) { game.flags.vilaVista = true; flash('🏘️ Você chegou à Vila do Carvalho!'); sfx('ready'); }
       // partículas mágicas: derivam, caem/sobem conforme a era e seguem o jogador
@@ -2114,6 +2176,9 @@
         const livre = !activeNPC && !eraMenuOpen, a = ' (' + actHint() + ')';
         if (mount) setHint('🚶 Descer' + a);
         else if (livre && nearMount()) setHint(MOUNT_EMOJI[nearMount()] + ' Entrar ' + MOUNT_NOME[nearMount()] + a);
+        else if (livre && nearPedra()) setHint('🪨 Mover a pedra do riacho' + a);
+        else if (livre && nearFolhaPrimavera()) setHint('🍃 Cantar a Folha da Primavera' + a);
+        else if (livre && nearCavar()) setHint('⛏️ Cavar um novo curso pro riacho' + a);
         else if (livre && nearCovinha()) setHint('🌱 Plantar a Semente-do-Amanhã' + a);
         else if (livre && nearFox()) setHint('🦊 Libertar a Fagulha' + a);
         else if (livre && nearLantern()) setHint('✨ Pegar a Lanterna-Vagalume' + a);

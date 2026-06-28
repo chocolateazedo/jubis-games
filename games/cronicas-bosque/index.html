@@ -111,6 +111,10 @@
     #journal .jrow.done { opacity: .6; }
     #journal .jmk { flex: none; } #journal .jt small { color: #9fcfae; }
     #journal .jstats { text-align: center; color: #ffe6a0; font-size: 13px; font-weight: 700; padding: 4px 0 10px; border-bottom: 1px solid rgba(255,225,140,.25); margin-bottom: 6px; }
+    #journal .jsec { margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(160,230,180,.25); }
+    #journal .jsech { color: #bdf5c8; font-weight: 800; font-size: 14px; margin-bottom: 6px; }
+    #journal .jline { color: #cfe6d4; font-size: 13px; padding: 3px 0; } #journal .jline small { color: #9fcfae; }
+    #journal .jmiss { opacity: .38; }
     #journal .jclose { display: block; margin: 12px auto 0; border: none; border-radius: 12px; padding: 10px 22px; font-weight: 800; cursor: pointer; color: #06321b; background: linear-gradient(90deg, #7be88f, #43d977); }
     /* ===== painéis HTML nítidos do Modo Celular (substituem os canvas 3D, que embaçam em baixa resolução) ===== */
     #dialogBox { position: fixed; z-index: 30; left: 50%; top: 11%; transform: translateX(-50%); display: none;
@@ -181,7 +185,7 @@
       <p>O bosque está ficando <b>cinza</b>. O <b>Vovô Carvalho</b> guarda um segredo: suas raízes tocam o <b>ontem</b> e o <b>amanhã</b>. Viaje no tempo e <b>cure o futuro mudando o passado</b>.</p>
       <div class="keys">
         🥽 <b>VR (óculos Meta):</b> ande com a <b>alavanca</b> (gatilho esquerdo = correr, lateral = pular).<br>
-        🖥️ <b>PC:</b> mouse pra olhar, <b>W A S D</b> pra andar (Shift = correr, Espaço = pular), <b>E</b> pra falar.<br>
+        🖥️ <b>PC:</b> <b>W A S D</b> pra andar, <b>mouse OU setas ←↑↓→</b> pra olhar (Shift = correr, Espaço = pular), <b>E</b> pra falar.<br>
         📱 <b>Celular:</b> <b>arraste</b> pra olhar, <b>direcional</b> pra andar, toque pra falar.<br>
         <span style="opacity:.7">Chegue perto do <b>Vovô Carvalho</b> pra viajar entre as eras.</span>
       </div>
@@ -1252,17 +1256,28 @@
     }
     // ---------- DIÁRIO DE MISSÕES (lista os capítulos e o objetivo atual) ----------
     const CHAPTER_DESC = { 1: 'Descubra de onde vem o cinza — e ouça os mais velhos da Vila do Carvalho.', 2: 'Pegue a Lanterna-Vagalume, que abre o caminho do futuro.', 3: 'Atravesse pela raiz do Vovô até o Ermo, o amanhã murcho.', 4: 'Volte ao passado e plante a Semente-do-Amanhã.', 5: 'Veja o presente mudar com o que você fez atrás.', 6: 'Volte ao Ermo e encare o que seca o Vovô.', 7: 'Vença a Murcha… cuidando dela, não batendo.', 8: 'O amanhã floresce. 💚' };
+    const LACO_NOME = { riacho: 'O Riacho Represado', corvo: 'O Corvo Espantado' }; // [2.0] nomes dos laços/folhas/companheiros pro Diário
+    const FOLHA_NOME = { primavera: '🍃 Primavera', verao: '☀️ Verão', chuvas: '💧 Chuvas', inverno: '🩶 Inverno' };
+    const COMP_NOME = { fagulha: '🦊 Fagulha', folho: '🐛 Folho', gota: '🐢 Gota', brisa: '🦋 Brisa' };
     function renderJournal() {
       const b = document.querySelector('#journal .jbody'); if (!b) return; b.innerHTML = '';
-      if ((game.folhas && game.folhas.length) || (game.lacos && Object.keys(game.lacos).length)) { // [2.0] resumo da Teia (só quando houver conteúdo)
-        const hd = document.createElement('div'); hd.className = 'jstats'; hd.innerHTML = '🕊️ Harmonia: <b>' + Math.round(game.harmonia) + '%</b> · 🍃 Folhas da Canção: <b>' + (game.folhas ? game.folhas.length : 0) + '/4</b>'; b.appendChild(hd);
-      }
+      const lacoKeys = game.lacos ? Object.keys(game.lacos) : [], teiaAtiva = (game.folhas && game.folhas.length) || lacoKeys.length;
+      if (teiaAtiva) { const hd = document.createElement('div'); hd.className = 'jstats'; hd.innerHTML = '🕊️ Harmonia do Tempo: <b>' + Math.round(game.harmonia) + '%</b>'; b.appendChild(hd); }
       for (let n = 1; n <= 8; n++) {
         const done = game.fase > n, cur = game.fase === n;
         const row = document.createElement('div'); row.className = 'jrow' + (cur ? ' cur' : '') + (done ? ' done' : '');
         const desc = (cur && game.objetivo) ? game.objetivo : CHAPTER_DESC[n];
         row.innerHTML = '<span class="jmk">' + (done ? '✅' : cur ? '▶️' : '•') + '</span><span class="jt"><b>' + n + '. ' + (FASE_TITULOS[n] || '') + '</b>' + (done ? '' : '<br><small>' + desc + '</small>') + '</span>';
         b.appendChild(row);
+      }
+      if (teiaAtiva) { // [2.0] Teia de Causalidade: laços (estado), Folhas e companheiros
+        const sec = document.createElement('div'); sec.className = 'jsec';
+        let html = '<div class="jsech">🕸️ Teia de Causalidade</div>';
+        for (const k of lacoKeys) { const st = game.lacos[k], eq = st === 'equilibrado'; html += '<div class="jline">' + (eq ? '✅' : '⚠️') + ' ' + (LACO_NOME[k] || k) + ' <small>(' + (eq ? 'equilibrado' : 'EM ABERTO — precisa equilibrar') + ')</small></div>'; }
+        html += '<div class="jline">🍃 Canção das Quatro Folhas (' + game.folhas.length + '/4): ' + ['primavera', 'verao', 'chuvas', 'inverno'].map(f => game.folhas.includes(f) ? FOLHA_NOME[f] : '<span class="jmiss">' + FOLHA_NOME[f] + '</span>').join(' · ') + '</div>';
+        const comps = ['fagulha', 'folho', 'gota', 'brisa'].filter(c => game.flags[c]);
+        if (comps.length) html += '<div class="jline">🤝 Grupo: ' + comps.map(c => COMP_NOME[c]).join(' · ') + '</div>';
+        sec.innerHTML = html; b.appendChild(sec);
       }
     }
     function openJournal() { if (renderer.xr.isPresenting) return; renderJournal(); const el = document.getElementById('journal'); if (el) el.style.display = 'block'; if (document.exitPointerLock) document.exitPointerLock(); }
@@ -1849,7 +1864,8 @@
 
     // ---------- controles desktop/touch ----------
     const keys = {};
-    addEventListener('keydown', e => { keys[e.code] = true; });
+    const GAME_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight', 'KeyE', 'KeyJ']);
+    addEventListener('keydown', e => { keys[e.code] = true; if (!renderer.xr.isPresenting && GAME_KEYS.has(e.code)) e.preventDefault(); });
     addEventListener('keyup', e => { keys[e.code] = false; });
     let yaw = dolly.rotation.y, pitch = 0, locked = false;
     const cv = renderer.domElement;
@@ -2083,9 +2099,12 @@
         if (Math.abs(s.tx) > 0.7 && !turned) { dolly.rotation.y -= Math.sign(s.tx) * Math.PI / 6; turned = true; }
         if (Math.abs(s.tx) < 0.3) turned = false;
       } else {
+        // setas = câmera por teclado (alternativa ao mouse — funciona mesmo se o touchpad travar ao digitar); WASD = andar
+        yaw += ((keys['ArrowLeft'] ? 1 : 0) - (keys['ArrowRight'] ? 1 : 0)) * dt * 2.4;
+        pitch += ((keys['ArrowUp'] ? 1 : 0) - (keys['ArrowDown'] ? 1 : 0)) * dt * 1.8; pitch = Math.max(-1.3, Math.min(1.3, pitch));
         dolly.rotation.y = yaw; camera.rotation.x = pitch;
         mx = (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0) + joy.x;
-        mz = (keys['KeyS'] ? 1 : 0) - (keys['KeyW'] ? 1 : 0) + (keys['ArrowDown'] ? 1 : 0) - (keys['ArrowUp'] ? 1 : 0) + joy.y;
+        mz = (keys['KeyS'] ? 1 : 0) - (keys['KeyW'] ? 1 : 0) + joy.y;
       }
       if (inBattle) { mx = 0; mz = 0; wantJump = false; } // na batalha o jogador fica parado
       const len = Math.hypot(mx, mz);
@@ -2427,7 +2446,7 @@
     function startHintText() {
       if (playMode === 'vr') return 'Use a alavanca pra andar · gatilho pra agir';
       if (playMode === 'mobile') return 'Direcional pra andar · arraste pra olhar · botão Ação pra agir';
-      return 'WASD pra andar · mouse pra olhar · tecla E pra agir';
+      return 'WASD pra andar · mouse OU setas ←↑↓→ pra olhar · tecla E pra agir';
     }
     function startGame() {
       startAudio();

@@ -75,6 +75,8 @@
     #talkHint { position: fixed; z-index: 26; left: 50%; bottom: max(84px, calc(env(safe-area-inset-bottom) + 70px)); transform: translateX(-50%); display: none;
       background: rgba(8,24,16,.78); color: #eaffee; border: 1px solid rgba(160,230,180,.5); border-radius: 14px;
       padding: 10px 16px; font-weight: 700; font-size: 15px; cursor: pointer; }
+    #collectHud { position: fixed; z-index: 27; top: max(12px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); display: none;
+      background: rgba(8,24,16,.78); color: #ffe39a; border: 1px solid rgba(255,225,140,.55); border-radius: 12px; padding: 6px 12px; font-weight: 800; font-size: 15px; pointer-events: none; }
     #questBar { position: fixed; z-index: 27; top: max(58px, calc(env(safe-area-inset-top) + 52px)); left: 50%; transform: translateX(-50%); display: none;
       background: rgba(8,24,16,.82); color: #eaffee; border: 1px solid rgba(255,225,140,.55); border-radius: 12px;
       padding: 7px 16px; font-weight: 700; font-size: 14px; max-width: 92vw; text-align: center; pointer-events: none; }
@@ -135,6 +137,7 @@
   <p id="hint">Arraste/mouse para olhar · WASD ou direcional para andar</p>
 
   <div id="questBar"></div>
+  <div id="collectHud">✨ <b id="collectN">0</b>/<span id="collectT">0</span></div>
   <div id="talkHint">💬 Conversar</div>
   <div id="battleBar"></div>
   <!-- painéis HTML nítidos do Modo Celular (o 3D embaça na resolução reduzida) -->
@@ -324,17 +327,22 @@
     // ---------- VOVÔ CARVALHO (o portal do tempo, que fala) ----------
     const PORTAL = { x: 6, z: 22 };
     const vovo = new THREE.Group();
+    let treeVariants = []; // variações de árvore extraídas do trees.glb (pro Vovô e a muda)
     {
-      const bark = new THREE.MeshStandardMaterial({ color: 0x6b4f2a, roughness: 1 });
-      const leaf = new THREE.MeshStandardMaterial({ color: 0x3f8f43, roughness: 0.9 });
-      const dark = new THREE.MeshStandardMaterial({ color: 0x241606 });
-      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 2.2, 7, 10), bark); trunk.position.y = 3.5; vovo.add(trunk);
-      for (const [cx, cy, cz, r] of [[0, 8.4, 0, 4.2], [-3, 7.2, 1, 3], [3, 7.5, -1, 3], [0, 10.4, 0, 2.6]]) { const c = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 10), leaf); c.position.set(cx, cy, cz); vovo.add(c); }
-      for (const ex of [-0.8, 0.8]) { const eye = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8), dark); eye.position.set(ex, 4.7, 2.0); vovo.add(eye); }
-      const sm = new THREE.Mesh(new THREE.TorusGeometry(0.75, 0.15, 8, 14, Math.PI), dark); sm.position.set(0, 4.0, 1.95); sm.rotation.x = Math.PI; vovo.add(sm);
-      const ring = new THREE.Mesh(new THREE.RingGeometry(3.4, 4.4, 44), new THREE.MeshBasicMaterial({ color: 0x9be8ff, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
+      // carinha gentil do Vovô (olhos que brilham + sorriso), na frente do tronco — a copa vem do modelo real
+      const dark = new THREE.MeshStandardMaterial({ color: 0x2a1a08 });
+      for (const ex of [-0.7, 0.7]) { const eye = new THREE.Mesh(new THREE.SphereGeometry(0.3, 14, 12), new THREE.MeshStandardMaterial({ color: 0x2a1a08, emissive: 0xffe39a, emissiveIntensity: 0.7 })); eye.position.set(ex, 4.2, 1.85); vovo.add(eye); }
+      const sm = new THREE.Mesh(new THREE.TorusGeometry(0.72, 0.14, 8, 18, Math.PI), dark); sm.position.set(0, 3.5, 1.8); sm.rotation.x = Math.PI; vovo.add(sm);
+      const ring = new THREE.Mesh(new THREE.RingGeometry(3.4, 4.6, 48), new THREE.MeshBasicMaterial({ color: 0x9be8ff, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
       ring.rotation.x = -Math.PI / 2; ring.position.y = 0.18; vovo.add(ring); vovo.userData.ring = ring;
+      const glow = new THREE.PointLight(0xffd98a, 1.1, 26, 2); glow.position.set(0, 6, 0); vovo.add(glow); vovo.userData.glow = glow; // brilho mágico quentinho
       vovo.position.set(PORTAL.x, heightAt(PORTAL.x, PORTAL.z), PORTAL.z); scene.add(vovo);
+    }
+    // monta uma árvore avulsa (Group de meshes) a partir de uma variação do GLB, na altura desejada
+    function buildTreeFromVariant(v, targetH, ownMaterial) {
+      const g = new THREE.Group(), s = targetH / v.h;
+      for (const part of v.parts) { const mat = ownMaterial ? (Array.isArray(part.mat) ? part.mat.map(mm => mm.clone()) : part.mat.clone()) : part.mat; g.add(new THREE.Mesh(part.geo, mat)); }
+      g.scale.setScalar(s); return g;
     }
     function nearPortal() { return Math.hypot(dolly.position.x - PORTAL.x, dolly.position.z - PORTAL.z) < 6; }
 
@@ -596,7 +604,7 @@
       else if (target) {
         const mult = essMult(tc.ess, target.def.ess), dmg = Math.max(1, Math.round((tc.poder + hero.mag - target.def.def / 2) * (0.9 + Math.random() * 0.2) * mult));
         target.hp -= dmg; sfx('hit'); spawnDmg(target.actor.wrap.position, dmg, mult >= 2 ? 0xffe24a : 0xffffff);
-        if (mult >= 2) flash('✨ Acertou a fraqueza! ×2'); playClip(target.actor, 'eat');
+        if (mult >= 2) { flash('✨ Acertou a fraqueza! ×2'); sfx('crit'); } playClip(target.actor, 'eat');
         if (target.hp <= 0) { target.alive = false; defeatEnemy(target); }
       }
       resetHeroTurn(); updateHeroHud();
@@ -656,7 +664,7 @@
       const i = overworldEnemies.indexOf(e.actor); if (i >= 0) overworldEnemies.splice(i, 1);
       if (battle.enemies.every(x => !x.alive)) winBattle();
     }
-    function levelUp() { hero.lvl++; hero.xpNext = Math.round(hero.xpNext * 1.7); hero.hpMax += 6; hero.mpMax += 2; hero.atk += 2; hero.def += 1; hero.mag += 1; hero.hp = hero.hpMax; hero.mp = hero.mpMax; }
+    function levelUp() { hero.lvl++; hero.xpNext = Math.round(hero.xpNext * 1.7); hero.hpMax += 6; hero.mpMax += 2; hero.atk += 2; hero.def += 1; hero.mag += 1; hero.hp = hero.hpMax; hero.mp = hero.mpMax; sfx('levelup'); }
     function winBattle() {
       const xp = battle.enemies.reduce((s, e) => s + e.def.xp, 0); hero.xp += xp; sfx('fanfare');
       let msg = '🎉 Você venceu! +' + xp + ' XP';
@@ -808,6 +816,9 @@
       else if (kind === 'ready') { o.type = 'triangle'; o.frequency.setValueAtTime(880, t); g.gain.setValueAtTime(0.001, t); g.gain.exponentialRampToValueAtTime(0.1, t + 0.02); g.gain.exponentialRampToValueAtTime(0.001, t + 0.18); o.start(t); o.stop(t + 0.2); }
       else if (kind === 'start') { o.type = 'sawtooth'; o.frequency.setValueAtTime(120, t); o.frequency.exponentialRampToValueAtTime(640, t + 0.3); g.gain.setValueAtTime(0.12, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.35); o.start(t); o.stop(t + 0.36); }
       else if (kind === 'fanfare') { [523, 659, 784, 1047].forEach((f, k) => { const oo = actx.createOscillator(), gg = actx.createGain(); oo.type = 'triangle'; oo.frequency.value = f; oo.connect(gg).connect(actx.destination); const tt = t + k * 0.12; gg.gain.setValueAtTime(0.001, tt); gg.gain.exponentialRampToValueAtTime(0.14, tt + 0.02); gg.gain.exponentialRampToValueAtTime(0.001, tt + 0.4); oo.start(tt); oo.stop(tt + 0.42); }); }
+      else if (kind === 'levelup') { [523, 587, 659, 784, 880, 1047].forEach((f, k) => { const oo = actx.createOscillator(), gg = actx.createGain(); oo.type = 'square'; oo.frequency.value = f; oo.connect(gg).connect(actx.destination); const tt = t + k * 0.08; gg.gain.setValueAtTime(0.001, tt); gg.gain.exponentialRampToValueAtTime(0.1, tt + 0.02); gg.gain.exponentialRampToValueAtTime(0.001, tt + 0.3); oo.start(tt); oo.stop(tt + 0.32); }); }
+      else if (kind === 'coin') { [988, 1319].forEach((f, k) => { const oo = actx.createOscillator(), gg = actx.createGain(); oo.type = 'square'; oo.frequency.value = f; oo.connect(gg).connect(actx.destination); const tt = t + k * 0.07; gg.gain.setValueAtTime(0.001, tt); gg.gain.exponentialRampToValueAtTime(0.12, tt + 0.01); gg.gain.exponentialRampToValueAtTime(0.001, tt + 0.16); oo.start(tt); oo.stop(tt + 0.18); }); }
+      else if (kind === 'crit') { o.type = 'square'; o.frequency.setValueAtTime(300, t); o.frequency.exponentialRampToValueAtTime(1200, t + 0.08); o.frequency.exponentialRampToValueAtTime(160, t + 0.2); g.gain.setValueAtTime(0.2, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.24); o.start(t); o.stop(t + 0.26); }
     }
     // (os inimigos de teste são criados junto com os pets, onde getGLB já existe)
 
@@ -873,7 +884,12 @@
     }
 
     const gltfLoader = new GLTFLoader();
-    gltfLoader.load('../bosque-vr/models/trees.glb', g => buildInstanced(extractVariants(g), broad, 6.5));
+    gltfLoader.load('../bosque-vr/models/trees.glb', g => {
+      treeVariants = extractVariants(g); buildInstanced(treeVariants, broad, 6.5);
+      // Vovô Carvalho: a árvore real maior e mais bonita do bosque (copa do modelo, bem grande)
+      const big = treeVariants.reduce((a, b) => (b.h > a.h ? b : a), treeVariants[0]);
+      const vt = buildTreeFromVariant(big, 13, true); vovo.add(vt); vovo.userData.tree = vt;
+    });
     gltfLoader.load('../bosque-vr/models/pines.glb', g => buildInstanced(extractVariants(g), pine, 8.5));
 
     // pedras (modelo CC0), também instanced
@@ -897,6 +913,8 @@
     // carregador com cache (cada GLB baixa 1x; depois é clonado por instância)
     const _glbCache = {};
     function getGLB(url) { return _glbCache[url] || (_glbCache[url] = gltfLoader.loadAsync(url)); }
+    // aquece o cache dos modelos de combate pra a 1ª batalha começar na hora (sem travar carregando)
+    ['caterpillar', 'dog', 'bee', 'fox'].forEach(n => getGLB(`../bosque-vr/pets/animal-${n}.glb`));
     const mixers = []; // todos os AnimationMixers, atualizados no loop
     function bestClip(gltf, name) {
       return THREE.AnimationClip.findByName(gltf.animations || [], name)
@@ -949,6 +967,32 @@
     spawnEnemy('brotoca', 10, 50);
     spawnEnemy('brotoca', 4, 46);
 
+    // ---------- FRUTOS DE LUZ (colecionáveis espalhados pelo mapa) ----------
+    const COLLECT_N = 16, collectibles = [];
+    const fruitGeo = new THREE.OctahedronGeometry(0.34, 0);
+    for (let i = 0; i < COLLECT_N; i++) {
+      const p = landPoint(WORLD_R - 8);
+      if (Math.hypot(p.x - PORTAL.x, p.z - PORTAL.z) < 8) { p.x += 12; } // longe do Vovô
+      const m = new THREE.Mesh(fruitGeo, new THREE.MeshStandardMaterial({ color: 0xffe24a, emissive: 0xffcc33, emissiveIntensity: 0.9, roughness: 0.3, metalness: 0.3 }));
+      m.position.set(p.x, heightAt(p.x, p.z) + 1.2, p.z); m.userData = { bx: p.x, bz: p.z, ph: Math.random() * 6.28 }; scene.add(m); collectibles.push(m);
+    }
+    const collectN = document.getElementById('collectN'), collectT = document.getElementById('collectT');
+    if (collectT) collectT.textContent = COLLECT_N;
+    function updateCollectibles(dt, t) {
+      const px = dolly.position.x, pz = dolly.position.z;
+      for (let i = collectibles.length - 1; i >= 0; i--) {
+        const m = collectibles[i]; m.rotation.y += dt * 2; m.position.y = heightAt(m.userData.bx, m.userData.bz) + 1.2 + Math.sin(t * 0.003 + m.userData.ph) * 0.18;
+        if (Math.hypot(m.userData.bx - px, m.userData.bz - pz) < 1.6) { // coletou!
+          scene.remove(m); collectibles.splice(i, 1); game.coletados++; sfx('coin');
+          spawnDmg(m.position.clone().add(new THREE.Vector3(0, -0.6, 0)), '✨+1', 0xffe24a);
+          if (collectN) collectN.textContent = game.coletados;
+          const hud = document.getElementById('collectHud'); if (hud) hud.style.display = 'block';
+          if (game.coletados % 4 === 0) { hero.hpMax += 2; hero.mpMax += 1; hero.hp = hero.hpMax; hero.mp = hero.mpMax; flash('✨ Frutos de Luz! Coração mais forte — HP/MP máximos subiram!'); sfx('levelup'); }
+          if (game.coletados === COLLECT_N) { hero.itens.mel = (hero.itens.mel || 0) + 3; flash('🌟 Você juntou TODOS os Frutos de Luz! Ganhou 3 Mel-do-Bosque. O bosque brilha por você!'); sfx('fanfare'); }
+        }
+      }
+    }
+
     // ---------- AVES voando (modelos de papagaio/passarinho do mesmo pack, em círculos) ----------
     const flyers = [];
     ['parrot','chick','parrot','bee'].forEach((name, i) => {
@@ -964,7 +1008,7 @@
 
     // ---------- NPCs (blocky characters): bots com quem dá pra conversar ----------
     // ======================= MOTOR DE HISTÓRIA (10 fases) =======================
-    const game = { fase: 0, vovoFalou: false, objetivo: '', vistoMudanca: false, flags: { lanterna: false, fagulha: false, momento: false, semente: false, sementePlantada: false } };
+    const game = { fase: 0, vovoFalou: false, objetivo: '', vistoMudanca: false, coletados: 0, flags: { lanterna: false, fagulha: false, momento: false, semente: false, sementePlantada: false } };
     const FASE_TITULOS = { 1: 'O Bosque Doente', 2: 'A Lanterna-Vagalume', 3: 'O Ermo', 4: 'A Semente do Passado', 5: 'O Amanhã Plantado', 6: 'A Cura Começa', 7: 'O Coração da Murcha', 8: 'Epílogo' };
     function setObjetivo(txt) {
       game.objetivo = txt; const q = document.getElementById('questBar');
@@ -1107,16 +1151,19 @@
       const mx = 8, mz = 32;
       manchaCinza = new THREE.Mesh(new THREE.CircleGeometry(3.4, 24), new THREE.MeshBasicMaterial({ color: 0x6a6a6a, transparent: true, opacity: 0.55, depthWrite: false }));
       manchaCinza.rotation.x = -Math.PI / 2; manchaCinza.position.set(mx, heightAt(mx, mz) + 0.06, mz); scene.add(manchaCinza);
+      // o carvalhinho do PRESENTE: árvore real (modelo) que vai crescer quando você plantar no passado
       brotoNovo = new THREE.Group();
-      brotoNovo.add(new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.15, 1.2, 8), new THREE.MeshStandardMaterial({ color: 0x6b4f2a })));
-      const cap = new THREE.Mesh(new THREE.SphereGeometry(0.7, 10, 8), new THREE.MeshStandardMaterial({ color: 0x4caf50 })); cap.position.y = 1.0; brotoNovo.add(cap);
-      brotoNovo.position.set(mx, heightAt(mx, mz) + 0.6, mz); brotoNovo.visible = false; scene.add(brotoNovo);
+      if (treeVariants.length) brotoNovo.add(buildTreeFromVariant(treeVariants[0], 3.4, true));
+      brotoNovo.position.set(mx, heightAt(mx, mz), mz); brotoNovo.visible = false; brotoNovo.scale.setScalar(0.06); scene.add(brotoNovo);
     }
+    let brotoGrow = 0; // 0→1: a animação de crescimento do carvalhinho no presente
     function nearCovinha() { return covinha && currentEra === 'semente' && game.flags.semente && !game.flags.sementePlantada && Math.hypot(dolly.position.x - covinha.userData.cx, dolly.position.z - covinha.userData.cz) < 3; }
     function plantarSemente() {
       game.flags.semente = false; game.flags.sementePlantada = true; sfx('fanfare');
-      const b = new THREE.Mesh(new THREE.ConeGeometry(0.45, 1.1, 8), new THREE.MeshStandardMaterial({ color: 0x6abf4f }));
-      b.position.set(covinha.userData.cx, heightAt(covinha.userData.cx, covinha.userData.cz) + 0.65, covinha.userData.cz); scene.add(b);
+      // brota uma arvorezinha real na covinha (passado); no presente o brotoNovo vai crescer
+      const cx = covinha.userData.cx, cz = covinha.userData.cz;
+      if (treeVariants.length) { const t = buildTreeFromVariant(treeVariants[0], 1.7, true); t.position.set(cx, heightAt(cx, cz), cz); scene.add(t); }
+      brotoGrow = 0;
       startNarration('Broto', ['Você plantou! Olha ele crescendo…', 'Esse carvalhinho vai virar o Vovô de todas as árvores. Cuida dele no teu tempo, tá?'], () => { iniciarFase(5); });
     }
 
@@ -1626,7 +1673,9 @@
       // causalidade visível: a covinha (passado), a mancha cinza some / o broto nasce (presente)
       if (covinha) covinha.visible = currentEra === 'semente';
       if (manchaCinza) manchaCinza.visible = currentEra === 'bosque' && !game.flags.sementePlantada;
-      if (brotoNovo) brotoNovo.visible = currentEra === 'bosque' && game.flags.sementePlantada;
+      if (brotoNovo) { brotoNovo.visible = currentEra === 'bosque' && game.flags.sementePlantada;
+        if (brotoNovo.visible && brotoGrow < 1) { brotoGrow = Math.min(1, brotoGrow + dt * 0.5); const e = 1 - Math.pow(1 - brotoGrow, 3); brotoNovo.scale.setScalar(0.06 + 0.94 * e); } }
+      updateCollectibles(dt, t); // frutos de luz giram, boiam e são coletados ao chegar perto
       // partículas mágicas: derivam, caem/sobem conforme a era e seguem o jogador
       { const pa = pGeo.attributes.position.array, hs = PSPAN / 2;
         for (let i = 0; i < PCOUNT; i++) {
@@ -1869,6 +1918,7 @@
       startAudio();
       document.getElementById('intro').classList.add('hidden'); // some o card e os botões de modo
       const h = document.getElementById('hint'); h.textContent = startHintText(); h.style.display = 'block';
+      const ch = document.getElementById('collectHud'); if (ch) ch.style.display = 'block'; // mostra o contador de Frutos de Luz
       if (game.fase === 0) iniciarFase(1); // começa a campanha
       if (playMode === 'mobile') goFullscreen(); // celular: tela cheia + paisagem
       if (playMode === 'pc' && cv.requestPointerLock) cv.requestPointerLock();

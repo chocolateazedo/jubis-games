@@ -1172,8 +1172,8 @@
     }
     // moradores da vila (só no presente)
     [
-      { char: 'b', nome: 'Dona Bromélia', dx: VILA.x + 6, dz: VILA.z + 7, falas: ['Bem-vindo à Vila do Carvalho, broto!', 'Foi do Vovô Carvalho que brotou a primeira semente daqui, sabia?'] },
-      { char: 'd', nome: 'Tonico', dx: VILA.x - 7, dz: VILA.z + 5, falas: ['Cê veio de avião?! Que demais!', 'Quando crescer eu vou ser piloto, igual você!'] },
+      { char: 'b', nome: 'Dona Bromélia', dx: VILA.x + 6, dz: VILA.z + 7, falasFn: () => game.lacos.lampiao ? ['Ai, que luz boa você trouxe pra Vila, broto! Agora minhas mudinhas vão vingar.', 'Quando você juntar a Canção toda, volte aqui — quero ouvir!'] : ['Bem-vindo à Vila do Carvalho, broto!', 'Foi do Vovô Carvalho que brotou a primeira semente daqui, sabia?'] },
+      { char: 'd', nome: 'Tonico', dx: VILA.x - 7, dz: VILA.z + 5, falasFn: () => game.lacos.lampiao ? ['Você acendeu o lampião! Agora não tenho mais medo do escuro. 🏮', 'Quando crescer eu vou ser piloto, igual você!'] : ['Cê veio de avião?! Que demais!', 'Quando crescer eu vou ser piloto, igual você!'] },
       { char: 'e', nome: 'Vovó Samambaia', dx: VILA.x + 4, dz: VILA.z - 8,
         falasFn: () => (game.flags.cogu && !game.flags.vila)
           ? ['Então o cinza voltou a subir… eu já temia, criança.', 'O Vovô Carvalho é a árvore-mãe de tudo. As raízes dele tocam o ONTEM e o AMANHÃ ao mesmo tempo.', 'Esse cinza não nasce aqui: ele VAZA de um futuro murcho. Pra fechar a fenda, você vai ter que atravessar o tempo pela raiz do Vovô.', 'Antigamente, a gente fazia as estações virarem CANTANDO — a Canção das Quatro Folhas: uma pra Primavera 🍃, uma pro Verão ☀️, uma pras Chuvas 💧 e uma pro Inverno 🩶. Mas uma cantora ficou sozinha e engoliu o último verso. Desde então o frio não passa.', 'Reaprenda os versos viajando no tempo, broto — comece procurando a Folha da Primavera lá no passado. Mas cuidado: mexer no ontem mexe no agora. E leve a Lanterna — sem luz, ninguém pisa no Ermo.']
@@ -1256,7 +1256,7 @@
     }
     // ---------- DIÁRIO DE MISSÕES (lista os capítulos e o objetivo atual) ----------
     const CHAPTER_DESC = { 1: 'Descubra de onde vem o cinza — e ouça os mais velhos da Vila do Carvalho.', 2: 'Pegue a Lanterna-Vagalume, que abre o caminho do futuro.', 3: 'Atravesse pela raiz do Vovô até o Ermo, o amanhã murcho.', 4: 'Volte ao passado e plante a Semente-do-Amanhã.', 5: 'Veja o presente mudar com o que você fez atrás.', 6: 'Volte ao Ermo e encare o que seca o Vovô.', 7: 'Vença a Murcha… cuidando dela, não batendo.', 8: 'O amanhã floresce. 💚' };
-    const LACO_NOME = { riacho: 'O Riacho Represado', corvo: 'O Corvo Espantado' }; // [2.0] nomes dos laços/folhas/companheiros pro Diário
+    const LACO_NOME = { riacho: 'O Riacho Represado', corvo: 'O Corvo Espantado', lampiao: 'O Lampião Aceso' }; // [2.0] nomes dos laços/folhas/companheiros pro Diário
     const FOLHA_NOME = { primavera: '🍃 Primavera', verao: '☀️ Verão', chuvas: '💧 Chuvas', inverno: '🩶 Inverno' };
     const COMP_NOME = { fagulha: '🦊 Fagulha', folho: '🐛 Folho', gota: '🐢 Gota', brisa: '🦋 Brisa' };
     function renderJournal() {
@@ -1560,6 +1560,36 @@
     function updateTeia2(t) {
       if (teia2Corvo) { teia2Corvo.visible = currentEra === 'semente' && !game.lacos.corvo; if (teia2Corvo.visible) teia2Corvo.children[0].position.y = 1.0 + Math.sin(t * 0.005) * 0.12; }
       if (besourosGroup) { besourosGroup.visible = currentEra === 'bosque' && game.lacos.corvo === 'ativo'; if (besourosGroup.visible) for (const b of besourosGroup.children) { b.position.y = 0.3 + Math.abs(Math.sin(t * 0.01 + b.userData.ph)) * 0.5; b.rotation.y += 0.12; } }
+    }
+
+    // ----- Laço 4: O Lampião Aceso (a luz no passado atrai a sombra da Murcha no presente) -----
+    const LACO4 = { lampiao: { x: VILA.x + 12, z: VILA.z + 12 }, sombra: { x: VILA.x - 12, z: VILA.z + 2 } };
+    let teia4Lamp = null, teia4Sombra = null;
+    function criarTeia4() {
+      teia4Lamp = new THREE.Group();
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 3.0, 8), new THREE.MeshStandardMaterial({ color: 0x5a4326, roughness: 1 })); post.position.y = 1.5; teia4Lamp.add(post);
+      const lant = new THREE.Mesh(new THREE.IcosahedronGeometry(0.32, 0), new THREE.MeshStandardMaterial({ color: 0x2a2a20, roughness: 1, flatShading: true })); lant.position.y = 3.0; teia4Lamp.add(lant);
+      teia4Lamp.position.set(LACO4.lampiao.x, heightAt(LACO4.lampiao.x, LACO4.lampiao.z), LACO4.lampiao.z); scene.add(teia4Lamp); teia4Lamp.visible = false;
+      // sombra da Murcha (mariposa escura) no presente
+      teia4Sombra = new THREE.Group();
+      const corpo = new THREE.Mesh(new THREE.IcosahedronGeometry(0.4, 0), new THREE.MeshStandardMaterial({ color: 0x3a3045, roughness: 1, flatShading: true, transparent: true, opacity: 0.85 })); teia4Sombra.add(corpo);
+      for (const sx of [-1, 1]) { const asa = new THREE.Mesh(new THREE.IcosahedronGeometry(0.7, 0), corpo.material); asa.scale.set(1.1, 0.7, 0.25); asa.position.set(sx * 0.7, 0.1, 0); teia4Sombra.add(asa); }
+      teia4Sombra.position.set(LACO4.sombra.x, heightAt(LACO4.sombra.x, LACO4.sombra.z) + 2.0, LACO4.sombra.z); scene.add(teia4Sombra); teia4Sombra.visible = false;
+    }
+    criarTeia4();
+    function nearLampiao() { return teia4Lamp && !game.lacos.lampiao && currentEra === 'semente' && Math.hypot(dolly.position.x - LACO4.lampiao.x, dolly.position.z - LACO4.lampiao.z) < 3.5; }
+    function nearSombra() { return game.lacos.lampiao === 'ativo' && currentEra === 'bosque' && Math.hypot(dolly.position.x - LACO4.sombra.x, dolly.position.z - LACO4.sombra.z) < 4.5; }
+    function acenderLampiao() {
+      game.lacos.lampiao = 'ativo'; sfx('ready'); recomputeHarmonia(); renderJournal(); hero.itens.mel = (hero.itens.mel || 0) + 2; saveGame('auto');
+      startNarration('', ['Você acende o primeiro lampião da Vila! Os moradores perdem o medo do escuro e ficam te devendo uma — passe pra conversar depois. 🏮', 'Mas a luz no passado chama bicho: no AGORA, uma sombra de mariposa (a saudade da Murcha) ronda a Vila. Volte ao 🌳 Bosque e console-a — com calma.'], () => { });
+    }
+    function cantarConforto() {
+      game.lacos.lampiao = 'equilibrado'; sfx('fanfare'); recomputeHarmonia(); renderJournal(); saveGame('auto');
+      startNarration('', ['Você chega pertinho da sombra e canta bem baixinho, sem medo…', 'Ela para de tremer, escuta, e se desfaz num pó-de-luz calminho. Não dava pra espantar — dava pra acolher. (Guarde esse jeito pro fim, broto.) 🩶'], () => { });
+    }
+    function updateTeia4(t) {
+      if (teia4Lamp) teia4Lamp.visible = currentEra === 'semente' && !game.lacos.lampiao;
+      if (teia4Sombra) { teia4Sombra.visible = currentEra === 'bosque' && game.lacos.lampiao === 'ativo'; if (teia4Sombra.visible) { teia4Sombra.position.y = heightAt(LACO4.sombra.x, LACO4.sombra.z) + 2.0 + Math.sin(t * 0.003) * 0.4; teia4Sombra.rotation.y += 0.01; for (let i = 1; i <= 2; i++) teia4Sombra.children[i].rotation.z = Math.sin(t * 0.02) * 0.5 * (i === 1 ? 1 : -1); } }
     }
 
     // ---------- construção (Kenney Building Kit, CC0) ----------
@@ -1952,6 +1982,8 @@
       if (nearCavar()) { equilibrarRiacho(); return; }
       if (nearCorvo()) { espantarCorvo(); return; }                    // [2.0] laço do corvo
       if (nearPragaVerao()) { cantarVerao(); return; }
+      if (nearLampiao()) { acenderLampiao(); return; }                 // [2.0] laço do lampião
+      if (nearSombra()) { cantarConforto(); return; }
       if (nearCovinha()) { plantarSemente(); return; }
       if (nearFox()) { recruitFagulha(); return; }
       if (nearLantern()) { pickLantern(); return; }
@@ -2194,7 +2226,7 @@
       if (brotoNovo) { brotoNovo.visible = currentEra === 'bosque' && game.flags.sementePlantada;
         if (brotoNovo.visible && brotoGrow < 1) { brotoGrow = Math.min(1, brotoGrow + dt * 0.5); const e = 1 - Math.pow(1 - brotoGrow, 3); brotoNovo.scale.setScalar(0.06 + 0.94 * e); } }
       updateCollectibles(dt, t); // frutos de luz giram, boiam e são coletados ao chegar perto
-      updateTeia(t); updateTeia2(t); // [2.0] Teia de Causalidade: laços (riacho/lago, corvo/besouros) por era
+      updateTeia(t); updateTeia2(t); updateTeia4(t); // [2.0] Teia de Causalidade: laços (riacho, corvo, lampião) por era
       if (shopOpen && !nearShop()) closeShop(); // saiu de perto da banca → fecha a loja
       if (!game.flags.vilaVista && currentEra === 'bosque' && Math.hypot(dolly.position.x - VILA.x, dolly.position.z - VILA.z) < 24) { game.flags.vilaVista = true; flash('🏘️ Você chegou à Vila do Carvalho!'); sfx('ready'); }
       // partículas mágicas: derivam, caem/sobem conforme a era e seguem o jogador
@@ -2239,6 +2271,8 @@
         else if (livre && nearCavar()) setHint('⛏️ Cavar um novo curso pro riacho' + a);
         else if (livre && nearCorvo()) setHint('🐦 Espantar o Corvo Cinza' + a);
         else if (livre && nearPragaVerao()) setHint('🎵 Cantar o canto de pássaro' + a);
+        else if (livre && nearLampiao()) setHint('🏮 Acender o lampião da Vila' + a);
+        else if (livre && nearSombra()) setHint('🩶 Cantar pra consolar a sombra' + a);
         else if (livre && nearCovinha()) setHint('🌱 Plantar a Semente-do-Amanhã' + a);
         else if (livre && nearFox()) setHint('🦊 Libertar a Fagulha' + a);
         else if (livre && nearLantern()) setHint('✨ Pegar a Lanterna-Vagalume' + a);

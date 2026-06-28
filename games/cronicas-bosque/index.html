@@ -1828,6 +1828,8 @@
     // ===================== TRANSPORTES (carro 🚗, moto 🏍️, cavalo 🐴, avião ✈️) =====================
     let mount = null, flyAlt = 0, cycWas = false; // montaria atual e altura de voo do avião
     const MOUNT_MULT = { carro: 2.4, moto: 2.7, cavalo: 2.0, aviao: 3.2 };
+    // posição da câmera (altura, recuo) ao montar: você vira motorista/cavaleiro e VÊ o veículo à frente (fora do VR)
+    const MOUNT_CAM = { carro: [1.5, 0.7], moto: [1.5, 0.4], cavalo: [2.2, 0.7], aviao: [1.7, 0.6] };
     const MOUNT_EMOJI = { carro: '🚗', moto: '🏍️', cavalo: '🐴', aviao: '✈️' };
     const MOUNT_MSG = { carro: 'Vrum vrum! De carro agora.', moto: 'Acelera na moto!', cavalo: 'Eba, montou no cavalo!', aviao: 'Decolando de avião! 🛫' };
     const matT = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.6, metalness: 0.1 });
@@ -1884,6 +1886,8 @@
       setEngine(type);
       if (type) { MOUNTS[type].visible = true; sfx(type === 'cavalo' ? 'neigh' : 'vroom'); flash(MOUNT_EMOJI[type] + ' ' + MOUNT_MSG[type]); }
       else { sfx('poof'); }
+      // sobe e recua a câmera pra você ver a cabine/o cavalo à sua frente (no VR a cabeça é livre, não mexe)
+      if (!renderer.xr.isPresenting) { const o = type ? MOUNT_CAM[type] : null; camera.position.set(0, o ? o[0] : 1.6, o ? o[1] : 0); }
     }
     function cycleMount() { const order = [null, 'carro', 'moto', 'cavalo', 'aviao']; setMount(order[(order.indexOf(mount) + 1) % order.length]); }
     document.querySelectorAll('#mountBar .mb').forEach(b => {

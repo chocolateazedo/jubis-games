@@ -93,6 +93,14 @@
     #battleBar .bbtn:active { background: rgba(120,220,150,.6); transform: scale(.95); }
     #battleBar .bbtn.dim { opacity: .45; }
     body.inbattle #joy, body.inbattle #mbtns { display: none !important; } /* na batalha, só a barra de ações */
+    #shop { position: fixed; z-index: 33; left: 50%; top: 50%; transform: translate(-50%, -50%); display: none; width: min(94vw, 460px);
+      background: linear-gradient(180deg, rgba(20,40,28,.97), rgba(8,22,16,.98)); border: 2px solid rgba(255,225,140,.6); border-radius: 16px; padding: 16px; box-shadow: 0 18px 50px rgba(0,0,0,.55); }
+    #shop .shead { color: #ffe6a0; font-weight: 800; font-size: 17px; text-align: center; margin-bottom: 12px; }
+    #shop .srow { display: flex; align-items: center; gap: 8px; justify-content: space-between; padding: 9px 6px; border-bottom: 1px solid rgba(160,230,180,.18); color: #eaffee; font-size: 14px; }
+    #shop .sbuy { border: 2px solid rgba(255,225,140,.5); background: rgba(255,210,100,.25); color: #ffe6a0; font-weight: 800; border-radius: 10px; padding: 8px 12px; cursor: pointer; -webkit-tap-highlight-color: transparent; white-space: nowrap; }
+    #shop .sbuy.dim { opacity: .4; }
+    #shop .sclose { display: block; margin: 12px auto 0; border: none; border-radius: 12px; padding: 10px 22px; font-weight: 800; cursor: pointer; color: #06321b; background: linear-gradient(90deg, #7be88f, #43d977); }
+    body.inbattle #shop { display: none !important; }
     /* ===== painéis HTML nítidos do Modo Celular (substituem os canvas 3D, que embaçam em baixa resolução) ===== */
     #dialogBox { position: fixed; z-index: 30; left: 50%; top: 11%; transform: translateX(-50%); display: none;
       width: min(92vw, 560px); background: linear-gradient(180deg, rgba(16,40,28,.96), rgba(8,22,16,.97));
@@ -156,6 +164,7 @@
   <div id="dialogBox"><div class="dname"></div><div class="dtext"></div><div class="dcont">▶ toque para continuar</div></div>
   <div id="eraMenu"><div class="emtitle">Pra qual tempo, broto?</div><div class="embtns"></div></div>
   <div id="battleStatus"></div>
+  <div id="shop"><div class="shead">🛒 Loja da Vila — ✨ <b id="shopCoins">0</b> Frutos de Luz</div><div class="sitems"></div><button class="sclose" id="shopClose">Fechar</button></div>
   <div id="toast"></div>
 
   <div id="intro">
@@ -339,6 +348,7 @@
 
     // ---------- VOVÔ CARVALHO (o portal do tempo, que fala) ----------
     const PORTAL = { x: 6, z: 22 };
+    const VILA = { x: -64, z: -54 }, SHOP = { x: -64, z: -67 }; // a Vila do Carvalho fica numa clareira a noroeste
     const vovo = new THREE.Group();
     let treeVariants = []; // variações de árvore extraídas do trees.glb (pro Vovô e a muda)
     // Vovô Carvalho: um ENT ancião esculpido — rosto na casca, barba de musgo, braços-galho, pés-raiz e copa frondosa.
@@ -908,6 +918,7 @@
         const a = Math.random() * Math.PI * 2, d = 8 + Math.random() * (WORLD_R - 6), x = Math.cos(a) * d, z = Math.sin(a) * d;
         if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 5) continue;
         if (Math.hypot(x - dolly.position.x, z - dolly.position.z) < 7) continue;
+        if (Math.hypot(x - VILA.x, z - VILA.z) < 34) continue; // clareira da Vila do Carvalho
         const y = heightAt(x, z), s = 0.8 + Math.random() * 0.7, yaw = Math.random() * Math.PI * 2, vi = (Math.random() * 5) | 0;
         (Math.random() < 0.38 ? pine : broad).push({ x, y, z, s, yaw, vi });
         m.compose(pos.set(x, y + 0.06, z), ID, scl.set(s * 2.2, 1, s * 2.2)); blobMesh.setMatrixAt(placed, m);
@@ -1059,6 +1070,97 @@
         }
       }
     }
+
+    // ===================== VILA DO CARVALHO (cidade na clareira a noroeste) =====================
+    function mergeByMaterial(root) { // junta tudo por material → poucos draw calls (leve no celular)
+      root.updateMatrixWorld(true);
+      const buckets = new Map(), out = new THREE.Group();
+      root.traverse(o => { if (o.isMesh) { let g = o.geometry.clone().applyMatrix4(o.matrixWorld); if (g.index) g = g.toNonIndexed(); g.deleteAttribute('uv2'); if (!buckets.has(o.material)) buckets.set(o.material, []); buckets.get(o.material).push(g); } });
+      for (const [mat, geos] of buckets) { const merged = mergeGeometries(geos, false); if (merged) out.add(new THREE.Mesh(merged, mat)); else geos.forEach(gg => out.add(new THREE.Mesh(gg, mat))); }
+      return out;
+    }
+    {
+      const VG = new THREE.Group();
+      const M = {
+        wallA: new THREE.MeshStandardMaterial({ color: 0xe8d8b0, roughness: 0.95 }), wallB: new THREE.MeshStandardMaterial({ color: 0xd8b486, roughness: 0.95 }), wallC: new THREE.MeshStandardMaterial({ color: 0xcfb3d6, roughness: 0.95 }),
+        roofA: new THREE.MeshStandardMaterial({ color: 0xc0502f, roughness: 0.9, flatShading: true }), roofB: new THREE.MeshStandardMaterial({ color: 0x6f8a46, roughness: 0.9, flatShading: true }), roofC: new THREE.MeshStandardMaterial({ color: 0x4f7aa0, roughness: 0.9, flatShading: true }),
+        wood: new THREE.MeshStandardMaterial({ color: 0x6b4a2e, roughness: 1 }), glass: new THREE.MeshStandardMaterial({ color: 0x9fe6ff, emissive: 0x335566, emissiveIntensity: 0.3, roughness: 0.4 }),
+        stone: new THREE.MeshStandardMaterial({ color: 0x9a9a92, roughness: 1, flatShading: true }), dirt: new THREE.MeshStandardMaterial({ color: 0xc0a472, roughness: 1 }), lamp: new THREE.MeshStandardMaterial({ color: 0x3a2a10, emissive: 0xffd070, emissiveIntensity: 1.2 }),
+        awn: new THREE.MeshStandardMaterial({ color: 0xd64b4b, roughness: 0.9, flatShading: true }),
+      };
+      const wallCols = [M.wallA, M.wallB, M.wallC], roofCols = [M.roofA, M.roofB, M.roofC];
+      const box = (parent, w, h, d, mat, x, y, z) => { const mm = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); mm.position.set(x, y, z); parent.add(mm); return mm; };
+      const plaza = new THREE.Mesh(new THREE.CircleGeometry(20, 40), M.dirt); plaza.rotation.x = -Math.PI / 2; plaza.position.set(VILA.x, heightAt(VILA.x, VILA.z) + 0.05, VILA.z); VG.add(plaza);
+      function cottage(cx, cz, wall, roof) {
+        const g = new THREE.Group(), baseY = heightAt(cx, cz);
+        box(g, 3.4, 2.6, 3.4, wall, 0, 1.3, 0);
+        const r = new THREE.Mesh(new THREE.ConeGeometry(2.9, 1.9, 4), roof); r.position.y = 3.5; r.rotation.y = Math.PI / 4; g.add(r);
+        box(g, 0.95, 1.7, 0.16, M.wood, 0, 0.85, 1.72); box(g, 0.7, 0.7, 0.13, M.glass, -1.0, 1.7, 1.72); box(g, 0.7, 0.7, 0.13, M.glass, 1.0, 1.7, 1.72);
+        box(g, 0.5, 1.1, 0.5, wall, 1.1, 3.8, -0.6);
+        g.position.set(cx, baseY, cz); g.rotation.y = Math.atan2(VILA.x - cx, VILA.z - cz); VG.add(g);
+        obstacles.push({ x: cx, z: cz, r: 2.6 });
+      }
+      const NC = 7;
+      for (let i = 0; i < NC; i++) { const a = i / NC * 6.2832, cx = VILA.x + Math.cos(a) * 14, cz = VILA.z + Math.sin(a) * 14; if (Math.hypot(cx - SHOP.x, cz - SHOP.z) < 5) continue; cottage(cx, cz, wallCols[i % 3], roofCols[i % 3]); }
+      // banca da Loja (no SHOP): balcão + toldo listrado + plaquinha
+      { const g = new THREE.Group(), by = heightAt(SHOP.x, SHOP.z); box(g, 4.0, 1.1, 1.6, M.wood, 0, 0.55, 0); box(g, 4.0, 0.2, 2.4, M.awn, 0, 2.4, 0.3);
+        box(g, 0.2, 2.3, 0.2, M.wood, -1.8, 1.2, 1.3); box(g, 0.2, 2.3, 0.2, M.wood, 1.8, 1.2, 1.3); box(g, 1.4, 0.5, 0.1, M.wallA, 0, 2.9, 0.3);
+        g.position.set(SHOP.x, by, SHOP.z); g.rotation.y = Math.atan2(VILA.x - SHOP.x, VILA.z - SHOP.z); VG.add(g); }
+      { const wy = heightAt(VILA.x, VILA.z), well = new THREE.Group();
+        const ring = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 1.0, 16), M.stone); ring.position.y = 0.5; well.add(ring);
+        box(well, 0.2, 2.2, 0.2, M.wood, -1.0, 1.6, 0); box(well, 0.2, 2.2, 0.2, M.wood, 1.0, 1.6, 0);
+        const rf = new THREE.Mesh(new THREE.ConeGeometry(1.7, 0.9, 4), M.roofA); rf.position.y = 3.1; rf.rotation.y = Math.PI / 4; well.add(rf);
+        well.position.set(VILA.x, wy, VILA.z); VG.add(well); obstacles.push({ x: VILA.x, z: VILA.z, r: 1.3 }); }
+      for (let i = 0; i < NC; i++) { const a = (i + 0.5) / NC * 6.2832, lx = VILA.x + Math.cos(a) * 8.5, lz = VILA.z + Math.sin(a) * 8.5, ly = heightAt(lx, lz), lp = new THREE.Group(); box(lp, 0.18, 3.0, 0.18, M.wood, 0, 1.5, 0); const lan = new THREE.Mesh(new THREE.IcosahedronGeometry(0.34, 0), M.lamp); lan.position.y = 3.1; lp.add(lan); lp.position.set(lx, ly, lz); VG.add(lp); }
+      { const sx = VILA.x + 24, sz = VILA.z + 18, sy = heightAt(sx, sz), sg = new THREE.Group(); box(sg, 0.16, 2.4, 0.16, M.wood, 0, 1.2, 0); box(sg, 2.6, 1.0, 0.12, M.wallA, 0, 2.1, 0); sg.position.set(sx, sy, sz); sg.rotation.y = Math.atan2(10 - sx, 64 - sz); VG.add(sg); }
+      scene.add(mergeByMaterial(VG));
+      const vlight = new THREE.PointLight(0xffe0a0, 0.85, 44, 2); vlight.position.set(VILA.x, heightAt(VILA.x, VILA.z) + 5, VILA.z); scene.add(vlight);
+    }
+    // moradores da vila (só no presente)
+    [
+      { char: 'b', nome: 'Dona Bromélia', dx: VILA.x + 6, dz: VILA.z + 7, falas: ['Bem-vindo à Vila do Carvalho, broto!', 'Foi do Vovô Carvalho que brotou a primeira semente daqui, sabia?'] },
+      { char: 'd', nome: 'Tonico', dx: VILA.x - 7, dz: VILA.z + 5, falas: ['Cê veio de avião?! Que demais!', 'Quando crescer eu vou ser piloto, igual você!'] },
+      { char: 'e', nome: 'Vovó Samambaia', dx: VILA.x + 4, dz: VILA.z - 8, falas: ['No meu tempo a gente subia no Vovô pra colher estrela…', 'Junta os Frutos de Luz, criança. Eles guardam o brilho do amanhã.'] },
+      { char: 'g', nome: 'Mestre Cipó', dx: VILA.x - 5, dz: VILA.z - 6, falas: ['Cuida do bosque que ele cuida de você.', 'Dizem que o futuro tá ficando cinza… você vai dar um jeito, né?'] },
+    ].forEach(d => getGLB(`../bosque-vr/npcs/character-${d.char}.glb`).then(g => {
+      const a = spawnActor(g, 'idle', 1.5); a.wrap.position.set(d.dx, heightAt(d.dx, d.dz), d.dz); a.wrap.rotation.y = Math.atan2(VILA.x - d.dx, VILA.z - d.dz);
+      a.wrap.userData = { nome: d.nome, falas: d.falas }; a.story = { era: 'bosque' }; obstacles.push({ x: d.dx, z: d.dz, r: 0.5 }); npcs.push(a);
+    }).catch(() => {}));
+    getGLB('../bosque-vr/npcs/character-f.glb').then(g => { // lojista
+      const a = spawnActor(g, 'idle', 1.5); a.wrap.position.set(SHOP.x, heightAt(SHOP.x, SHOP.z) , SHOP.z + 0.9); a.wrap.rotation.y = Math.atan2(VILA.x - SHOP.x, VILA.z - SHOP.z);
+      a.wrap.userData = { nome: 'Lojista Cará', shop: true }; a.story = { era: 'bosque' }; npcs.push(a);
+    }).catch(() => {});
+    // ---- LOJA: troca Frutos de Luz por itens (DOM no celular/PC; presente simples no VR) ----
+    const SHOP_ITEMS = [
+      { nome: '🍯 Mel-do-Bosque (cura 15)', cost: 2, give: () => { hero.itens.mel = (hero.itens.mel || 0) + 1; } },
+      { nome: '❤ Coração de Carvalho (+6 HP máx)', cost: 3, give: () => { hero.hpMax += 6; hero.hp = hero.hpMax; } },
+      { nome: '💧 Gota de Sol (+3 MP máx)', cost: 3, give: () => { hero.mpMax += 3; hero.mp = hero.mpMax; } },
+      { nome: '⚔ Seiva de Força (+1 Ataque)', cost: 4, give: () => { hero.atk += 1; } },
+    ];
+    let shopOpen = false;
+    function nearShop() { return currentEra === 'bosque' && Math.hypot(dolly.position.x - SHOP.x, dolly.position.z - SHOP.z) < 4.5; }
+    function renderShop() {
+      const el = document.querySelector('#shop .sitems'); if (!el) return; el.innerHTML = '';
+      const cn = document.getElementById('shopCoins'); if (cn) cn.textContent = game.coletados;
+      SHOP_ITEMS.forEach(it => {
+        const row = document.createElement('div'); row.className = 'srow'; const can = game.coletados >= it.cost;
+        const nm = document.createElement('span'); nm.textContent = it.nome; row.appendChild(nm);
+        const b = document.createElement('button'); b.className = 'sbuy' + (can ? '' : ' dim'); b.textContent = '✨ ' + it.cost;
+        b.addEventListener('click', () => buyItem(it)); b.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); buyItem(it); }, { passive: false });
+        row.appendChild(b); el.appendChild(row);
+      });
+    }
+    function buyItem(it) {
+      if (game.coletados < it.cost) { flash('✨ Frutos de Luz insuficientes…'); return; }
+      game.coletados -= it.cost; it.give(); sfx('coin'); flash('Comprou: ' + it.nome);
+      const cn = document.getElementById('collectN'); if (cn) cn.textContent = game.coletados; renderShop();
+    }
+    function openShop() {
+      if (renderer.xr.isPresenting) { const aff = SHOP_ITEMS.filter(it => game.coletados >= it.cost); if (aff.length) { buyItem(aff[0]); flash('🛒 Lojista: leva esse, broto!'); } else flash('🛒 Lojista Cará: junta uns Frutos de Luz e volta aqui!'); return; }
+      shopOpen = true; renderShop(); const el = document.getElementById('shop'); if (el) el.style.display = 'block'; if (document.exitPointerLock) document.exitPointerLock();
+    }
+    function closeShop() { shopOpen = false; const el = document.getElementById('shop'); if (el) el.style.display = 'none'; }
+    { const sc = document.getElementById('shopClose'); if (sc) sc.addEventListener('click', closeShop); }
 
     // ---------- AVES voando (modelos de papagaio/passarinho do mesmo pack, em círculos) ----------
     const flyers = [];
@@ -1621,6 +1723,7 @@
       if (nearFox()) { recruitFagulha(); return; }
       if (nearLantern()) { pickLantern(); return; }
       if (nearPortal()) { tocarVovo(); return; }
+      if (nearShop()) { openShop(); return; }
       const n = nearestNPC(); if (n) startTalk(n);
     }
     addEventListener('keydown', e => {
@@ -1822,6 +1925,7 @@
       if (brotoNovo) { brotoNovo.visible = currentEra === 'bosque' && game.flags.sementePlantada;
         if (brotoNovo.visible && brotoGrow < 1) { brotoGrow = Math.min(1, brotoGrow + dt * 0.5); const e = 1 - Math.pow(1 - brotoGrow, 3); brotoNovo.scale.setScalar(0.06 + 0.94 * e); } }
       updateCollectibles(dt, t); // frutos de luz giram, boiam e são coletados ao chegar perto
+      if (shopOpen && !nearShop()) closeShop(); // saiu de perto da banca → fecha a loja
       // partículas mágicas: derivam, caem/sobem conforme a era e seguem o jogador
       { const pa = pGeo.attributes.position.array, hs = PSPAN / 2;
         for (let i = 0; i < PCOUNT; i++) {
@@ -1861,6 +1965,7 @@
         else if (livre && nearFox()) setHint('🦊 Libertar a Fagulha' + a);
         else if (livre && nearLantern()) setHint('✨ Pegar a Lanterna-Vagalume' + a);
         else if (livre && nearPortal()) setHint('🌳 Tocar o Vovô Carvalho' + a);
+        else if (livre && nearShop()) setHint('🛒 Abrir a Loja da Vila' + a);
         else if (livre && nearestNPC()) setHint('💬 Conversar' + a);
         else setHint('');
       }

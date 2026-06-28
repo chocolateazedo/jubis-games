@@ -1319,7 +1319,7 @@
     }
     // ---------- DIÁRIO DE MISSÕES (lista os capítulos e o objetivo atual) ----------
     const CHAPTER_DESC = { 1: 'Descubra de onde vem o cinza — e ouça os mais velhos da Vila do Carvalho.', 2: 'Pegue a Lanterna-Vagalume, que abre o caminho do futuro.', 3: 'Atravesse pela raiz do Vovô até o Ermo, o amanhã murcho.', 4: 'Volte ao passado e plante a Semente-do-Amanhã.', 5: 'Veja o presente mudar com o que você fez atrás.', 6: 'Volte ao Ermo e encare o que seca o Vovô.', 7: 'Vença a Murcha… cuidando dela, não batendo.', 8: 'O amanhã floresce. 💚' };
-    const LACO_NOME = { riacho: 'O Riacho Represado', corvo: 'O Corvo Espantado', lampiao: 'O Lampião Aceso', muda: 'A Muda Curada Demais' }; // [2.0] nomes dos laços/folhas/companheiros pro Diário
+    const LACO_NOME = { riacho: 'O Riacho Represado', corvo: 'O Corvo Espantado', lampiao: 'O Lampião Aceso', muda: 'A Muda Curada Demais', cipo: 'A Ponte de Cipó' }; // [2.0] nomes dos laços/folhas/companheiros pro Diário
     const FOLHA_NOME = { primavera: '🍃 Primavera', verao: '☀️ Verão', chuvas: '💧 Chuvas', inverno: '🩶 Inverno' };
     const COMP_NOME = { fagulha: '🦊 Fagulha', folho: '🐛 Folho', gota: '🐢 Gota', brisa: '🦋 Brisa' };
     function renderJournal() {
@@ -1364,6 +1364,7 @@
       if (game.fase >= 2 && !game.flags.lanterna) criarLanterna();
       if (game.fase >= 4) criarSementeMundo();
       if (game.lacos.riacho === 'ativo') abrirFenda(); // [2.0] restaura a Fenda Temporal se o laço ficou em aberto
+      if (game.lacos.cipo === 'equilibrado') criarPonteIlha(); // [2.0] restaura a Ponte de Cipó e a ilhota
       for (let i = 0; i < game.coletados && collectibles.length; i++) { const m = collectibles.pop(); scene.remove(m); } // tira os Frutos já coletados (mantém 16 no total)
     }
     function applyLoadedState(s) {
@@ -1700,6 +1701,61 @@
       if (lacoMata) { lacoMata.visible = currentEra === 'bosque' && game.lacos.muda === 'ativo'; if (lacoMata.visible) lacoMata.rotation.y += 0.002; }
       if (lacoPomar) { lacoPomar.visible = currentEra === 'bosque' && game.lacos.muda === 'equilibrado'; if (lacoPomar.visible) lacoPomar.rotation.y += 0.004; }
     }
+    // ----- Laço 5: A Ponte de Cipó (laço SEM consequência ruim — só bônus: ponte e ilha nova no lago) -----
+    const LACO5 = { cipo: { x: -8, z: 58 }, ilha: { x: 34, z: -12 }, ponteA: { x: 34, z: 1.5 } };
+    const ILHA_R = 4.2, PONTE_HW = 1.7, PONTE_Y = LAKE_Y + 0.55;
+    let mestreCipo = null, ponteGrupo = null, ilhaTesouro = null;
+    function criarMestreCipo() { // o jovem Mestre Cipó, no passado (Semente)
+      mestreCipo = new THREE.Group();
+      const verde = new THREE.MeshStandardMaterial({ color: 0x5aa84a, roughness: 1, flatShading: true });
+      const corpo = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.4, 1.3, 7), verde); corpo.position.y = 0.85; mestreCipo.add(corpo);
+      const cabeca = new THREE.Mesh(new THREE.IcosahedronGeometry(0.4, 0), verde); cabeca.position.y = 1.7; mestreCipo.add(cabeca);
+      for (const sx of [-1, 1]) { const braco = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.9, 5), verde); braco.position.set(sx * 0.4, 1.1, 0); braco.rotation.z = sx * 0.9; mestreCipo.add(braco); }
+      const novelo = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.12, 6, 10), new THREE.MeshStandardMaterial({ color: 0x7a5a36, roughness: 1, flatShading: true })); novelo.position.set(0, 0.5, 0.5); novelo.rotation.x = Math.PI / 2; mestreCipo.add(novelo);
+      mestreCipo.position.set(LACO5.cipo.x, heightAt(LACO5.cipo.x, LACO5.cipo.z), LACO5.cipo.z); scene.add(mestreCipo); mestreCipo.visible = false;
+    }
+    criarMestreCipo();
+    function criarPonteIlha() { // ponte + ilha no presente (Bosque) — chamado ao ensinar Cipó e no load de save com o laço feito
+      if (ponteGrupo) return;
+      ponteGrupo = new THREE.Group();
+      const ilha = new THREE.Mesh(new THREE.CylinderGeometry(ILHA_R, ILHA_R + 0.4, 0.7, 20), new THREE.MeshStandardMaterial({ color: 0x6cae4f, roughness: 1, flatShading: true }));
+      ilha.position.set(LACO5.ilha.x, PONTE_Y - 0.25, LACO5.ilha.z); ponteGrupo.add(ilha);
+      const tr = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.32, 1.6, 6), new THREE.MeshStandardMaterial({ color: 0x7a5a36, roughness: 1 })); tr.position.set(LACO5.ilha.x, PONTE_Y + 0.9, LACO5.ilha.z); ponteGrupo.add(tr);
+      const cp = new THREE.Mesh(new THREE.IcosahedronGeometry(1.5, 0), new THREE.MeshStandardMaterial({ color: 0x7fc85a, roughness: 1, flatShading: true })); cp.position.set(LACO5.ilha.x, PONTE_Y + 2.2, LACO5.ilha.z); ponteGrupo.add(cp);
+      ilhaTesouro = new THREE.Group();
+      for (let i = 0; i < 5; i++) { const a = i / 5 * 6.283; const fr = new THREE.Mesh(new THREE.OctahedronGeometry(0.3, 0), new THREE.MeshStandardMaterial({ color: 0xffe24a, emissive: 0xffcc33, emissiveIntensity: 0.9, roughness: 0.3, metalness: 0.3 })); fr.position.set(Math.cos(a) * 1.1, 0, Math.sin(a) * 1.1); ilhaTesouro.add(fr); }
+      ilhaTesouro.position.set(LACO5.ilha.x, PONTE_Y + 0.7, LACO5.ilha.z); ponteGrupo.add(ilhaTesouro);
+      const ax = LACO5.ponteA.x, az = LACO5.ponteA.z, bx = LACO5.ilha.x, bz = LACO5.ilha.z + ILHA_R, comp = Math.hypot(bx - ax, bz - az);
+      const segs = 9, plankMat = new THREE.MeshStandardMaterial({ color: 0x8a6a40, roughness: 1, flatShading: true });
+      for (let i = 0; i <= segs; i++) { const tt = i / segs; const pl = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.16, (comp / segs) * 0.85), plankMat); pl.position.set(ax + (bx - ax) * tt, PONTE_Y, az + (bz - az) * tt); ponteGrupo.add(pl); }
+      for (const sx of [-1, 1]) { const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, comp, 5), new THREE.MeshStandardMaterial({ color: 0x5a8a3a, roughness: 1 })); rope.position.set((ax + bx) / 2 + sx * 0.95, PONTE_Y + 0.6, (az + bz) / 2); rope.rotation.x = Math.PI / 2; ponteGrupo.add(rope); }
+      scene.add(ponteGrupo); ponteGrupo.visible = (currentEra === 'bosque');
+      if (game.flags.ilhaColhida && ilhaTesouro) ilhaTesouro.visible = false; // tesouro já colhido num save anterior
+    }
+    function nearCipo() { return mestreCipo && !game.lacos.cipo && currentEra === 'semente' && Math.hypot(dolly.position.x - LACO5.cipo.x, dolly.position.z - LACO5.cipo.z) < 3.5; }
+    function ensinarCipo() {
+      game.lacos.cipo = 'equilibrado'; sfx('fanfare'); recomputeHarmonia(); renderJournal(); criarPonteIlha(); saveGame('auto');
+      startNarration('Mestre Cipó (jovem)', ['Tecer uma ponte? Eu nunca tentei… acha mesmo que eu consigo?', 'Tá bom! Vou aprender — pelos amigos do outro lado da água! 🌉', 'No AGORA, a ponte de cipó atravessa o lago até uma ilhota cheia de Frutos. E sabe o melhor? Dessa vez não veio problema nenhum junto. Tem carinho que só dá — não cobra. 💚'], () => { });
+    }
+    function nearIlhaTesouro() { return ilhaTesouro && !game.flags.ilhaColhida && currentEra === 'bosque' && Math.hypot(dolly.position.x - LACO5.ilha.x, dolly.position.z - LACO5.ilha.z) < 2.8; }
+    function colherIlha() {
+      game.flags.ilhaColhida = true; sfx('levelup'); if (ilhaTesouro) ilhaTesouro.visible = false;
+      hero.hpMax += 4; hero.mpMax += 2; hero.hp = hero.hpMax; hero.mp = hero.mpMax; hero.itens.mel = (hero.itens.mel || 0) + 2; updateHeroHud(); saveGame('auto');
+      startNarration('', ['🌟 Você colhe os Frutos escondidos da ilhota! Coração mais forte: HP e MP máximos subiram, e ainda ganhou 2 Mel.', 'Valeu a pena atravessar a ponte. 🌉🍎'], () => { });
+    }
+    function onPonte(x, z) { // o ponto está sobre a ponte/ilha andável? (só no presente, com a ponte feita)
+      if (game.lacos.cipo !== 'equilibrado' || currentEra !== 'bosque') return false;
+      if (Math.hypot(x - LACO5.ilha.x, z - LACO5.ilha.z) < ILHA_R) return true; // sobre a ilha
+      const ax = LACO5.ponteA.x, az = LACO5.ponteA.z, bx = LACO5.ilha.x, bz = LACO5.ilha.z + ILHA_R;
+      const vx = bx - ax, vz = bz - az, L2 = vx * vx + vz * vz; let tt = ((x - ax) * vx + (z - az) * vz) / (L2 || 1); tt = Math.max(0, Math.min(1, tt));
+      return Math.hypot(x - (ax + vx * tt), z - (az + vz * tt)) < PONTE_HW; // dentro do corredor da ponte
+    }
+    function ponteFloorY(x, z) { return onPonte(x, z) ? PONTE_Y : -Infinity; }
+    function updateTeia5(t) {
+      if (mestreCipo) { mestreCipo.visible = currentEra === 'semente' && !game.lacos.cipo; if (mestreCipo.visible) mestreCipo.children[1].position.y = 1.7 + Math.sin(t * 0.004) * 0.06; }
+      if (ponteGrupo) ponteGrupo.visible = currentEra === 'bosque';
+      if (ilhaTesouro && ilhaTesouro.visible && currentEra === 'bosque') { ilhaTesouro.rotation.y += 0.02; ilhaTesouro.position.y = PONTE_Y + 0.7 + Math.sin(t * 0.003) * 0.12; }
+    }
     function checkUnlockRaiz() { if (!game.flags.raiz && game.folhas.length >= 2) { game.flags.raiz = true; setTimeout(() => flash('🌰 Uma raiz mais funda se abriu! Toque o Vovô e viaje à RAIZ, o passado profundo.'), 1400); } }
 
     // ----- ATO III — A RAIZ: o Constructo de Pedra (chefe-coração resolvido com companhia) → Folha das Chuvas -----
@@ -1831,6 +1887,7 @@
         const hit = downRay.intersectObjects(buildSolids, true)[0];
         if (hit && hit.point.y > h) h = hit.point.y; // sobe pro piso (até 1,3 m de degrau)
       }
+      const pf = ponteFloorY(x, z); if (pf > h) h = pf; // [2.0] anda sobre a Ponte de Cipó / ilhota
       return h;
     }
     // tenta mover num eixo; se tiver parede à frente, para antes dela (permite deslizar)
@@ -2130,6 +2187,8 @@
       if (nearSombra()) { cantarConforto(); return; }
       if (nearMudaDoente()) { curarMuda(); return; }                   // [2.0] laço da muda (Mata Emaranhada)
       if (nearMata()) { abrirClareira(); return; }
+      if (nearCipo()) { ensinarCipo(); return; }                       // [2.0] laço da Ponte de Cipó (só bônus)
+      if (nearIlhaTesouro()) { colherIlha(); return; }
       if (nearConstructo()) { resolverConstructo(); return; }           // [2.0] Ato III: Constructo → Folha das Chuvas
       if (nearCovinha()) { plantarSemente(); return; }
       if (nearFox()) { recruitFagulha(); return; }
@@ -2300,7 +2359,7 @@
         if (r > WORLD_R) { p.x *= WORLD_R / r; p.z *= WORLD_R / r; }
         if (mount !== 'aviao') { // no chão: respeita lago, troncos e pedras
           const dx = p.x - LAKE.x, dz2 = p.z - LAKE.z, ld = Math.hypot(dx, dz2), min = LAKE.r + 0.8;
-          if (ld < min) { const k = min / (ld || 1); p.x = LAKE.x + dx * k; p.z = LAKE.z + dz2 * k; }
+          if (ld < min && !onPonte(p.x, p.z)) { const k = min / (ld || 1); p.x = LAKE.x + dx * k; p.z = LAKE.z + dz2 * k; } // [2.0] deixa atravessar a Ponte de Cipó
           const PR = 0.4;
           for (const o of obstacles) { const ox = p.x - o.x, oz = p.z - o.z, od = Math.hypot(ox, oz), md = o.r + PR; if (od < md) { const k = md / (od || 1); p.x = o.x + ox * k; p.z = o.z + oz * k; } }
         }
@@ -2372,7 +2431,7 @@
       if (brotoNovo) { brotoNovo.visible = currentEra === 'bosque' && game.flags.sementePlantada;
         if (brotoNovo.visible && brotoGrow < 1) { brotoGrow = Math.min(1, brotoGrow + dt * 0.5); const e = 1 - Math.pow(1 - brotoGrow, 3); brotoNovo.scale.setScalar(0.06 + 0.94 * e); } }
       updateCollectibles(dt, t); // frutos de luz giram, boiam e são coletados ao chegar perto
-      updateTeia(t); updateTeia2(t); updateTeia3(t); updateTeia4(t); updateConstructo(t); // [2.0] Teia + Constructo (era Raiz)
+      updateTeia(t); updateTeia2(t); updateTeia3(t); updateTeia4(t); updateTeia5(t); updateConstructo(t); // [2.0] Teia + Constructo (era Raiz)
       if (shopOpen && !nearShop()) closeShop(); // saiu de perto da banca → fecha a loja
       if (!game.flags.vilaVista && currentEra === 'bosque' && Math.hypot(dolly.position.x - VILA.x, dolly.position.z - VILA.z) < 24) { game.flags.vilaVista = true; flash('🏘️ Você chegou à Vila do Carvalho!'); sfx('ready'); }
       // partículas mágicas: derivam, caem/sobem conforme a era e seguem o jogador
@@ -2421,6 +2480,8 @@
         else if (livre && nearSombra()) setHint('🩶 Cantar pra consolar a sombra' + a);
         else if (livre && nearMudaDoente()) setHint('🌿 Curar a muda doente' + a);
         else if (livre && nearMata()) setHint('☀️ Abrir uma clareira de luz na Mata' + a);
+        else if (livre && nearCipo()) setHint('🌉 Ensinar o Mestre Cipó a tecer a ponte' + a);
+        else if (livre && nearIlhaTesouro()) setHint('🍎 Colher os Frutos da ilhota' + a);
         else if (livre && nearConstructo()) setHint('🗿 Dar companhia ao Constructo' + a);
         else if (livre && nearCovinha()) setHint('🌱 Plantar a Semente-do-Amanhã' + a);
         else if (livre && nearFox()) setHint('🦊 Libertar a Fagulha' + a);

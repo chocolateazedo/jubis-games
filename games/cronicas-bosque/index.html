@@ -101,6 +101,16 @@
     #shop .sbuy.dim { opacity: .4; }
     #shop .sclose { display: block; margin: 12px auto 0; border: none; border-radius: 12px; padding: 10px 22px; font-weight: 800; cursor: pointer; color: #06321b; background: linear-gradient(90deg, #7be88f, #43d977); }
     body.inbattle #shop { display: none !important; }
+    #journalBtn { position: fixed; z-index: 27; top: max(50px, calc(env(safe-area-inset-top) + 38px)); left: max(12px, env(safe-area-inset-left)); display: none;
+      width: 42px; height: 42px; border: 1px solid rgba(255,225,140,.5); background: rgba(8,24,16,.78); border-radius: 12px; font-size: 20px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    #journal { position: fixed; z-index: 33; left: 50%; top: 50%; transform: translate(-50%, -50%); display: none; width: min(94vw, 480px); max-height: 80vh; overflow-y: auto;
+      background: linear-gradient(180deg, rgba(20,40,28,.97), rgba(8,22,16,.98)); border: 2px solid rgba(255,225,140,.55); border-radius: 16px; padding: 16px; box-shadow: 0 18px 50px rgba(0,0,0,.55); }
+    #journal .jhead { color: #ffe6a0; font-weight: 800; font-size: 18px; text-align: center; margin-bottom: 12px; }
+    #journal .jrow { display: flex; gap: 9px; padding: 8px 4px; border-bottom: 1px solid rgba(160,230,180,.15); color: #cfe6d4; font-size: 14px; align-items: flex-start; }
+    #journal .jrow.cur { color: #fff; } #journal .jrow.cur .jt b { color: #ffe6a0; }
+    #journal .jrow.done { opacity: .6; }
+    #journal .jmk { flex: none; } #journal .jt small { color: #9fcfae; }
+    #journal .jclose { display: block; margin: 12px auto 0; border: none; border-radius: 12px; padding: 10px 22px; font-weight: 800; cursor: pointer; color: #06321b; background: linear-gradient(90deg, #7be88f, #43d977); }
     /* ===== painéis HTML nítidos do Modo Celular (substituem os canvas 3D, que embaçam em baixa resolução) ===== */
     #dialogBox { position: fixed; z-index: 30; left: 50%; top: 11%; transform: translateX(-50%); display: none;
       width: min(92vw, 560px); background: linear-gradient(180deg, rgba(16,40,28,.96), rgba(8,22,16,.97));
@@ -151,6 +161,8 @@
 
   <div id="questBar"></div>
   <div id="collectHud">✨ <b id="collectN">0</b>/<span id="collectT">0</span></div>
+  <button id="journalBtn">📜</button>
+  <div id="journal"><div class="jhead">📜 Diário de Missões</div><div class="jbody"></div><button class="jclose" id="journalClose">Fechar</button></div>
   <div id="mountBar">
     <button class="mb on" data-m="">🚶</button>
     <button class="mb" data-m="carro">🚗</button>
@@ -1120,11 +1132,15 @@
     [
       { char: 'b', nome: 'Dona Bromélia', dx: VILA.x + 6, dz: VILA.z + 7, falas: ['Bem-vindo à Vila do Carvalho, broto!', 'Foi do Vovô Carvalho que brotou a primeira semente daqui, sabia?'] },
       { char: 'd', nome: 'Tonico', dx: VILA.x - 7, dz: VILA.z + 5, falas: ['Cê veio de avião?! Que demais!', 'Quando crescer eu vou ser piloto, igual você!'] },
-      { char: 'e', nome: 'Vovó Samambaia', dx: VILA.x + 4, dz: VILA.z - 8, falas: ['No meu tempo a gente subia no Vovô pra colher estrela…', 'Junta os Frutos de Luz, criança. Eles guardam o brilho do amanhã.'] },
-      { char: 'g', nome: 'Mestre Cipó', dx: VILA.x - 5, dz: VILA.z - 6, falas: ['Cuida do bosque que ele cuida de você.', 'Dizem que o futuro tá ficando cinza… você vai dar um jeito, né?'] },
+      { char: 'e', nome: 'Vovó Samambaia', dx: VILA.x + 4, dz: VILA.z - 8,
+        falasFn: () => (game.flags.cogu && !game.flags.vila)
+          ? ['Então o cinza voltou a subir… eu já temia, criança.', 'O Vovô Carvalho é a árvore-mãe de tudo. As raízes dele tocam o ONTEM e o AMANHÃ ao mesmo tempo.', 'Esse cinza não nasce aqui: ele VAZA de um futuro murcho. Pra fechar a fenda, você vai ter que atravessar o tempo pela raiz do Vovô.', 'Vá tocar nele. E leve a Lanterna-Vagalume — sem luz, ninguém pisa no Ermo.']
+          : ['No meu tempo a gente subia no Vovô pra colher estrela…', 'Junta os Frutos de Luz, criança. Eles guardam o brilho do amanhã.'],
+        onEnd: () => { if (game.flags.cogu && !game.flags.vila) { game.flags.vila = true; sfx('fanfare'); setObjetivo('Volte ao bosque e toque o Vovô Carvalho 🌳'); } } },
+      { char: 'g', nome: 'Mestre Cipó', dx: VILA.x - 5, dz: VILA.z - 6, falas: ['Cuida do bosque que ele cuida de você.', 'Dizem que o futuro tá ficando cinza… mas semente teimosa sempre acha um jeito de brotar.'] },
     ].forEach(d => getGLB(`../bosque-vr/npcs/character-${d.char}.glb`).then(g => {
       const a = spawnActor(g, 'idle', 1.5); a.wrap.position.set(d.dx, heightAt(d.dx, d.dz), d.dz); a.wrap.rotation.y = Math.atan2(VILA.x - d.dx, VILA.z - d.dz);
-      a.wrap.userData = { nome: d.nome, falas: d.falas }; a.story = { era: 'bosque' }; obstacles.push({ x: d.dx, z: d.dz, r: 0.5 }); npcs.push(a);
+      a.wrap.userData = { nome: d.nome, falas: d.falas, falasFn: d.falasFn, onEnd: d.onEnd }; a.story = { era: 'bosque' }; obstacles.push({ x: d.dx, z: d.dz, r: 0.5 }); npcs.push(a);
     }).catch(() => {}));
     getGLB('../bosque-vr/npcs/character-f.glb').then(g => { // lojista
       const a = spawnActor(g, 'idle', 1.5); a.wrap.position.set(SHOP.x, heightAt(SHOP.x, SHOP.z) , SHOP.z + 0.9); a.wrap.rotation.y = Math.atan2(VILA.x - SHOP.x, VILA.z - SHOP.z);
@@ -1177,7 +1193,7 @@
 
     // ---------- NPCs (blocky characters): bots com quem dá pra conversar ----------
     // ======================= MOTOR DE HISTÓRIA (10 fases) =======================
-    const game = { fase: 0, vovoFalou: false, objetivo: '', vistoMudanca: false, coletados: 0, flags: { lanterna: false, fagulha: false, momento: false, semente: false, sementePlantada: false } };
+    const game = { fase: 0, vovoFalou: false, objetivo: '', vistoMudanca: false, coletados: 0, flags: { cogu: false, vila: false, vilaVista: false, lanterna: false, fagulha: false, momento: false, semente: false, sementePlantada: false } };
     const FASE_TITULOS = { 1: 'O Bosque Doente', 2: 'A Lanterna-Vagalume', 3: 'O Ermo', 4: 'A Semente do Passado', 5: 'O Amanhã Plantado', 6: 'A Cura Começa', 7: 'O Coração da Murcha', 8: 'Epílogo' };
     function setObjetivo(txt) {
       game.objetivo = txt; const q = document.getElementById('questBar');
@@ -1192,14 +1208,33 @@
       else if (n === 5) setObjetivo('Volte ao 🌳 Bosque (presente) e veja o que mudou!');
       else if (n === 6) setObjetivo('Volte ao 🥀 Ermo (futuro) e encare o que está secando o Vovô');
       else if (n === 8) setObjetivo('🌟 Você curou o amanhã! Fim da aventura — por enquanto. Obrigado por jogar! 💚');
+      renderJournal();
     }
+    // ---------- DIÁRIO DE MISSÕES (lista os capítulos e o objetivo atual) ----------
+    const CHAPTER_DESC = { 1: 'Descubra de onde vem o cinza — e ouça os mais velhos da Vila do Carvalho.', 2: 'Pegue a Lanterna-Vagalume, que abre o caminho do futuro.', 3: 'Atravesse pela raiz do Vovô até o Ermo, o amanhã murcho.', 4: 'Volte ao passado e plante a Semente-do-Amanhã.', 5: 'Veja o presente mudar com o que você fez atrás.', 6: 'Volte ao Ermo e encare o que seca o Vovô.', 7: 'Vença a Murcha… cuidando dela, não batendo.', 8: 'O amanhã floresce. 💚' };
+    function renderJournal() {
+      const b = document.querySelector('#journal .jbody'); if (!b) return; b.innerHTML = '';
+      for (let n = 1; n <= 8; n++) {
+        const done = game.fase > n, cur = game.fase === n;
+        const row = document.createElement('div'); row.className = 'jrow' + (cur ? ' cur' : '') + (done ? ' done' : '');
+        const desc = (cur && game.objetivo) ? game.objetivo : CHAPTER_DESC[n];
+        row.innerHTML = '<span class="jmk">' + (done ? '✅' : cur ? '▶️' : '•') + '</span><span class="jt"><b>' + n + '. ' + (FASE_TITULOS[n] || '') + '</b>' + (done ? '' : '<br><small>' + desc + '</small>') + '</span>';
+        b.appendChild(row);
+      }
+    }
+    function openJournal() { if (renderer.xr.isPresenting) return; renderJournal(); const el = document.getElementById('journal'); if (el) el.style.display = 'block'; if (document.exitPointerLock) document.exitPointerLock(); }
+    function closeJournal() { const el = document.getElementById('journal'); if (el) el.style.display = 'none'; }
+    function toggleJournal() { const el = document.getElementById('journal'); if (el && el.style.display === 'block') closeJournal(); else openJournal(); }
+    { const jb = document.getElementById('journalBtn'), jc = document.getElementById('journalClose');
+      if (jb) { jb.addEventListener('click', toggleJournal); jb.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); toggleJournal(); }, { passive: false }); }
+      if (jc) jc.addEventListener('click', closeJournal); }
     // NPCs da trama: diálogo condicional (falasFn) + ação ao terminar (onEnd); visíveis só na sua era
     const STORY_NPCS = [
       { id: 'cogu', nome: 'Seu Cogu', char: 'a', x: 6, z: 56, era: 'bosque',
         falasFn: () => game.fase <= 1
-          ? ['Psiu… chega aqui, broto. Reparou no cinza no chão? Não é normal, não.', 'É o futuro vazando pra cá, pela raiz do Vovô Carvalho. Vai falar com ele!', 'Ah — se um bichinho ficar bravo e te atacar, é só encher a barra de AÇÃO e revidar.']
+          ? ['Psiu… chega aqui, broto. Tá vendo esse cinza no chão? Não é poeira — é o futuro vazando pra cá.', 'Isso é coisa antiga, de raiz funda. Quem entende é a gente mais velha da 🏘️ Vila do Carvalho, lá pro lado do poente.', 'Vai lá e fala com a Vovó Samambaia — ela viu o bosque nascer. É longe: vai de carro ou de avião!', 'Ah, e se um bichinho ficar bravo e te atacar, enche a barra de AÇÃO e revida, tá?']
           : ['Cuidado com o que você mexe lá atrás… toda folha que cai aqui caiu primeiro em outro lugar.'],
-        onEnd: () => { if (game.fase === 1) setObjetivo('Vá até o Vovô Carvalho e toque nele 🌳'); } },
+        onEnd: () => { if (game.fase === 1) { game.flags.cogu = true; setObjetivo('Vá à 🏘️ Vila do Carvalho (a noroeste) e fale com a Vovó Samambaia'); } } },
     ];
     const npcs = [];
     STORY_NPCS.forEach(d => {
@@ -1284,8 +1319,10 @@
     }
     // ---------- o Vovô: conversa (Fase 1) e depois abre o menu das Eras ----------
     function tocarVovo() {
-      if (!game.vovoFalou) startNarration('Vovô Carvalho', ['Ô, broto… chega mais, sem medo.', 'Tem um cinza entrando nas minhas raízes… e minhas raízes tocam o ontem e o amanhã.', 'Ache uma luz e volte aqui — aí eu te mostro pra onde esse cinza vai dar.'], () => { game.vovoFalou = true; iniciarFase(2); });
-      else openEraMenu();
+      if (!game.vovoFalou) {
+        if (game.fase <= 1 && !game.flags.vila) { startNarration('Vovô Carvalho', ['Calma, broto… antes de mim, vá ouvir a Vovó Samambaia, lá na Vila do Carvalho.', 'Ela guarda a história que você precisa pra atravessar o tempo. Volte depois.'], () => { }); return; }
+        startNarration('Vovô Carvalho', ['Ô, broto… chega mais, sem medo. A Samambaia te contou, né?', 'Esse cinza entra pelas minhas raízes — e minhas raízes tocam o ontem e o amanhã.', 'Pega a Lanterna-Vagalume aqui pertinho e volta: aí eu te abro o caminho pro futuro.'], () => { game.vovoFalou = true; iniciarFase(2); });
+      } else openEraMenu();
     }
     function momentoErmo() {
       startNarration('Vovô Carvalho (murcho)', ['Aqui foi o bosque… o lago virou pó, o céu esqueceu de ser azul.', 'No galho mais alto, o ninho está vazio — frio faz muito tempo.', 'Mas olha: uma folhinha verde, teimosa, ainda segura no galho.', 'Uma folha é tudo o que o futuro precisa pra recomeçar. Toma essa semente, broto.', 'Planta ela quando eu ainda era pequenininho. O que você conserta lá… floresce aqui.'], () => { game.flags.semente = true; iniciarFase(4); });
@@ -1728,6 +1765,7 @@
     }
     addEventListener('keydown', e => {
       if (e.code === 'KeyE' && !e.repeat) interact();
+      if (e.code === 'KeyJ' && !e.repeat) toggleJournal(); // diário de missões (PC)
       if (!e.repeat && e.code.startsWith('Digit')) { const map = { Digit1: null, Digit2: 'carro', Digit3: 'moto', Digit4: 'cavalo', Digit5: 'aviao' }; if (e.code in map) setMount(map[e.code]); } // 1-5 = transporte (PC)
       if (e.code === 'KeyT' && !e.repeat) { const o = ['bosque', 'ermo', 'semente']; travelEra(o[(o.indexOf(currentEra) + 1) % 3]); } // TEMP: ciclar eras
       if (e.code === 'KeyR' && !e.repeat && buildPiece) ghostRY += Math.PI / 4;
@@ -1926,6 +1964,7 @@
         if (brotoNovo.visible && brotoGrow < 1) { brotoGrow = Math.min(1, brotoGrow + dt * 0.5); const e = 1 - Math.pow(1 - brotoGrow, 3); brotoNovo.scale.setScalar(0.06 + 0.94 * e); } }
       updateCollectibles(dt, t); // frutos de luz giram, boiam e são coletados ao chegar perto
       if (shopOpen && !nearShop()) closeShop(); // saiu de perto da banca → fecha a loja
+      if (!game.flags.vilaVista && currentEra === 'bosque' && Math.hypot(dolly.position.x - VILA.x, dolly.position.z - VILA.z) < 24) { game.flags.vilaVista = true; flash('🏘️ Você chegou à Vila do Carvalho!'); sfx('ready'); }
       // partículas mágicas: derivam, caem/sobem conforme a era e seguem o jogador
       { const pa = pGeo.attributes.position.array, hs = PSPAN / 2;
         for (let i = 0; i < PCOUNT; i++) {
@@ -2172,6 +2211,7 @@
       const h = document.getElementById('hint'); h.textContent = startHintText(); h.style.display = 'block';
       const ch = document.getElementById('collectHud'); if (ch) ch.style.display = 'block'; // mostra o contador de Frutos de Luz
       const mbar = document.getElementById('mountBar'); if (mbar) mbar.style.display = 'flex'; // mostra a barra de transportes
+      const jb = document.getElementById('journalBtn'); if (jb) jb.style.display = 'block'; // botão do diário
       if (game.fase === 0) iniciarFase(1); // começa a campanha
       if (playMode === 'mobile') goFullscreen(); // celular: tela cheia + paisagem
       if (playMode === 'pc' && cv.requestPointerLock) cv.requestPointerLock();

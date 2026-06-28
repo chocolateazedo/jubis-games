@@ -77,6 +77,10 @@
       padding: 10px 16px; font-weight: 700; font-size: 15px; cursor: pointer; }
     #collectHud { position: fixed; z-index: 27; top: max(12px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); display: none;
       background: rgba(8,24,16,.78); color: #ffe39a; border: 1px solid rgba(255,225,140,.55); border-radius: 12px; padding: 6px 12px; font-weight: 800; font-size: 15px; pointer-events: none; }
+    #harmonia { position: fixed; z-index: 27; top: max(12px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); display: none; pointer-events: none; text-align: center; }
+    #harmonia .hlbl { color: #cfe6d4; font-size: 12px; font-weight: 700; text-shadow: 0 1px 3px #000; }
+    #harmonia .htrack { width: min(60vw, 220px); height: 9px; margin: 3px auto 0; background: rgba(0,0,0,.5); border: 1px solid rgba(160,230,180,.4); border-radius: 6px; overflow: hidden; }
+    #harmonia #harmoniaFill { height: 100%; width: 100%; background: #5be07a; border-radius: 6px; transition: width .4s, background .4s; }
     #questBar { position: fixed; z-index: 27; top: max(58px, calc(env(safe-area-inset-top) + 52px)); left: 50%; transform: translateX(-50%); display: none;
       background: rgba(8,24,16,.82); color: #eaffee; border: 1px solid rgba(255,225,140,.55); border-radius: 12px;
       padding: 7px 16px; font-weight: 700; font-size: 14px; max-width: 92vw; text-align: center; pointer-events: none; }
@@ -106,6 +110,7 @@
     #journal .jrow.cur { color: #fff; } #journal .jrow.cur .jt b { color: #ffe6a0; }
     #journal .jrow.done { opacity: .6; }
     #journal .jmk { flex: none; } #journal .jt small { color: #9fcfae; }
+    #journal .jstats { text-align: center; color: #ffe6a0; font-size: 13px; font-weight: 700; padding: 4px 0 10px; border-bottom: 1px solid rgba(255,225,140,.25); margin-bottom: 6px; }
     #journal .jclose { display: block; margin: 12px auto 0; border: none; border-radius: 12px; padding: 10px 22px; font-weight: 800; cursor: pointer; color: #06321b; background: linear-gradient(90deg, #7be88f, #43d977); }
     /* ===== painéis HTML nítidos do Modo Celular (substituem os canvas 3D, que embaçam em baixa resolução) ===== */
     #dialogBox { position: fixed; z-index: 30; left: 50%; top: 11%; transform: translateX(-50%); display: none;
@@ -157,6 +162,7 @@
 
   <div id="questBar"></div>
   <div id="collectHud">✨ <b id="collectN">0</b>/<span id="collectT">0</span></div>
+  <div id="harmonia"><span class="hlbl">🕊️ Harmonia do Tempo</span><div class="htrack"><div id="harmoniaFill"></div></div></div>
   <button id="journalBtn">📜</button>
   <div id="journal"><div class="jhead">📜 Diário de Missões</div><div class="jbody"></div><button class="jclose" id="journalClose">Fechar</button></div>
   <div id="talkHint">💬 Conversar</div>
@@ -179,6 +185,7 @@
         📱 <b>Celular:</b> <b>arraste</b> pra olhar, <b>direcional</b> pra andar, toque pra falar.<br>
         <span style="opacity:.7">Chegue perto do <b>Vovô Carvalho</b> pra viajar entre as eras.</span>
       </div>
+      <button class="go" id="continuarBtn" style="display:none; background:linear-gradient(90deg,#ffd56b,#ff9f43);">▶ Continuar</button>
       <p style="margin:14px 0 2px; font-weight:700;">Escolha como vai jogar:</p>
       <div class="modes">
         <button class="go" id="modeMobile">📱 Modo Celular</button>
@@ -1103,7 +1110,7 @@
       for (let i = collectibles.length - 1; i >= 0; i--) {
         const m = collectibles[i]; m.rotation.y += dt * 2; m.position.y = heightAt(m.userData.bx, m.userData.bz) + 1.2 + Math.sin(t * 0.003 + m.userData.ph) * 0.18;
         if (Math.hypot(m.userData.bx - px, m.userData.bz - pz) < 1.6) { // coletou!
-          scene.remove(m); collectibles.splice(i, 1); game.coletados++; sfx('coin');
+          scene.remove(m); collectibles.splice(i, 1); game.coletados++; sfx('coin'); saveGame('auto');
           spawnDmg(m.position.clone().add(new THREE.Vector3(0, -0.6, 0)), '✨+1', 0xffe24a);
           if (collectN) collectN.textContent = game.coletados;
           const hud = document.getElementById('collectHud'); if (hud) hud.style.display = 'block';
@@ -1223,7 +1230,9 @@
 
     // ---------- NPCs (blocky characters): bots com quem dá pra conversar ----------
     // ======================= MOTOR DE HISTÓRIA (10 fases) =======================
-    const game = { fase: 0, vovoFalou: false, objetivo: '', vistoMudanca: false, coletados: 0, flags: { cogu: false, vila: false, vilaVista: false, lanterna: false, fagulha: false, momento: false, semente: false, sementePlantada: false } };
+    const game = { fase: 0, vovoFalou: false, objetivo: '', vistoMudanca: false, coletados: 0,
+      harmonia: 100, lacos: {}, folhas: [], sidequests: {}, // [2.0] Teia de Causalidade + Canção das Quatro Folhas (estado base; conteúdo vem nos Atos)
+      flags: { cogu: false, vila: false, vilaVista: false, lanterna: false, fagulha: false, momento: false, semente: false, sementePlantada: false } };
     const FASE_TITULOS = { 1: 'O Bosque Doente', 2: 'A Lanterna-Vagalume', 3: 'O Ermo', 4: 'A Semente do Passado', 5: 'O Amanhã Plantado', 6: 'A Cura Começa', 7: 'O Coração da Murcha', 8: 'Epílogo' };
     function setObjetivo(txt) {
       game.objetivo = txt; const q = document.getElementById('questBar');
@@ -1238,12 +1247,15 @@
       else if (n === 5) setObjetivo('Volte ao 🌳 Bosque (presente) e veja o que mudou!');
       else if (n === 6) setObjetivo('Volte ao 🥀 Ermo (futuro) e encare o que está secando o Vovô');
       else if (n === 8) setObjetivo('🌟 Você curou o amanhã! Fim da aventura — por enquanto. Obrigado por jogar! 💚');
-      renderJournal();
+      renderJournal(); if (typeof saveGame === 'function') saveGame('auto'); // autosave por capítulo
     }
     // ---------- DIÁRIO DE MISSÕES (lista os capítulos e o objetivo atual) ----------
     const CHAPTER_DESC = { 1: 'Descubra de onde vem o cinza — e ouça os mais velhos da Vila do Carvalho.', 2: 'Pegue a Lanterna-Vagalume, que abre o caminho do futuro.', 3: 'Atravesse pela raiz do Vovô até o Ermo, o amanhã murcho.', 4: 'Volte ao passado e plante a Semente-do-Amanhã.', 5: 'Veja o presente mudar com o que você fez atrás.', 6: 'Volte ao Ermo e encare o que seca o Vovô.', 7: 'Vença a Murcha… cuidando dela, não batendo.', 8: 'O amanhã floresce. 💚' };
     function renderJournal() {
       const b = document.querySelector('#journal .jbody'); if (!b) return; b.innerHTML = '';
+      if ((game.folhas && game.folhas.length) || (game.lacos && Object.keys(game.lacos).length)) { // [2.0] resumo da Teia (só quando houver conteúdo)
+        const hd = document.createElement('div'); hd.className = 'jstats'; hd.innerHTML = '🕊️ Harmonia: <b>' + Math.round(game.harmonia) + '%</b> · 🍃 Folhas da Canção: <b>' + (game.folhas ? game.folhas.length : 0) + '/4</b>'; b.appendChild(hd);
+      }
       for (let n = 1; n <= 8; n++) {
         const done = game.fase > n, cur = game.fase === n;
         const row = document.createElement('div'); row.className = 'jrow' + (cur ? ' cur' : '') + (done ? ' done' : '');
@@ -1258,6 +1270,43 @@
     { const jb = document.getElementById('journalBtn'), jc = document.getElementById('journalClose');
       if (jb) { jb.addEventListener('click', toggleJournal); jb.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); toggleJournal(); }, { passive: false }); }
       if (jc) jc.addEventListener('click', closeJournal); }
+    // ---------- SAVE/LOAD (localStorage) — autosave por capítulo; "Continuar" no menu inicial ----------
+    const SAVE_PREFIX = 'cronicas-bosque-save-';
+    function serializeState() {
+      return { v: 2, mode: playMode, currentEra,
+        fase: game.fase, vovoFalou: game.vovoFalou, objetivo: game.objetivo, vistoMudanca: game.vistoMudanca, coletados: game.coletados,
+        harmonia: game.harmonia, lacos: Object.assign({}, game.lacos), folhas: game.folhas.slice(), sidequests: Object.assign({}, game.sidequests), flags: Object.assign({}, game.flags),
+        hero: { lvl: hero.lvl, xp: hero.xp, xpNext: hero.xpNext, hp: hero.hp, hpMax: hero.hpMax, mp: hero.mp, mpMax: hero.mpMax, atk: hero.atk, def: hero.def, mag: hero.mag, agi: hero.agi, tecnicas: hero.tecnicas.slice(), itens: Object.assign({}, hero.itens) } };
+    }
+    function saveGame(slot) { try { localStorage.setItem(SAVE_PREFIX + (slot || 'auto'), JSON.stringify(serializeState())); } catch (e) {} }
+    function loadRaw(slot) { try { const s = localStorage.getItem(SAVE_PREFIX + (slot || 'auto')); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
+    function rebuildWorldFromState() { // recria os objetos do mundo que deveriam existir pro capítulo salvo
+      if (!game.flags.fagulha) criarFagulhaNpc();
+      if (game.fase >= 2 && !game.flags.lanterna) criarLanterna();
+      if (game.fase >= 4) criarSementeMundo();
+      for (let i = 0; i < game.coletados && collectibles.length; i++) { const m = collectibles.pop(); scene.remove(m); } // tira os Frutos já coletados (mantém 16 no total)
+    }
+    function applyLoadedState(s) {
+      if (!s) return;
+      game.fase = s.fase || 0; game.vovoFalou = !!s.vovoFalou; game.objetivo = s.objetivo || ''; game.vistoMudanca = !!s.vistoMudanca; game.coletados = s.coletados || 0;
+      game.harmonia = s.harmonia != null ? s.harmonia : 100; game.lacos = s.lacos || {}; game.folhas = s.folhas || []; game.sidequests = s.sidequests || {};
+      if (s.flags) Object.assign(game.flags, s.flags);
+      if (s.hero) Object.assign(hero, s.hero);
+      currentEra = s.currentEra || 'bosque'; applyEra(currentEra);
+      rebuildWorldFromState();
+      if (game.objetivo) setObjetivo(game.objetivo);
+      const cn = document.getElementById('collectN'); if (cn) cn.textContent = game.coletados;
+      const ch = document.getElementById('collectHud'); if (ch && game.coletados) ch.style.display = 'block';
+      updateHarmonia(); renderJournal();
+    }
+    function startLoadedGame() { const s = loadRaw('auto'); if (!s) return; applyLoadedState(s); setMode(s.mode || 'pc'); startGame(); if (s.mode === 'vr') { const vb = document.getElementById('VRButton'); if (vb) vb.click(); } }
+    // Medidor de Harmonia (esqueleto 2.0): só aparece quando a Teia de Causalidade estiver ativa
+    function updateHarmonia() {
+      const el = document.getElementById('harmonia'), f = document.getElementById('harmoniaFill'); if (!el || !f) return;
+      const ativo = (game.folhas && game.folhas.length) || (game.lacos && Object.keys(game.lacos).length);
+      el.style.display = ativo ? 'block' : 'none';
+      const h = Math.max(0, Math.min(100, game.harmonia)); f.style.width = h + '%'; f.style.background = h > 60 ? '#5be07a' : h > 30 ? '#ffd86b' : '#e07a7a';
+    }
     // NPCs da trama: diálogo condicional (falasFn) + ação ao terminar (onEnd); visíveis só na sua era
     const STORY_NPCS = [
       { id: 'cogu', nome: 'Seu Cogu', char: 'a', x: 6, z: 56, era: 'bosque',
@@ -1344,7 +1393,7 @@
     }
     function nearLantern() { return lanternItem && Math.hypot(dolly.position.x - lanternItem.position.x, dolly.position.z - lanternItem.position.z) < 2.8; }
     function pickLantern() {
-      if (!lanternItem) return; scene.remove(lanternItem); lanternItem = null; game.flags.lanterna = true;
+      if (!lanternItem) return; scene.remove(lanternItem); lanternItem = null; game.flags.lanterna = true; saveGame('auto');
       flash('✨ Você pegou a Lanterna-Vagalume! O caminho do Ermo se abriu.'); sfx('fanfare'); setObjetivo('Toque o Vovô e viaje ao 🥀 Ermo');
     }
     // ---------- o Vovô: conversa (Fase 1) e depois abre o menu das Eras ----------
@@ -1368,7 +1417,7 @@
     }
     function nearFox() { return foxNpc && !game.flags.fagulha && Math.hypot(dolly.position.x - foxNpc.wrap.position.x, dolly.position.z - foxNpc.wrap.position.z) < 3; }
     function recruitFagulha() {
-      game.flags.fagulha = true;
+      game.flags.fagulha = true; saveGame('auto');
       if (foxNpc) { scene.remove(foxNpc.wrap); const mi = mixers.indexOf(foxNpc.mixer); if (mi >= 0) mixers.splice(mi, 1); foxNpc = null; }
       startNarration('Fagulha', ['Ai, esses espinhos!… Ufa, obrigada, broto!', 'Você também sente o bosque ficando triste? Eu vou com você — e na luta eu solto faísca de ☀️ Sol!'], () => { flash('🦊 Fagulha entrou no grupo!'); });
     }
@@ -1395,7 +1444,7 @@
     let brotoGrow = 0; // 0→1: a animação de crescimento do carvalhinho no presente
     function nearCovinha() { return covinha && currentEra === 'semente' && game.flags.semente && !game.flags.sementePlantada && Math.hypot(dolly.position.x - covinha.userData.cx, dolly.position.z - covinha.userData.cz) < 3; }
     function plantarSemente() {
-      game.flags.semente = false; game.flags.sementePlantada = true; sfx('fanfare');
+      game.flags.semente = false; game.flags.sementePlantada = true; sfx('fanfare'); saveGame('auto');
       // brota uma arvorezinha real na covinha (passado); no presente o brotoNovo vai crescer
       const cx = covinha.userData.cx, cz = covinha.userData.cz;
       if (treeVariants.length) { const t = buildTreeFromVariant(treeVariants[0], 1.7, true); t.position.set(cx, heightAt(cx, cz), cz); scene.add(t); }
@@ -2303,6 +2352,13 @@
       if (navigator.xr && navigator.xr.isSessionSupported) navigator.xr.isSessionSupported('immersive-vr').then(ok => { if (!ok) disableVR(); }).catch(disableVR);
       else disableVR();
     })();
+    // "Continuar" aparece se houver um jogo salvo (autosave)
+    { const cb = document.getElementById('continuarBtn'), s = loadRaw('auto');
+      if (cb && s && (s.fase || 0) > 0) {
+        cb.style.display = 'block';
+        cb.textContent = '▶ Continuar — Cap. ' + (s.fase || 1) + '  (' + ({ mobile: 'Celular', pc: 'PC', vr: 'VR' }[s.mode] || 'PC') + ')';
+        cb.addEventListener('click', startLoadedGame);
+      } }
   </script>
 </body>
 </html>

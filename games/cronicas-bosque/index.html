@@ -86,6 +86,29 @@
     #battleBar .bbtn:active { background: rgba(120,220,150,.6); transform: scale(.95); }
     #battleBar .bbtn.dim { opacity: .45; }
     body.inbattle #joy, body.inbattle #mbtns { display: none !important; } /* na batalha, só a barra de ações */
+    /* ===== painéis HTML nítidos do Modo Celular (substituem os canvas 3D, que embaçam em baixa resolução) ===== */
+    #dialogBox { position: fixed; z-index: 30; left: 50%; top: 11%; transform: translateX(-50%); display: none;
+      width: min(92vw, 560px); background: linear-gradient(180deg, rgba(16,40,28,.96), rgba(8,22,16,.97));
+      border: 2px solid rgba(160,230,180,.6); border-radius: 16px; padding: 14px 18px; box-shadow: 0 14px 40px rgba(0,0,0,.5); cursor: pointer; }
+    #dialogBox .dname { color: #bdf5c8; font-weight: 800; font-size: 18px; margin-bottom: 5px; }
+    #dialogBox .dtext { color: #fff; font-size: 17px; line-height: 1.45; }
+    #dialogBox .dcont { color: #8fdfa0; font-size: 13px; margin-top: 9px; }
+    #eraMenu { position: fixed; z-index: 31; left: 50%; top: 15%; transform: translateX(-50%); display: none;
+      width: min(94vw, 560px); background: rgba(8,22,16,.96); border: 2px solid rgba(160,230,180,.6); border-radius: 16px; padding: 14px; text-align: center; box-shadow: 0 14px 40px rgba(0,0,0,.5); }
+    #eraMenu .emtitle { color: #bdf5c8; font-weight: 800; font-size: 18px; margin-bottom: 12px; }
+    #eraMenu .embtns { display: flex; gap: 8px; justify-content: center; }
+    #eraMenu .ebtn { flex: 1; border: 2px solid rgba(160,230,180,.4); background: rgba(255,255,255,.06); color: #eaffee; border-radius: 12px;
+      padding: 14px 6px; font-weight: 800; font-size: 16px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    #eraMenu .ebtn .esub { display: block; color: #9fdfae; font-size: 12px; font-weight: 600; margin-top: 5px; }
+    #eraMenu .ebtn.cur { border-color: #ffe6a0; color: #ffe6a0; }
+    #eraMenu .ebtn:active { background: rgba(120,220,150,.35); }
+    #battleStatus { position: fixed; z-index: 27; left: 50%; top: max(96px, calc(env(safe-area-inset-top) + 90px)); transform: translateX(-50%); display: none;
+      flex-direction: column; gap: 5px; width: min(92vw, 460px); pointer-events: none; }
+    #battleStatus .bsrow { display: flex; align-items: center; gap: 8px; }
+    #battleStatus .bsname { color: #eaffee; font-weight: 700; font-size: 13px; min-width: 84px; text-align: right; text-shadow: 0 1px 3px #000; }
+    #battleStatus .bstrack { position: relative; flex: 1; height: 19px; background: rgba(0,0,0,.55); border-radius: 10px; overflow: hidden; border: 1px solid rgba(160,230,180,.35); }
+    #battleStatus .bsfill { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; border-radius: 10px; }
+    #battleStatus .bslabel { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 12px; text-shadow: 0 1px 2px #000; }
     #toast { position: fixed; z-index: 36; left: 50%; top: 16%; transform: translateX(-50%); opacity: 0; transition: opacity .3s;
       background: rgba(8,24,16,.92); color: #fff; border: 1px solid rgba(160,230,180,.5); border-radius: 12px; padding: 10px 16px; font-size: 14px; max-width: 86vw; text-align: center; }
     /* multiplayer */
@@ -114,6 +137,10 @@
   <div id="questBar"></div>
   <div id="talkHint">💬 Conversar</div>
   <div id="battleBar"></div>
+  <!-- painéis HTML nítidos do Modo Celular (o 3D embaça na resolução reduzida) -->
+  <div id="dialogBox"><div class="dname"></div><div class="dtext"></div><div class="dcont">▶ toque para continuar</div></div>
+  <div id="eraMenu"><div class="emtitle">Pra qual tempo, broto?</div><div class="embtns"></div></div>
+  <div id="battleStatus"></div>
   <div id="toast"></div>
 
   <div id="intro">
@@ -355,16 +382,28 @@
       }
       c.textAlign = 'left'; c.textBaseline = 'alphabetic'; eraTex.needsUpdate = true;
     }
+    function renderEraMenuDOM() { // celular: três botões HTML tocáveis (sem mira, sempre nítidos)
+      const box = document.getElementById('eraMenu'), wrap = box.querySelector('.embtns'); wrap.innerHTML = '';
+      for (let i = 0; i < 3; i++) {
+        const b = document.createElement('button'); b.className = 'ebtn' + (currentEra === ERA_KEYS[i] ? ' cur' : '');
+        b.innerHTML = ERA_TAG[i] + '<span class="esub">' + ERA_SUB[i] + '</span>';
+        b.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); eraSelect(i); }, { passive: false });
+        b.addEventListener('click', () => eraSelect(i));
+        wrap.appendChild(b);
+      }
+      box.style.display = 'block';
+    }
     function openEraMenu() {
       eraMenuOpen = true; eraHover = -1;
+      if (onTouchUI()) { renderEraMenuDOM(); return; } // celular: menu HTML
       camera.getWorldPosition(rcPos); camera.getWorldDirection(rcDir); rcDir.y = 0; rcDir.normalize();
       eraPanel.position.set(rcPos.x + rcDir.x * 1.8, rcPos.y, rcPos.z + rcDir.z * 1.8); eraPanel.lookAt(rcPos.x, rcPos.y, rcPos.z);
       eraPanel.visible = true; drawEraMenu();
     }
-    function closeEraMenu() { eraMenuOpen = false; eraPanel.visible = false; }
+    function closeEraMenu() { eraMenuOpen = false; eraPanel.visible = false; const box = document.getElementById('eraMenu'); if (box) box.style.display = 'none'; }
     function eraPick() { buildAimRay(); const hit = raycaster.intersectObject(eraPanel, false)[0]; if (!hit || !hit.uv) return -1; return Math.max(0, Math.min(2, Math.floor(hit.uv.x * 3))); }
     function eraSelect(c) {
-      if (c < 0) return; const k = ERA_KEYS[c];
+      if (!eraMenuOpen || c < 0) return; const k = ERA_KEYS[c]; // guard evita seleção dupla (touchstart + click)
       if (k === 'ermo' && !game.flags.lanterna) { closeEraMenu(); flash('🌑 Escuro demais lá no futuro… preciso da Lanterna-Vagalume.'); return; }
       if (k === 'semente' && !game.flags.momento) { closeEraMenu(); flash('🌱 O passado ainda está longe demais… volte mais tarde.'); return; }
       closeEraMenu();
@@ -423,6 +462,36 @@
       c.fillStyle = '#bdf5c8'; c.fillText('AÇÃO', 20, 128); bar(128, battle ? battle.heroAtb : 0, battle && battle.ready ? '#ffd86b' : '#c98a4a', battle && battle.ready ? 'PRONTO!' : '');
       c.textAlign = 'left'; hudTex.needsUpdate = true;
     }
+    // -- status de batalha em HTML (Modo Celular): HP/MP/AÇÃO do herói + HP dos inimigos, sempre nítidos --
+    let _bsSig = null, _bsRows = [];
+    function bsAddRow(root, name, color, valFn) {
+      const row = document.createElement('div'); row.className = 'bsrow';
+      const nm = document.createElement('div'); nm.className = 'bsname'; nm.textContent = name;
+      const track = document.createElement('div'); track.className = 'bstrack';
+      const fill = document.createElement('div'); fill.className = 'bsfill'; fill.style.background = color;
+      const lab = document.createElement('div'); lab.className = 'bslabel';
+      track.appendChild(fill); track.appendChild(lab); row.appendChild(nm); row.appendChild(track); root.appendChild(row);
+      _bsRows.push({ fill, lab, valFn, lastF: -1, lastL: null });
+    }
+    function rebuildBattleStatus() {
+      const root = document.getElementById('battleStatus'); if (!root) return;
+      root.innerHTML = ''; _bsRows = []; const b = battle; if (!b) return;
+      for (const e of b.enemies) if (e.alive) { const en = e; bsAddRow(root, en.def.nome, '#e07a7a', () => [en.hp / en.hpMax, Math.max(0, en.hp) + '']); }
+      bsAddRow(root, '❤ HP', '#5be07a', () => [hero.hp / hero.hpMax, hero.hp + '/' + hero.hpMax]);
+      bsAddRow(root, '💧 MP', '#5aa0ff', () => [hero.mp / hero.mpMax, hero.mp + '/' + hero.mpMax]);
+      bsAddRow(root, '⚡ AÇÃO', '#ffd86b', () => [battle ? battle.heroAtb : 0, battle && battle.ready ? 'PRONTO!' : '']);
+      if (b.ally) { const al = b.ally; bsAddRow(root, '🦊 ' + al.nome, '#9be07a', () => [al.hp / al.hpMax, Math.max(0, al.hp) + '']); }
+      root.style.display = 'flex';
+    }
+    function tickBattleStatus() {
+      if (!battle) return;
+      const sig = (battle.ally ? 1 : 0) + '|' + battle.enemies.filter(e => e.alive).map(e => e.def.nome).join(',');
+      if (sig !== _bsSig) { _bsSig = sig; rebuildBattleStatus(); }
+      for (const r of _bsRows) { const v = r.valFn(), pct = Math.round(Math.max(0, Math.min(1, v[0])) * 100);
+        if (pct !== r.lastF) { r.lastF = pct; r.fill.style.width = pct + '%'; }
+        if (v[1] !== r.lastL) { r.lastL = v[1]; r.lab.textContent = v[1]; } }
+    }
+    function hideBattleStatus() { const root = document.getElementById('battleStatus'); if (root) root.style.display = 'none'; _bsSig = null; _bsRows = []; }
 
     // -- menu de batalha (painel 2x2 mirado pelo raio) --
     const batCv = document.createElement('canvas'); batCv.width = 512; batCv.height = 512;
@@ -599,7 +668,7 @@
       if (battle && battle.ring) scene.remove(battle.ring);
       if (battle) for (const e of battle.enemies) if (e.alive && e.bar) e.actor.wrap.remove(e.bar);
       if (battle && battle.ally && battle.ally.actor) { scene.remove(battle.ally.actor.wrap); const mi = mixers.indexOf(battle.ally.actor.mixer); if (mi >= 0) mixers.splice(mi, 1); }
-      battle = null; heroHud.visible = false;
+      battle = null; heroHud.visible = false; hideBattleStatus();
     }
 
     // ===================== CHEFE: MURCHA, a Mariposa =====================
@@ -631,7 +700,7 @@
         }
         const ring = new THREE.Mesh(new THREE.RingGeometry(5.0, 5.8, 48), new THREE.MeshBasicMaterial({ color: 0xb09ad0, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false }));
         ring.rotation.x = -Math.PI / 2; ring.position.set(dolly.position.x, heightAt(dolly.position.x, dolly.position.z) + 0.12, dolly.position.z); scene.add(ring); battle.ring = ring;
-        heroHud.visible = true; updateHeroHud(); sfx('start'); setObjetivo('Vença a Murcha… mas talvez vencer seja CUIDAR.');
+        heroHud.visible = !onTouchUI(); updateHeroHud(); sfx('start'); setObjetivo('Vença a Murcha… mas talvez vencer seja CUIDAR.');
         flash('🦋 A Murcha aparece — de frio e sozinha, roendo a seiva do Vovô.');
       }).catch(() => {});
     }
@@ -689,7 +758,7 @@
       }
       const ring = new THREE.Mesh(new THREE.RingGeometry(4.6, 5.3, 48), new THREE.MeshBasicMaterial({ color: 0xffd86b, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false }));
       ring.rotation.x = -Math.PI / 2; ring.position.set(dolly.position.x, heightAt(dolly.position.x, dolly.position.z) + 0.12, dolly.position.z); scene.add(ring); battle.ring = ring;
-      heroHud.visible = true; updateHeroHud(); sfx('start'); flash('⚔ ' + d.nome + ' apareceu! Encha a barra de AÇÃO e aperte pra agir.');
+      heroHud.visible = !onTouchUI(); updateHeroHud(); sfx('start'); flash('⚔ ' + d.nome + ' apareceu! Encha a barra de AÇÃO e aperte pra agir.');
     }
     function checkAggro() {
       if (inBattle) return;
@@ -707,13 +776,13 @@
           if (b.ally && b.ally.alive) { b.ally.atb += dt * (0.16 + b.ally.agi / 200); if (b.ally.atb >= 1) { b.ally.atb = 0; allyAct(b.ally); } }
         }
       }
-      camera.getWorldPosition(camW);
-      for (const e of b.enemies) { if (!e.alive) continue; e.actor.wrap.lookAt(dolly.position.x, e.actor.wrap.position.y, dolly.position.z); if (e.bar.userData.last !== e.hp) { e.bar.userData.last = e.hp; drawBar(e.bar, e.hp / e.hpMax, e.def.nome + ' ' + Math.max(0, e.hp)); } e.bar.lookAt(camW); }
-      if (b.ally && b.ally.alive) { const al = b.ally, en = b.enemies.find(x => x.alive); if (en) al.actor.wrap.lookAt(en.actor.wrap.position.x, al.actor.wrap.position.y, en.actor.wrap.position.z); if (al.bar.userData.last !== al.hp) { al.bar.userData.last = al.hp; drawBar(al.bar, al.hp / al.hpMax, 'Fagulha ' + Math.max(0, al.hp)); } al.bar.lookAt(camW); }
+      camera.getWorldPosition(camW); const mob = onTouchUI(); // celular usa o status HTML; PC/VR usam as barrinhas 3D
+      for (const e of b.enemies) { if (!e.alive) continue; e.actor.wrap.lookAt(dolly.position.x, e.actor.wrap.position.y, dolly.position.z); e.bar.visible = !mob; if (!mob) { if (e.bar.userData.last !== e.hp) { e.bar.userData.last = e.hp; drawBar(e.bar, e.hp / e.hpMax, e.def.nome + ' ' + Math.max(0, e.hp)); } e.bar.lookAt(camW); } }
+      if (b.ally && b.ally.alive) { const al = b.ally, en = b.enemies.find(x => x.alive); if (en) al.actor.wrap.lookAt(en.actor.wrap.position.x, al.actor.wrap.position.y, en.actor.wrap.position.z); al.bar.visible = !mob; if (!mob) { if (al.bar.userData.last !== al.hp) { al.bar.userData.last = al.hp; drawBar(al.bar, al.hp / al.hpMax, 'Fagulha ' + Math.max(0, al.hp)); } al.bar.lookAt(camW); } }
       // celular: quando o herói está pronto, abre a barra de ações sozinha (sem precisar mirar)
       if (b.ready && !b.menuOpen && !narration && onTouchUI()) openBattleMenu();
       if (b.menuOpen && !onTouchUI()) { const h = battlePick(); if (h !== b.hover) { b.hover = h; drawBattleMenu(); } }
-      updateHeroHud();
+      if (mob) tickBattleStatus(); else updateHeroHud();
     }
     function updateDying(dt) {
       camera.getWorldPosition(camW);
@@ -949,23 +1018,35 @@
       dlgTex.needsUpdate = true;
     }
     let activeNPC = null, talkIdx = 0, narration = null;
+    // mostra a fala: celular = caixa HTML nítida; PC/VR = painel 3D (canvas)
+    function showDialogue(nome, texto) {
+      if (onTouchUI()) {
+        const box = document.getElementById('dialogBox');
+        const nm = box.querySelector('.dname'); nm.textContent = nome || ''; nm.style.display = nome ? 'block' : 'none';
+        box.querySelector('.dtext').textContent = texto; box.style.display = 'block'; dlgPlane.visible = false;
+      } else {
+        drawDialogue(nome, texto); dlgPlane.visible = true;
+        const box = document.getElementById('dialogBox'); if (box) box.style.display = 'none';
+      }
+    }
+    function hideDialogue() { dlgPlane.visible = false; const box = document.getElementById('dialogBox'); if (box) box.style.display = 'none'; }
     function startTalk(a) {
       activeNPC = a; talkIdx = 0;
       activeNPC._falas = a.wrap.userData.falasFn ? a.wrap.userData.falasFn() : (a.wrap.userData.falas || ['…']);
-      drawDialogue(a.wrap.userData.nome, activeNPC._falas[0]); dlgPlane.visible = true; playClip(a, 'emote-yes');
+      showDialogue(a.wrap.userData.nome, activeNPC._falas[0]); playClip(a, 'emote-yes');
     }
     function advanceTalk() {
       if (!activeNPC) return; talkIdx++;
       const f = activeNPC._falas;
-      if (talkIdx >= f.length) { dlgPlane.visible = false; playClip(activeNPC, 'idle'); const onEnd = activeNPC.wrap.userData.onEnd; activeNPC = null; if (onEnd) onEnd(); return; }
-      drawDialogue(activeNPC.wrap.userData.nome, f[talkIdx]);
+      if (talkIdx >= f.length) { hideDialogue(); playClip(activeNPC, 'idle'); const onEnd = activeNPC.wrap.userData.onEnd; activeNPC = null; if (onEnd) onEnd(); return; }
+      showDialogue(activeNPC.wrap.userData.nome, f[talkIdx]);
     }
     // narração (sem NPC): o balão aparece na frente do jogador (ex.: o "momento")
-    function startNarration(nome, falas, onEnd) { narration = { nome, falas, idx: 0, onEnd }; drawDialogue(nome, falas[0]); dlgPlane.visible = true; }
+    function startNarration(nome, falas, onEnd) { narration = { nome, falas, idx: 0, onEnd }; showDialogue(nome, falas[0]); }
     function advanceNarration() {
       if (!narration) return; narration.idx++;
-      if (narration.idx >= narration.falas.length) { dlgPlane.visible = false; const oe = narration.onEnd; narration = null; if (oe) oe(); return; }
-      drawDialogue(narration.nome, narration.falas[narration.idx]);
+      if (narration.idx >= narration.falas.length) { hideDialogue(); const oe = narration.onEnd; narration = null; if (oe) oe(); return; }
+      showDialogue(narration.nome, narration.falas[narration.idx]);
     }
     const npcTmp = new THREE.Vector3(), camTmp = new THREE.Vector3();
     function nearestNPC() {
@@ -1433,6 +1514,9 @@
       if (e.code === 'KeyX' && !e.repeat && removeMode) doRemove(removeTarget);
     });
     talkHint.addEventListener('click', interact);
+    { const dbox = document.getElementById('dialogBox'); // tocar/clicar na caixa de fala avança o diálogo
+      if (dbox) { dbox.addEventListener('click', interact);
+        dbox.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); interact(); }, { passive: false }); } }
     let interactWas = false, rotWas = false, menuWas = false, remWas = false, liftWas = false;
     let toastT = 0;
     function flash(msg) { const el = document.getElementById('toast'); el.textContent = msg; el.style.opacity = '1'; clearTimeout(toastT); toastT = setTimeout(() => el.style.opacity = '0', 2800); }
@@ -1564,12 +1648,12 @@
       vovo.userData.ring.rotation.z += dt * 0.6;
       vovo.userData.ring.material.opacity = 0.4 + Math.sin(t * 0.003) * 0.15;
       updateFade(dt);
-      if (eraMenuOpen) { const h = eraPick(); if (h !== eraHover) { eraHover = h; drawEraMenu(); } }
+      if (eraMenuOpen && !onTouchUI()) { const h = eraPick(); if (h !== eraHover) { eraHover = h; drawEraMenu(); } }
       // COMBATE: tick da batalha ou checa aproximação de inimigo; efeitos morrendo
       if (inBattle) updateBattle(dt); else { checkAggro(); checkBoss(); }
       updateDying(dt);
       // dica de interação (contextual) — a narração tem prioridade (até no meio da batalha)
-      if (narration) setHint('▶ Continuar (' + actHint() + ')');
+      if (narration) setHint(onTouchUI() ? '' : '▶ Continuar (' + actHint() + ')'); // no celular a caixa HTML já mostra "continuar"
       else if (inBattle) {
         if (battle && battle.ready && !battle.menuOpen) setHint('⚔ Agir! (' + actHint() + ')');
         else if (battle && battle.menuOpen) setHint(playMode === 'mobile' ? '' : (playMode === 'vr' ? 'Mire a ação e aperte o gatilho' : 'Mire a ação e tecle E'));

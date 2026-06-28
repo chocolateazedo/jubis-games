@@ -536,7 +536,8 @@
       c.textAlign = 'left'; c.textBaseline = 'alphabetic'; batTex.needsUpdate = true;
     }
     let playMode = 'pc'; // 'mobile' | 'pc' | 'vr' — escolhido na tela inicial
-    function onTouchUI() { return playMode === 'mobile'; } // barra de ações DOM só no Modo Celular
+    // UI DOM do celular: NUNCA dentro do headset (o DOM não aparece na camada XR — usaria painéis invisíveis e travaria a luta)
+    function onTouchUI() { return playMode === 'mobile' && !renderer.xr.isPresenting; }
     function actHint() { return playMode === 'vr' ? 'aperte o gatilho' : playMode === 'mobile' ? 'toque em Ação' : 'tecla E'; }
     function renderBattleBar() {
       const bb = document.getElementById('battleBar'); if (!bb || !battle) return;
@@ -1416,7 +1417,7 @@
     // ---------- entrada VR ----------
     renderer.xr.setReferenceSpaceType('local-floor');
     document.body.appendChild(VRButton.createButton(renderer));
-    renderer.xr.addEventListener('sessionstart', () => { camera.position.set(0, 0, 0); });
+    renderer.xr.addEventListener('sessionstart', () => { camera.position.set(0, 0, 0); setMode('vr'); }); // entrar em VR por qualquer caminho = Modo VR
     renderer.xr.addEventListener('sessionend', () => { camera.position.set(0, 1.6, 0); });
 
     // ---------- controles desktop/touch ----------

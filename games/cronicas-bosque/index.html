@@ -126,7 +126,7 @@
     #eraMenu { position: fixed; z-index: 31; left: 50%; top: 15%; transform: translateX(-50%); display: none;
       width: min(94vw, 560px); background: rgba(8,22,16,.96); border: 2px solid rgba(160,230,180,.6); border-radius: 16px; padding: 14px; text-align: center; box-shadow: 0 14px 40px rgba(0,0,0,.5); }
     #eraMenu .emtitle { color: #bdf5c8; font-weight: 800; font-size: 18px; margin-bottom: 12px; }
-    #eraMenu .embtns { display: flex; gap: 8px; justify-content: center; }
+    #eraMenu .embtns { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
     #eraMenu .ebtn { flex: 1; border: 2px solid rgba(160,230,180,.4); background: rgba(255,255,255,.06); color: #eaffee; border-radius: 12px;
       padding: 14px 6px; font-weight: 800; font-size: 16px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
     #eraMenu .ebtn .esub { display: block; color: #9fdfae; font-size: 12px; font-weight: 600; margin-top: 5px; }
@@ -339,6 +339,8 @@
       bosque:  { bg: 0x9ed0f2, useEnv: true,  fog: [0xbfe0f5, 60, 230], sun: [0xfff4d6, 1.40], hemi: [0xdfeeff, 0x5a6b40, 0.40], ground: 0xffffff, shore: 0xd9c48b, water: 0x2f7fc4, waterOp: 0.86, tree: 0xffffff, part: { color: 0xffe98a, size: 0.5, add: true,  fall: 0.05 } },
       ermo:    { bg: 0xcf9b5a, useEnv: false, fog: [0xc98a4a, 38, 150], sun: [0xffb066, 0.85], hemi: [0xe9c79a, 0x4a3a2a, 0.55], ground: 0x9a8358, shore: 0x8a7048, water: 0x6a5a3a, waterOp: 0.30, tree: 0x8a7a5c, part: { color: 0xb7a98a, size: 0.45, add: false, fall: -0.7 } },
       semente: { bg: 0xffe0c0, useEnv: false, fog: [0xffe6c8, 70, 260], sun: [0xffe6b0, 1.25], hemi: [0xfff0d8, 0x6f8f5a, 0.60], ground: 0xbfe6a0, shore: 0xe8d2a0, water: 0x4fd0c0, waterOp: 0.80, tree: 0xcfffcf, part: { color: 0xffd4e6, size: 0.55, add: false, fall: -0.35 } },
+      raiz:    { bg: 0xc9a86a, useEnv: false, fog: [0xc9a86a, 50, 200], sun: [0xffd9a0, 1.10], hemi: [0xe8d0a0, 0x4a4030, 0.55], ground: 0x7a6a4a, shore: 0x8a7858, water: 0x2a5a5a, waterOp: 0.50, tree: 0x9aaa7a, part: { color: 0xffe0a0, size: 0.60, add: true,  fall: 0.04 } },
+      renascer:{ bg: 0xa8e4f8, useEnv: false, fog: [0xc8f0ff, 70, 250], sun: [0xfff8e0, 1.50], hemi: [0xe8f8ff, 0x6fa05a, 0.50], ground: 0xd8ffd0, shore: 0xe8e0b0, water: 0x3fb0e0, waterOp: 0.90, tree: 0xe8ffe8, part: { color: 0xffd0e8, size: 0.55, add: true,  fall: 0.06 } },
     };
     const treeMeshes = []; // árvores/pedras instanciadas, tingidas por era
     // [2.0] Vila e transportes mudam de cara por era: no Ermo ficam murchos/acinzentados e as luzes apagam
@@ -468,32 +470,36 @@
     const eraPanel = new THREE.Mesh(new THREE.PlaneGeometry(1.95, 0.76), new THREE.MeshBasicMaterial({ map: eraTex, transparent: true }));
     eraPanel.visible = false; scene.add(eraPanel);
     let eraMenuOpen = false, eraHover = -1;
-    const ERA_KEYS = ['semente', 'bosque', 'ermo'], ERA_TAG = ['🌱 Semente', '🌳 Bosque', '🥀 Ermo'], ERA_SUB = ['no passado', 'no agora', 'no futuro'];
+    // [2.0] eras desbloqueáveis: o menu mostra só as que você já pode visitar
+    const ERA_INFO = { raiz: { tag: '🌰 Raiz', sub: 'passado fundo' }, semente: { tag: '🌱 Semente', sub: 'o passado' }, bosque: { tag: '🌳 Bosque', sub: 'o agora' }, ermo: { tag: '🥀 Ermo', sub: 'futuro murcho' }, renascer: { tag: '🌸 Renascer', sub: 'futuro curado' } };
+    const ERA_ORDER = ['raiz', 'semente', 'bosque', 'ermo', 'renascer'];
+    function eraUnlocked(k) { if (k === 'bosque') return true; if (k === 'ermo') return game.flags.lanterna; if (k === 'semente') return game.flags.momento; if (k === 'raiz') return game.flags.raiz; if (k === 'renascer') return game.flags.renascer; return false; }
+    function eraList() { return ERA_ORDER.filter(eraUnlocked); }
     function drawEraMenu() {
-      const c = eraCtx, W = 768, H = 300, cw = W / 3;
+      const list = eraList(), n = list.length, c = eraCtx, W = 768, H = 300, cw = W / n;
       c.clearRect(0, 0, W, H);
       c.fillStyle = 'rgba(8,22,16,0.93)'; rr(c, 4, 44, W - 8, H - 48, 22); c.fill();
       c.strokeStyle = 'rgba(160,230,180,0.6)'; c.lineWidth = 5; c.stroke();
       c.textAlign = 'center'; c.textBaseline = 'middle';
       c.fillStyle = '#bdf5c8'; c.font = 'bold 30px Arial'; c.fillText('Pra qual tempo, broto?', W / 2, 24);
-      for (let i = 0; i < 3; i++) {
-        const x = i * cw;
+      for (let i = 0; i < n; i++) {
+        const x = i * cw, k = list[i], info = ERA_INFO[k];
         c.fillStyle = eraHover === i ? 'rgba(120,220,150,0.45)' : 'rgba(255,255,255,0.06)';
-        rr(c, x + 12, 60, cw - 24, H - 80, 16); c.fill();
-        c.fillStyle = currentEra === ERA_KEYS[i] ? '#ffe6a0' : '#eaffee'; c.font = '38px Arial'; c.fillText(ERA_TAG[i], x + cw / 2, H / 2);
-        c.fillStyle = '#9fdfae'; c.font = '22px Arial'; c.fillText(ERA_SUB[i], x + cw / 2, H / 2 + 46);
+        rr(c, x + 8, 60, cw - 16, H - 80, 14); c.fill();
+        c.fillStyle = currentEra === k ? '#ffe6a0' : '#eaffee'; c.font = (n > 3 ? '28px' : '38px') + ' Arial'; c.fillText(info.tag, x + cw / 2, H / 2);
+        c.fillStyle = '#9fdfae'; c.font = (n > 3 ? '17px' : '22px') + ' Arial'; c.fillText(info.sub, x + cw / 2, H / 2 + 46);
       }
       c.textAlign = 'left'; c.textBaseline = 'alphabetic'; eraTex.needsUpdate = true;
     }
-    function renderEraMenuDOM() { // celular: três botões HTML tocáveis (sem mira, sempre nítidos)
+    function renderEraMenuDOM() { // celular: botões HTML tocáveis (só as eras desbloqueadas)
       const box = document.getElementById('eraMenu'), wrap = box.querySelector('.embtns'); wrap.innerHTML = '';
-      for (let i = 0; i < 3; i++) {
-        const b = document.createElement('button'); b.className = 'ebtn' + (currentEra === ERA_KEYS[i] ? ' cur' : '');
-        b.innerHTML = ERA_TAG[i] + '<span class="esub">' + ERA_SUB[i] + '</span>';
+      eraList().forEach((k, i) => {
+        const info = ERA_INFO[k], b = document.createElement('button'); b.className = 'ebtn' + (currentEra === k ? ' cur' : '');
+        b.innerHTML = info.tag + '<span class="esub">' + info.sub + '</span>';
         b.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); eraSelect(i); }, { passive: false });
         b.addEventListener('click', () => eraSelect(i));
         wrap.appendChild(b);
-      }
+      });
       box.style.display = 'block';
     }
     function openEraMenu() {
@@ -504,13 +510,11 @@
       eraPanel.visible = true; drawEraMenu();
     }
     function closeEraMenu() { eraMenuOpen = false; eraPanel.visible = false; const box = document.getElementById('eraMenu'); if (box) box.style.display = 'none'; }
-    function eraPick() { buildAimRay(); const hit = raycaster.intersectObject(eraPanel, false)[0]; if (!hit || !hit.uv) return -1; return Math.max(0, Math.min(2, Math.floor(hit.uv.x * 3))); }
+    function eraPick() { buildAimRay(); const hit = raycaster.intersectObject(eraPanel, false)[0]; if (!hit || !hit.uv) return -1; const n = eraList().length; return Math.max(0, Math.min(n - 1, Math.floor(hit.uv.x * n))); }
     function eraSelect(c) {
-      if (!eraMenuOpen || c < 0) return; const k = ERA_KEYS[c]; // guard evita seleção dupla (touchstart + click)
-      if (k === 'ermo' && !game.flags.lanterna) { closeEraMenu(); flash('🌑 Escuro demais lá no futuro… preciso da Lanterna-Vagalume.'); return; }
-      if (k === 'semente' && !game.flags.momento) { closeEraMenu(); flash('🌱 O passado ainda está longe demais… volte mais tarde.'); return; }
+      if (!eraMenuOpen || c < 0) return; const k = eraList()[c]; if (!k) return; // guard evita seleção dupla (touchstart + click)
       closeEraMenu();
-      if (k !== currentEra) travelEra(k); else flash('Você já está ' + ERA_SUB[c] + '.');
+      if (k !== currentEra) travelEra(k); else flash('Você já está ' + (ERA_INFO[k] ? ERA_INFO[k].sub : 'aqui') + '.');
     }
 
     // ============================================================
@@ -1540,7 +1544,7 @@
     }
     function collectFolhaPrimavera() {
       if (game.folhas.includes('primavera')) return;
-      game.folhas.push('primavera'); teiaFolha.visible = false; sfx('fanfare'); renderJournal(); updateHarmonia(); saveGame('auto');
+      game.folhas.push('primavera'); teiaFolha.visible = false; sfx('fanfare'); renderJournal(); updateHarmonia(); checkUnlockRaiz(); saveGame('auto');
       if (!game.flags.folho) { game.flags.folho = true;
         startNarration('Folho', ['🍃 Você cantou a Folha da Primavera! Eu… eu lembrei dela!', 'Pra te ajudar? Eu? Mas sou só um brotinho medroso… ah, tá bom. Mas só se a gente for juntinho.', 'Enquanto eu tô no grupo, eu cuido de você na batalha — um carinho de HP a cada turno. 💚'], () => { flash('🐛 Folho entrou no grupo!'); });
       }
@@ -1594,7 +1598,7 @@
     }
     function cantarVerao() {
       if (game.folhas.includes('verao')) return;
-      game.lacos.corvo = 'equilibrado'; game.folhas.push('verao'); sfx('fanfare'); recomputeHarmonia(); renderJournal();
+      game.lacos.corvo = 'equilibrado'; game.folhas.push('verao'); sfx('fanfare'); recomputeHarmonia(); renderJournal(); checkUnlockRaiz();
       const recruta = !game.flags.gota; if (recruta) game.flags.gota = true; saveGame('auto');
       startNarration('', ['Você lembra de um canto de pássaro bem velho e assobia baixinho…', 'Os besouros param, escutam… e vão embora sozinhos. Sem expulsar ninguém — só lembrando o bosque de uma música. Você aprendeu a Folha do Verão ☀️!'], () => { if (recruta) startNarration('Gota', ['💧 Blub! Ouvi seu canto lá do riacho e vim ver!', 'Eu sou a Gota. Sei guiar a água e segurar o tranco — enquanto eu tô no grupo, você apanha menos na luta. 🐢'], () => { flash('🐢 Gota entrou no grupo!'); }); });
     }
@@ -1631,6 +1635,41 @@
     function updateTeia4(t) {
       if (teia4Lamp) teia4Lamp.visible = currentEra === 'semente' && !game.lacos.lampiao;
       if (teia4Sombra) { teia4Sombra.visible = currentEra === 'bosque' && game.lacos.lampiao === 'ativo'; if (teia4Sombra.visible) { teia4Sombra.position.y = heightAt(LACO4.sombra.x, LACO4.sombra.z) + 2.0 + Math.sin(t * 0.003) * 0.4; teia4Sombra.rotation.y += 0.01; for (let i = 1; i <= 2; i++) teia4Sombra.children[i].rotation.z = Math.sin(t * 0.02) * 0.5 * (i === 1 ? 1 : -1); } }
+    }
+    function checkUnlockRaiz() { if (!game.flags.raiz && game.folhas.length >= 2) { game.flags.raiz = true; setTimeout(() => flash('🌰 Uma raiz mais funda se abriu! Toque o Vovô e viaje à RAIZ, o passado profundo.'), 1400); } }
+
+    // ----- ATO III — A RAIZ: o Constructo de Pedra (chefe-coração resolvido com companhia) → Folha das Chuvas -----
+    const CONSTRUCTO = { x: -46, z: 28 };
+    let constructoMesh = null;
+    function criarConstructo() {
+      const g = new THREE.Group();
+      const stone = new THREE.MeshStandardMaterial({ color: 0x8a8076, roughness: 1, flatShading: true });
+      const stoneD = new THREE.MeshStandardMaterial({ color: 0x6a6258, roughness: 1, flatShading: true });
+      const moss = new THREE.MeshStandardMaterial({ color: 0x5f8a3a, roughness: 1, flatShading: true });
+      const rune = new THREE.MeshStandardMaterial({ color: 0x2a3a40, emissive: 0x4fd0c0, emissiveIntensity: 1.0 });
+      const bx = (w, h, d, m, x, y, z) => { const me = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); me.position.set(x, y, z); g.add(me); return me; };
+      bx(2.2, 2.8, 1.6, stone, 0, 2.9, 0);                                   // torso
+      bx(1.5, 1.4, 1.4, stoneD, 0, 4.9, 0);                                  // cabeça
+      for (const sx of [-1, 1]) { bx(0.75, 2.6, 0.75, stone, sx * 1.5, 2.7, 0); bx(0.9, 1.9, 0.9, stoneD, sx * 0.6, 0.95, 0); } // braços + pernas
+      for (const sx of [-0.42, 0.42]) { const eye = new THREE.Mesh(new THREE.IcosahedronGeometry(0.2, 0), rune); eye.position.set(sx, 5.0, 0.72); g.add(eye); }
+      g.userData.eyes = [g.children[g.children.length - 2], g.children[g.children.length - 1]];
+      for (const p of [[-1.0, 4.0, 0.6], [1.1, 3.2, 0.5], [0, 1.6, 0.9]]) { const mm = new THREE.Mesh(new THREE.IcosahedronGeometry(0.4, 0), moss); mm.scale.set(1.2, 0.5, 1.2); mm.position.set(p[0], p[1], p[2]); g.add(mm); } // musgo (depois que vira amigo)
+      g.userData.mossStart = g.children.length - 3; // os 3 últimos musgos só aparecem quando resolvido
+      g.position.set(CONSTRUCTO.x, heightAt(CONSTRUCTO.x, CONSTRUCTO.z), CONSTRUCTO.z); g.rotation.y = Math.PI; scene.add(g); constructoMesh = g; g.visible = false;
+    }
+    criarConstructo();
+    function nearConstructo() { return constructoMesh && !game.folhas.includes('chuvas') && currentEra === 'raiz' && Math.hypot(dolly.position.x - CONSTRUCTO.x, dolly.position.z - CONSTRUCTO.z) < 5; }
+    function resolverConstructo() {
+      if (game.folhas.includes('chuvas')) return;
+      game.folhas.push('chuvas'); sfx('fanfare'); renderJournal(); updateHarmonia(); saveGame('auto');
+      startNarration('Constructo de Pedra', ['…fica? Ninguém ficou. Faz tanto tempo que esqueci o som de outra voz.', 'Você planta um musguinho-amigo no ombro dele. As runas dos olhos brilham mais quentes — ele não está mais sozinho.', 'Agradecido, o Constructo abre a câmara da Última Cantora, e você aprende a Folha das Chuvas. 💧'], () => { });
+    }
+    function updateConstructo(t) {
+      if (!constructoMesh) return;
+      constructoMesh.visible = currentEra === 'raiz';
+      const resolvido = game.folhas.includes('chuvas');
+      for (let i = constructoMesh.userData.mossStart; i < constructoMesh.children.length; i++) constructoMesh.children[i].visible = resolvido; // musgo só depois de virar amigo
+      if (constructoMesh.userData.eyes) { const pulse = resolvido ? 1.4 + Math.sin(t * 0.004) * 0.5 : 0.8; for (const e of constructoMesh.userData.eyes) e.material.emissiveIntensity = pulse; }
     }
 
     // ---------- construção (Kenney Building Kit, CC0) ----------
@@ -2025,6 +2064,7 @@
       if (nearPragaVerao()) { cantarVerao(); return; }
       if (nearLampiao()) { acenderLampiao(); return; }                 // [2.0] laço do lampião
       if (nearSombra()) { cantarConforto(); return; }
+      if (nearConstructo()) { resolverConstructo(); return; }           // [2.0] Ato III: Constructo → Folha das Chuvas
       if (nearCovinha()) { plantarSemente(); return; }
       if (nearFox()) { recruitFagulha(); return; }
       if (nearLantern()) { pickLantern(); return; }
@@ -2267,7 +2307,7 @@
       if (brotoNovo) { brotoNovo.visible = currentEra === 'bosque' && game.flags.sementePlantada;
         if (brotoNovo.visible && brotoGrow < 1) { brotoGrow = Math.min(1, brotoGrow + dt * 0.5); const e = 1 - Math.pow(1 - brotoGrow, 3); brotoNovo.scale.setScalar(0.06 + 0.94 * e); } }
       updateCollectibles(dt, t); // frutos de luz giram, boiam e são coletados ao chegar perto
-      updateTeia(t); updateTeia2(t); updateTeia4(t); // [2.0] Teia de Causalidade: laços (riacho, corvo, lampião) por era
+      updateTeia(t); updateTeia2(t); updateTeia4(t); updateConstructo(t); // [2.0] Teia + Constructo (era Raiz)
       if (shopOpen && !nearShop()) closeShop(); // saiu de perto da banca → fecha a loja
       if (!game.flags.vilaVista && currentEra === 'bosque' && Math.hypot(dolly.position.x - VILA.x, dolly.position.z - VILA.z) < 24) { game.flags.vilaVista = true; flash('🏘️ Você chegou à Vila do Carvalho!'); sfx('ready'); }
       // partículas mágicas: derivam, caem/sobem conforme a era e seguem o jogador
@@ -2314,6 +2354,7 @@
         else if (livre && nearPragaVerao()) setHint('🎵 Cantar o canto de pássaro' + a);
         else if (livre && nearLampiao()) setHint('🏮 Acender o lampião da Vila' + a);
         else if (livre && nearSombra()) setHint('🩶 Cantar pra consolar a sombra' + a);
+        else if (livre && nearConstructo()) setHint('🗿 Dar companhia ao Constructo' + a);
         else if (livre && nearCovinha()) setHint('🌱 Plantar a Semente-do-Amanhã' + a);
         else if (livre && nearFox()) setHint('🦊 Libertar a Fagulha' + a);
         else if (livre && nearLantern()) setHint('✨ Pegar a Lanterna-Vagalume' + a);

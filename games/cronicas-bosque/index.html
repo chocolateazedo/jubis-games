@@ -653,7 +653,7 @@
       if (battle.faseBatalha === 'acalanto') {
         c.fillStyle = battle.hover >= 0 ? 'rgba(120,220,150,0.5)' : 'rgba(255,255,255,0.08)'; rr(c, 40, 150, W - 80, W - 300, 22); c.fill();
         c.fillStyle = '#ffe6a0'; c.font = 'bold 56px Arial'; c.fillText('🎵 Cantar', W / 2, W / 2 - 20);
-        c.fillStyle = '#bdf5c8'; c.font = '28px Arial'; c.fillText('ninar a Murcha  (' + (battle.cantar || 0) + '/3)', W / 2, W / 2 + 50);
+        c.fillStyle = '#bdf5c8'; c.font = '28px Arial'; c.fillText('a Canção das Quatro Folhas  (' + (battle.cantar || 0) + '/4)', W / 2, W / 2 + 50);
       } else if (!battle.sub) {
         const cw = W / 2;
         for (let i = 0; i < 4; i++) {
@@ -781,10 +781,11 @@
       fagulha: { nome: 'Fagulha', emoji: '🦊', glb: 'fox', ess: 'sol', role: 'atk', hp: 15, def: 2, mag: 5, agi: 13, h: 0.85 },
       folho: { nome: 'Folho', emoji: '🐛', glb: 'caterpillar', tint: 0x6cba56, ess: 'folha', role: 'heal', hp: 14, def: 2, mag: 6, agi: 10, h: 0.8 },
       gota: { nome: 'Gota', emoji: '🐢', glb: 'beaver', tint: 0x4fa0d0, ess: 'agua', role: 'atk', hp: 22, def: 5, mag: 4, agi: 8, h: 0.85 },
+      brisa: { nome: 'Brisa', emoji: '🦋', glb: 'bee', tint: 0xb0a0d8, ess: 'cinza', role: 'heal', hp: 18, def: 3, mag: 7, agi: 12, h: 0.9 },
     };
     function spawnPartyAllies() {
       if (!battle) return; battle.allies = [];
-      const recruited = ['fagulha', 'folho', 'gota'].filter(k => game.flags[k]);
+      const recruited = ['fagulha', 'folho', 'gota', 'brisa'].filter(k => game.flags[k]);
       camera.getWorldDirection(rcDir); rcDir.y = 0; rcDir.normalize(); const rvx = -rcDir.z, rvz = rcDir.x;
       recruited.forEach((k, i) => {
         const d = ALLY_DEF[k];
@@ -889,19 +890,34 @@
         flash('🦋 A Murcha aparece — de frio e sozinha, roendo a seiva do Vovô.');
       }).catch(() => {});
     }
+    const VERSOS_CANCAO = ['🍃 Primavera', '☀️ Verão', '💧 Chuvas', '🩶 Inverno'];
     function setAcalanto() {
       battle.faseBatalha = 'acalanto'; battle.cantar = 0; const b = battle.boss; b.alive = true; b.hp = 1;
-      startNarration('Fagulha', ['Espera… esse jeito torto de asa, esse pó… ela não tá brava.', 'Ela tá com FRIO e sozinha faz tempo demais. Não dá pra bater nela — dá pra CANTAR pra ela. 🎵'], () => { flash('🎵 Abra o menu e escolha CANTAR (3×).'); });
+      startNarration('Fagulha', ['Espera… esse jeito torto de asa, esse pó… ela não tá brava.', 'Ela é a saudade da Última Cantora — tá com FRIO e sozinha faz tempo demais. Não dá pra bater nela.', 'Canta a CANÇÃO DAS QUATRO FOLHAS pra ela, broto. Os quatro versos. O do Inverno você aprende agora. 🎵'], () => { flash('🎵 Abra o menu e escolha CANTAR (4 versos).'); });
     }
     function cantar() {
-      battle.cantar++; sfx('ready'); flash('🎵 lá… lá… lá…  (' + battle.cantar + '/3)');
-      if (battle.cantar >= 3) bossSleep();
+      battle.cantar++; sfx('ready'); flash('🎵 Canção das Quatro Folhas — verso ' + battle.cantar + '/4: ' + (VERSOS_CANCAO[battle.cantar - 1] || ''));
+      if (battle.cantar >= 4) bossRedeem();
     }
-    function bossSleep() {
+    function bossRedeem() {
       const b = battle.boss; b.alive = false; if (b.bar) b.actor.wrap.remove(b.bar);
       b.actor.wrap.userData.dyT = 0; dyingActors.push({ wrap: b.actor.wrap, mixer: b.actor.mixer, t: 0, shrink: true });
-      game.flags.bossDone = true; endBattle(); sfx('fanfare'); reverdecerErmo();
-      startNarration('', ['Ah… que sono bom… que fresquinho.', '…Obrigada por cantar pra mim.', 'A Murcha encolhe num docinho de sono. E o Vovô, lá no futuro, floresce.', 'O Ermo reverdece diante dos seus olhos. Você curou o amanhã. 🌳'], () => { iniciarFase(8); });
+      game.flags.bossDone = true;
+      if (!game.folhas.includes('inverno')) game.folhas.push('inverno'); // o 4º verso, aprendido no clímax
+      game.flags.brisa = true; game.flags.renascer = true;               // a Murcha vira Brisa; o futuro curado se abre
+      renderJournal(); updateHarmonia(); endBattle(); sfx('fanfare'); reverdecerErmo(); saveGame('auto');
+      chooseEnding();
+    }
+    function chooseEnding() {
+      const todasFolhas = game.folhas.length >= 4;
+      const lacosFeitos = ['riacho', 'corvo', 'lampiao'].every(k => game.lacos[k] === 'equilibrado');
+      const todosFrutos = game.coletados >= (typeof COLLECT_N !== 'undefined' ? COLLECT_N : 16);
+      if (game.harmonia >= 80 && todasFolhas && lacosFeitos) {
+        startNarration('', ['🌸 A Canção completa ecoa por TODAS as eras. O Inverno, enfim, descansa e PASSA — vira Primavera de novo.', 'A Murcha se abre numa borboleta livre, a BRISA, e voa com você. A Vila canta em coro.', 'Em todo tempo o bosque floresce. A era do RENASCER se abriu — viaje e veja o amanhã que você plantou. 🌳💚',
+          todosFrutos ? '🌟 CENA SECRETA: como você cuidou de cada cantinho e juntou todos os Frutos de Luz, a Última Cantora original volta, só uma vez mais, pra cantar com você. Fim. 💚' : 'Obrigado por jogar! 💚'], () => { iniciarFase(8); });
+      } else {
+        startNarration('', ['🍂 A Canção se completa e o Inverno descansa — mas o bosque cura COM cicatrizes.', 'As fendas que ficaram abertas viram lembranças no Renascer. A Brisa voa contigo, mais quietinha.', 'Não foi perfeito, mas foi gentil — e às vezes basta isso. A era do Renascer se abriu. Obrigado por jogar. 💚'], () => { iniciarFase(8); });
+      }
     }
     function reverdecerErmo() { // o futuro cura em tempo real
       ERAS.ermo.bg = 0x9ed0f2; ERAS.ermo.fog = [0xbfe0f5, 60, 230]; ERAS.ermo.sun = [0xfff4d6, 1.3]; ERAS.ermo.hemi = [0xdfeeff, 0x5a6b40, 0.45];

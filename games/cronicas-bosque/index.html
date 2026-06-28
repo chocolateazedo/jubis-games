@@ -615,8 +615,29 @@
     battlePanel.visible = false; scene.add(battlePanel);
     const BAT_ACTIONS = [{ k: 'atacar', t: '⚔ Atacar' }, { k: 'tecnica', t: '✨ Técnica' }, { k: 'item', t: '🎒 Item' }, { k: 'defender', t: '🛡 Defender' }];
     // itens do submenu atual (Técnica ou Item) + "Voltar"
+    // [2.0] TÉCNICAS-DUPLAS (combos): aparecem no submenu Técnica quando os parceiros estão vivos
+    function comboHitAll(ess, power) {
+      for (const en of battle.enemies.filter(x => x.alive)) { const mult = essMult(ess, en.def.ess), dmg = Math.max(1, Math.round((power + hero.mag) * (0.9 + Math.random() * 0.2) * mult)); en.hp -= dmg; spawnDmg(en.actor.wrap.position, dmg, mult >= 2 ? 0xffe24a : 0xffffff); playClip(en.actor, 'eat'); if (en.hp <= 0) { en.alive = false; defeatEnemy(en); } }
+    }
+    function comboHitOne(ess, power, after) {
+      const en = aliveEnemy(); if (!en) return; const mult = essMult(ess, en.def.ess), dmg = Math.max(1, Math.round((power + hero.mag) * (0.9 + Math.random() * 0.2) * mult)); en.hp -= dmg; spawnDmg(en.actor.wrap.position, dmg, 0xffe24a); playClip(en.actor, 'eat'); if (after && en.alive) after(en); if (en.hp <= 0) { en.alive = false; defeatEnemy(en); }
+    }
+    const COMBOS = [
+      { id: 'clarao', nome: '☀️ Clarão (c/ Fagulha)', need: ['fagulha'], mp: 4, run: () => comboHitAll('sol', 9) },
+      { id: 'jatoduplo', nome: '💧 Jato Duplo (c/ Gota)', need: ['gota'], mp: 3, run: () => comboHitOne('agua', 15) },
+      { id: 'matamiga', nome: '🌿 Mata Amiga (c/ Folho)', need: ['folho'], mp: 4, run: () => comboHitOne('folha', 8, en => { en.atb = 0; flash('🌿 As raízes prenderam o turno do inimigo!'); }) },
+      { id: 'brotacao', nome: '🍃💧 Brotação (Folho+Gota)', need: ['folho', 'gota'], mp: 5, run: () => { const h = 12 + hero.mag; hero.hp = Math.min(hero.hpMax, hero.hp + h); updateHeroHud(); spawnDmg(dolly.position.clone().add(new THREE.Vector3(0, -0.4, 0)), '+' + h, 0x5be07a); for (const al of battle.allies) { if (al.alive) { al.hp = Math.min(al.hpMax, al.hp + h); spawnDmg(al.actor.wrap.position, '+' + h, 0x5be07a); } else { al.alive = true; al.hp = Math.round(al.hpMax * 0.5); al.actor.wrap.visible = true; if (al.bar) { al.actor.wrap.add(al.bar); al.bar.userData.last = -1; } flash('🌱 ' + al.nome + ' voltou pra luta!'); } } } },
+      { id: 'estacao', nome: '🌈 Estação Cheia (trio!)', need: ['fagulha', 'gota'], mp: 6, run: () => comboHitAll('sol', 16) },
+    ];
+    function combosDisponiveis() { return battle && battle.allies ? COMBOS.filter(c => c.need.every(k => battle.allies.some(al => al.kind === k && al.alive))) : []; }
+    function runCombo(c) {
+      if (hero.mp < c.mp) { flash('MP insuficiente!'); return; }
+      hero.mp -= c.mp; sfx('crit'); flash('✨ DUPLA: ' + c.nome.replace(/\s*\(.*\)\s*/, '') + '!'); c.run();
+      for (const al of battle.allies) if (c.need.includes(al.kind)) al.atb = 0; // os parceiros gastam a vez no combo
+      resetHeroTurn(); updateHeroHud();
+    }
     function battleMenuItems() {
-      if (battle.sub === 'tecnica') { const a = hero.tecnicas.map(k => ({ key: k, t: TECNICAS[k].nome + '  (' + TECNICAS[k].mp + ' MP)', dim: hero.mp < TECNICAS[k].mp })); a.push({ back: true, t: '← Voltar' }); return a; }
+      if (battle.sub === 'tecnica') { const a = hero.tecnicas.map(k => ({ key: k, t: TECNICAS[k].nome + '  (' + TECNICAS[k].mp + ' MP)', dim: hero.mp < TECNICAS[k].mp })); for (const c of combosDisponiveis()) a.push({ combo: c, t: c.nome + '  (' + c.mp + ' MP)', dim: hero.mp < c.mp }); a.push({ back: true, t: '← Voltar' }); return a; }
       if (battle.sub === 'item') { const a = Object.keys(hero.itens).filter(k => hero.itens[k] > 0).map(k => ({ key: k, t: ITENS[k].nome + '  ×' + hero.itens[k] })); a.push({ back: true, t: '← Voltar' }); return a; }
       return [];
     }
@@ -698,7 +719,7 @@
         const it = battleMenuItems()[i]; if (!it) return;
         if (it.back) { battle.sub = null; battle.hover = -1; refreshMenu(); return; }
         if (it.dim) { flash('MP insuficiente!'); return; }
-        if (battle.sub === 'tecnica') { closeBattleMenu(); heroTecnica(it.key, aliveEnemy()); }
+        if (battle.sub === 'tecnica') { closeBattleMenu(); if (it.combo) runCombo(it.combo); else heroTecnica(it.key, aliveEnemy()); }
         else { closeBattleMenu(); heroItem(it.key); }
       }
     }

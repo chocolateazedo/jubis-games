@@ -2435,6 +2435,8 @@
       semente: { bpm: 108, root: 69, wave: 'sine',     scale: SCALE_MAJ, chord: [0, 4, 7], prog: [0, 7, 5, 7], mel: [0, 2, 4, -1, 7, -1, 4, 2, 0, 4, 7, 9, 7, -1, 4, -1] },
       ermo:    { bpm: 50,  root: 53, wave: 'sine',     scale: SCALE_MIN, chord: [0, 3, 7], prog: [0, 0, 5, 3], mel: [7, -1, -1, 5, -1, -1, 3, -1, 2, -1, -1, 0, -1, -1, -1, -1] },
       batalha: { bpm: 138, root: 57, wave: 'sawtooth', scale: SCALE_MIN, chord: [0, 3, 7], prog: [0, 0, 5, 3], mel: [0, 7, 0, 7, 3, 7, 3, 7, 5, 7, 5, 7, 0, 3, 5, 7] },
+      raiz:    { bpm: 58,  root: 50, wave: 'sine',     scale: SCALE_MIN, chord: [0, 3, 7], prog: [0, 5, 3, 5], mel: [0, -1, -1, 3, -1, -1, 4, -1, 6, -1, 4, -1, 3, -1, 0, -1] }, // passado fundo: lento, misterioso
+      renascer:{ bpm: 100, root: 64, wave: 'triangle', scale: SCALE_MAJ, chord: [0, 4, 7], prog: [0, 5, 3, 4], mel: [4, 6, 4, 2, 4, -1, 6, 4, 2, 4, 6, -1, 4, 2, 0, -1] }, // futuro curado: claro, alegre
     };
     let musicBus = null, curTrack = 'bosque', step16 = 0, nextNoteT = 0, musicTimer = null;
     function m2f(m) { return 440 * Math.pow(2, (m - 69) / 12); }

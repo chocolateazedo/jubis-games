@@ -795,7 +795,8 @@
           if (d.tint) { const tint = mm => { const c = mm.clone(); if (c.color) c.color.setHex(d.tint); return c; }; fa.wrap.traverse(o => { if (o.isMesh && o.material) o.material = Array.isArray(o.material) ? o.material.map(tint) : tint(o.material); }); }
           const off = (i - (recruited.length - 1) / 2) * 1.8, ax = dolly.position.x - rcDir.x * 1.2 + rvx * off, az = dolly.position.z - rcDir.z * 1.2 + rvz * off;
           fa.wrap.position.set(ax, heightAt(ax, az), az);
-          const hp = d.hp + hero.lvl * 2, al = { actor: fa, kind: k, nome: d.nome, emoji: d.emoji, hp, hpMax: hp, def: d.def + hero.lvl, mag: d.mag + hero.lvl, agi: d.agi, role: d.role, ess: d.ess, atb: Math.random() * 0.3, alive: true, bar: makeBar() };
+          let hp = d.hp + hero.lvl * 2; if (game.flags.coro) hp = Math.round(hp * 1.25); // [2.0] coro dos Brotinhos reforça a party
+          const al = { actor: fa, kind: k, nome: d.nome, emoji: d.emoji, hp, hpMax: hp, def: d.def + hero.lvl, mag: d.mag + hero.lvl, agi: d.agi, role: d.role, ess: d.ess, atb: Math.random() * 0.3, alive: true, bar: makeBar() };
           al.bar.position.set(0, d.h + 0.6, 0); fa.wrap.add(al.bar); drawBar(al.bar, 1, d.nome + ' ' + hp);
           battle.allies.push(al); _bsSig = null; // força rebuild do status DOM
         }).catch(() => {});
@@ -1235,14 +1236,43 @@
     }
     // moradores da vila (só no presente)
     [
-      { char: 'b', nome: 'Dona Bromélia', dx: VILA.x + 6, dz: VILA.z + 7, falasFn: () => game.lacos.lampiao ? ['Ai, que luz boa você trouxe pra Vila, broto! Agora minhas mudinhas vão vingar.', 'Quando você juntar a Canção toda, volte aqui — quero ouvir!'] : ['Bem-vindo à Vila do Carvalho, broto!', 'Foi do Vovô Carvalho que brotou a primeira semente daqui, sabia?'] },
-      { char: 'd', nome: 'Tonico', dx: VILA.x - 7, dz: VILA.z + 5, falasFn: () => game.lacos.lampiao ? ['Você acendeu o lampião! Agora não tenho mais medo do escuro. 🏮', 'Quando crescer eu vou ser piloto, igual você!'] : ['Cê veio de avião?! Que demais!', 'Quando crescer eu vou ser piloto, igual você!'] },
+      { char: 'b', nome: 'Dona Bromélia', dx: VILA.x + 6, dz: VILA.z + 7,
+        falasFn: () => {
+          const sq = game.sidequests.bromelia;
+          if (sq === 'feita') return ['Minhas mudinhas estão lindas, graças a você! 💚'];
+          if (sq === 'ativa') return bromeliaPronta() ? ['Você replantou TODAS as mudinhas! Que mãos boas, broto. 🌷', 'Toma uns Frutos de Luz e um beijo da Bromélia!'] : ['Ainda faltam covinhas pra plantar no meu jardim, viu? (' + mudinhasPlantadas() + '/' + sqMarkers.mudinha.length + ')'];
+          return ['Bem-vindo à Vila do Carvalho, broto!', 'Ai… a seca do lago levou minhas mudinhas. 😢 Será que você replanta umas pra mim? Deixei 3 covinhas aqui no jardim.'];
+        },
+        onEnd: () => {
+          const sq = game.sidequests.bromelia;
+          if (!sq) { game.sidequests.bromelia = 'ativa'; renderJournal(); saveGame('auto'); flash('🌷 Missão: replante as 3 mudinhas da Bromélia (jardim da Vila).'); }
+          else if (sq === 'ativa' && bromeliaPronta()) { game.sidequests.bromelia = 'feita'; sqReward(2, 1, '🌷 Dona Bromélia: +2 Frutos de Luz e 1 Mel!'); renderJournal(); }
+        } },
+      { char: 'd', nome: 'Tonico', dx: VILA.x - 7, dz: VILA.z + 5,
+        falasFn: () => {
+          const sq = game.sidequests.tonico;
+          if (sq === 'feita') return ['Olha a Vila toda iluminada! Ninguém tem mais medo do escuro. 🏮', 'Quando crescer eu vou ser piloto, igual você!'];
+          if (sq === 'ativa') return tonicoPronto() ? ['Você acendeu TODOS os lampiões! A Vila tá um brilho! 🏮✨', 'Toma sua recompensa, herói da luz!'] : ['Ainda tem lampião apagado por aí, viu? (' + lampioesAcesos() + '/' + sqMarkers.lampiao.length + ')'];
+          return ['Cê veio de avião?! Que demais!', 'Ô, me ajuda? Os lampiões da Vila apagaram e eu tenho medo do escuro. Acende todinhos pra mim?'];
+        },
+        onEnd: () => {
+          const sq = game.sidequests.tonico;
+          if (!sq) { game.sidequests.tonico = 'ativa'; renderJournal(); saveGame('auto'); flash('🏮 Missão: reacenda os 4 lampiões ao redor da Vila.'); }
+          else if (sq === 'ativa' && tonicoPronto()) { game.sidequests.tonico = 'feita'; sqReward(2, 1, '🏮 Tonico: +2 Frutos de Luz e 1 Mel!'); renderJournal(); }
+        } },
+      { char: 'c', nome: 'Os Brotinhos', dx: VILA.x - 2, dz: VILA.z + 9,
+        falasFn: () => {
+          if (game.sidequests.brotinhos === 'feita') return ['De novo, de novo! A sua canção é a melhor! 🎶'];
+          if (!game.folhas.length) return ['Ô viajante! Você sabe alguma música das estações?', 'Volta quando aprender um verso da Canção, vai!'];
+          return ['Canta pra gente os versos que você já sabe! 🎶', '(Você canta: ' + game.folhas.map(f => FOLHA_NOME[f] || f).join(', ') + ')', 'Que lindooo! A gente vai fazer um CORO pra te ajudar quando você cantar pra Murcha! 💚'];
+        },
+        onEnd: () => { if (game.sidequests.brotinhos !== 'feita' && game.folhas.length) { game.sidequests.brotinhos = 'feita'; game.flags.coro = true; renderJournal(); saveGame('auto'); flash('🎶 Os Brotinhos vão fazer um coro por você — a party fica mais forte na batalha final!'); } } },
       { char: 'e', nome: 'Vovó Samambaia', dx: VILA.x + 4, dz: VILA.z - 8,
         falasFn: () => (game.flags.cogu && !game.flags.vila)
           ? ['Então o cinza voltou a subir… eu já temia, criança.', 'O Vovô Carvalho é a árvore-mãe de tudo. As raízes dele tocam o ONTEM e o AMANHÃ ao mesmo tempo.', 'Esse cinza não nasce aqui: ele VAZA de um futuro murcho. Pra fechar a fenda, você vai ter que atravessar o tempo pela raiz do Vovô.', 'Antigamente, a gente fazia as estações virarem CANTANDO — a Canção das Quatro Folhas: uma pra Primavera 🍃, uma pro Verão ☀️, uma pras Chuvas 💧 e uma pro Inverno 🩶. Mas uma cantora ficou sozinha e engoliu o último verso. Desde então o frio não passa.', 'Reaprenda os versos viajando no tempo, broto — comece procurando a Folha da Primavera lá no passado. Mas cuidado: mexer no ontem mexe no agora. E leve a Lanterna — sem luz, ninguém pisa no Ermo.']
           : ['No meu tempo a gente subia no Vovô pra colher estrela…', 'Junta os Frutos de Luz, criança. Eles guardam o brilho do amanhã.'],
         onEnd: () => { if (game.flags.cogu && !game.flags.vila) { game.flags.vila = true; sfx('fanfare'); setObjetivo('Volte ao bosque e toque o Vovô Carvalho 🌳'); } } },
-      { char: 'g', nome: 'Mestre Cipó', dx: VILA.x - 5, dz: VILA.z - 6, falas: ['Cuida do bosque que ele cuida de você.', 'Dizem que o futuro tá ficando cinza… mas semente teimosa sempre acha um jeito de brotar.'] },
+      { char: 'g', nome: 'Mestre Cipó', dx: VILA.x - 5, dz: VILA.z - 6, falasFn: () => game.lacos.cipo ? ['Olha minha ponte de cipó cruzando o lago até a ilhota! Nunca pensei que ia conseguir. 🌉', 'Foi você que me deu coragem lá atrás, quando eu era um broto. Obrigado mesmo!'] : ['Cuida do bosque que ele cuida de você.', 'Sabe… eu sempre quis tecer uma ponte até aquela ilhota do lago, mas nunca tive coragem. Quem me dera alguém tivesse me incentivado quando eu era novo, lá no passado.'] },
     ].forEach(d => getGLB(`../bosque-vr/npcs/character-${d.char}.glb`).then(g => {
       const a = spawnActor(g, 'idle', 1.5); a.wrap.position.set(d.dx, heightAt(d.dx, d.dz), d.dz); a.wrap.rotation.y = Math.atan2(VILA.x - d.dx, VILA.z - d.dz);
       a.wrap.userData = { nome: d.nome, falas: d.falas, falasFn: d.falasFn, onEnd: d.onEnd }; a.story = { era: 'bosque' }; obstacles.push({ x: d.dx, z: d.dz, r: 0.5 }); npcs.push(a);
@@ -1322,6 +1352,7 @@
     const LACO_NOME = { riacho: 'O Riacho Represado', corvo: 'O Corvo Espantado', lampiao: 'O Lampião Aceso', muda: 'A Muda Curada Demais', cipo: 'A Ponte de Cipó' }; // [2.0] nomes dos laços/folhas/companheiros pro Diário
     const FOLHA_NOME = { primavera: '🍃 Primavera', verao: '☀️ Verão', chuvas: '💧 Chuvas', inverno: '🩶 Inverno' };
     const COMP_NOME = { fagulha: '🦊 Fagulha', folho: '🐛 Folho', gota: '🐢 Gota', brisa: '🦋 Brisa' };
+    const SQ_NOME = { bromelia: 'Dona Bromélia — replantar as mudinhas', tonico: 'Tonico — reacender os lampiões', brotinhos: 'Os Brotinhos — cantar a Canção' }; // [2.0] Missões da Vila pro Diário
     function renderJournal() {
       const b = document.querySelector('#journal .jbody'); if (!b) return; b.innerHTML = '';
       const lacoKeys = game.lacos ? Object.keys(game.lacos) : [], teiaAtiva = (game.folhas && game.folhas.length) || lacoKeys.length;
@@ -1340,6 +1371,13 @@
         html += '<div class="jline">🍃 Canção das Quatro Folhas (' + game.folhas.length + '/4): ' + ['primavera', 'verao', 'chuvas', 'inverno'].map(f => game.folhas.includes(f) ? FOLHA_NOME[f] : '<span class="jmiss">' + FOLHA_NOME[f] + '</span>').join(' · ') + '</div>';
         const comps = ['fagulha', 'folho', 'gota', 'brisa'].filter(c => game.flags[c]);
         if (comps.length) html += '<div class="jline">🤝 Grupo: ' + comps.map(c => COMP_NOME[c]).join(' · ') + '</div>';
+        sec.innerHTML = html; b.appendChild(sec);
+      }
+      const sqKeys = game.sidequests ? Object.keys(game.sidequests).filter(k => SQ_NOME[k]) : []; // [2.0] Missões da Vila
+      if (sqKeys.length) {
+        const sec = document.createElement('div'); sec.className = 'jsec';
+        let html = '<div class="jsech">🏘️ Missões da Vila</div>';
+        for (const k of sqKeys) { const done = game.sidequests[k] === 'feita'; html += '<div class="jline">' + (done ? '✅' : '⚠️') + ' ' + SQ_NOME[k] + ' <small>(' + (done ? 'feita' : 'em andamento') + ')</small></div>'; }
         sec.innerHTML = html; b.appendChild(sec);
       }
     }
@@ -1365,6 +1403,8 @@
       if (game.fase >= 4) criarSementeMundo();
       if (game.lacos.riacho === 'ativo') abrirFenda(); // [2.0] restaura a Fenda Temporal se o laço ficou em aberto
       if (game.lacos.cipo === 'equilibrado') criarPonteIlha(); // [2.0] restaura a Ponte de Cipó e a ilhota
+      const bp = game.sidequests.bromeliaP || 0; for (let i = 0; i < bp && i < sqMarkers.mudinha.length; i++) sqMarkers.mudinha[i].userData.planted = true; // [2.0] restaura progresso das sidequests
+      const tp = game.sidequests.tonicoP || 0; for (let i = 0; i < tp && i < sqMarkers.lampiao.length; i++) acenderLampMesh(sqMarkers.lampiao[i]);
       for (let i = 0; i < game.coletados && collectibles.length; i++) { const m = collectibles.pop(); scene.remove(m); } // tira os Frutos já coletados (mantém 16 no total)
     }
     function applyLoadedState(s) {
@@ -1755,6 +1795,43 @@
       if (mestreCipo) { mestreCipo.visible = currentEra === 'semente' && !game.lacos.cipo; if (mestreCipo.visible) mestreCipo.children[1].position.y = 1.7 + Math.sin(t * 0.004) * 0.06; }
       if (ponteGrupo) ponteGrupo.visible = currentEra === 'bosque';
       if (ilhaTesouro && ilhaTesouro.visible && currentEra === 'bosque') { ilhaTesouro.rotation.y += 0.02; ilhaTesouro.position.y = PONTE_Y + 0.7 + Math.sin(t * 0.003) * 0.12; }
+    }
+    // ---------- Sidequests da Vila (Cap.10): nenhuma obrigatória, recompensa gentil ----------
+    const sqMarkers = { mudinha: [], lampiao: [] };
+    function criarSidequestMundo() {
+      const covMat = new THREE.MeshStandardMaterial({ color: 0x5a3f24, roughness: 1, flatShading: true });
+      [[9, 10], [12, 8], [10, 13]].forEach(([ox, oz]) => { // Bromélia: 3 covinhas de replantio no jardim da Vila
+        const x = VILA.x + ox, z = VILA.z + oz, g = new THREE.Group();
+        const cova = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.62, 0.22, 8), covMat); cova.position.y = 0.11; g.add(cova);
+        g.position.set(x, heightAt(x, z), z); g.userData = { x, z, planted: false }; scene.add(g); g.visible = false; sqMarkers.mudinha.push(g);
+      });
+      [[15, 0], [-15, 0], [0, 15], [0, -15]].forEach(([ox, oz]) => { // Tonico: 4 lampiões ao redor da Vila
+        const x = VILA.x + ox, z = VILA.z + oz, g = new THREE.Group();
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 3.0, 8), new THREE.MeshStandardMaterial({ color: 0x5a4326, roughness: 1 })); post.position.y = 1.5; g.add(post);
+        const lamp = new THREE.Mesh(new THREE.IcosahedronGeometry(0.3, 0), new THREE.MeshStandardMaterial({ color: 0x2a2a20, roughness: 1, flatShading: true, emissive: 0x000000 })); lamp.position.y = 3.0; g.add(lamp);
+        g.position.set(x, heightAt(x, z), z); g.userData = { x, z, lit: false, lamp }; scene.add(g); g.visible = false; sqMarkers.lampiao.push(g);
+        obstacles.push({ x, z, r: 0.4 });
+      });
+    }
+    criarSidequestMundo();
+    function sqReward(frutos, mel, msg) {
+      if (frutos) { game.coletados += frutos; const cn = document.getElementById('collectN'); if (cn) cn.textContent = game.coletados; const hud = document.getElementById('collectHud'); if (hud) hud.style.display = 'block'; }
+      if (mel) hero.itens.mel = (hero.itens.mel || 0) + mel;
+      sfx('fanfare'); flash(msg); saveGame('auto');
+    }
+    function mudinhasPlantadas() { return sqMarkers.mudinha.filter(g => g.userData.planted).length; }
+    function bromeliaPronta() { return sqMarkers.mudinha.length > 0 && mudinhasPlantadas() >= sqMarkers.mudinha.length; }
+    function lampioesAcesos() { return sqMarkers.lampiao.filter(g => g.userData.lit).length; }
+    function tonicoPronto() { return sqMarkers.lampiao.length > 0 && lampioesAcesos() >= sqMarkers.lampiao.length; }
+    function acenderLampMesh(g) { g.userData.lit = true; g.userData.lamp.material.color.setHex(0xffe6a0); g.userData.lamp.material.emissive.setHex(0xffcc55); g.userData.lamp.material.emissiveIntensity = 1.0; }
+    function nearMudinha() { if (game.sidequests.bromelia !== 'ativa' || currentEra !== 'bosque') return null; for (const g of sqMarkers.mudinha) if (!g.userData.planted && Math.hypot(dolly.position.x - g.userData.x, dolly.position.z - g.userData.z) < 2.6) return g; return null; }
+    function plantarMudinha(g) { g.userData.planted = true; g.visible = false; game.sidequests.bromeliaP = mudinhasPlantadas(); sfx('ready'); saveGame('auto'); if (bromeliaPronta()) flash('🌷 Todas replantadas! Volte à Dona Bromélia.'); else flash('🌱 Mudinha replantada! (' + mudinhasPlantadas() + '/' + sqMarkers.mudinha.length + ')'); }
+    function nearLampiaoSQ() { if (game.sidequests.tonico !== 'ativa' || currentEra !== 'bosque') return null; for (const g of sqMarkers.lampiao) if (!g.userData.lit && Math.hypot(dolly.position.x - g.userData.x, dolly.position.z - g.userData.z) < 2.8) return g; return null; }
+    function acenderLampiaoSQ(g) { acenderLampMesh(g); game.sidequests.tonicoP = lampioesAcesos(); sfx('ready'); saveGame('auto'); if (tonicoPronto()) flash('🏮 Todos acesos! Volte ao Tonico.'); else flash('🏮 Lampião aceso! (' + lampioesAcesos() + '/' + sqMarkers.lampiao.length + ')'); }
+    function updateSidequests() {
+      const bosque = currentEra === 'bosque';
+      for (const g of sqMarkers.mudinha) g.visible = bosque && game.sidequests.bromelia === 'ativa' && !g.userData.planted;
+      for (const g of sqMarkers.lampiao) g.visible = bosque;
     }
     function checkUnlockRaiz() { if (!game.flags.raiz && game.folhas.length >= 2) { game.flags.raiz = true; setTimeout(() => flash('🌰 Uma raiz mais funda se abriu! Toque o Vovô e viaje à RAIZ, o passado profundo.'), 1400); } }
 
@@ -2189,6 +2266,8 @@
       if (nearMata()) { abrirClareira(); return; }
       if (nearCipo()) { ensinarCipo(); return; }                       // [2.0] laço da Ponte de Cipó (só bônus)
       if (nearIlhaTesouro()) { colherIlha(); return; }
+      const mu = nearMudinha(); if (mu) { plantarMudinha(mu); return; }  // [2.0] sidequest Bromélia
+      const lp = nearLampiaoSQ(); if (lp) { acenderLampiaoSQ(lp); return; } // [2.0] sidequest Tonico
       if (nearConstructo()) { resolverConstructo(); return; }           // [2.0] Ato III: Constructo → Folha das Chuvas
       if (nearCovinha()) { plantarSemente(); return; }
       if (nearFox()) { recruitFagulha(); return; }
@@ -2431,7 +2510,7 @@
       if (brotoNovo) { brotoNovo.visible = currentEra === 'bosque' && game.flags.sementePlantada;
         if (brotoNovo.visible && brotoGrow < 1) { brotoGrow = Math.min(1, brotoGrow + dt * 0.5); const e = 1 - Math.pow(1 - brotoGrow, 3); brotoNovo.scale.setScalar(0.06 + 0.94 * e); } }
       updateCollectibles(dt, t); // frutos de luz giram, boiam e são coletados ao chegar perto
-      updateTeia(t); updateTeia2(t); updateTeia3(t); updateTeia4(t); updateTeia5(t); updateConstructo(t); // [2.0] Teia + Constructo (era Raiz)
+      updateTeia(t); updateTeia2(t); updateTeia3(t); updateTeia4(t); updateTeia5(t); updateSidequests(); updateConstructo(t); // [2.0] Teia + Constructo (era Raiz) + sidequests
       if (shopOpen && !nearShop()) closeShop(); // saiu de perto da banca → fecha a loja
       if (!game.flags.vilaVista && currentEra === 'bosque' && Math.hypot(dolly.position.x - VILA.x, dolly.position.z - VILA.z) < 24) { game.flags.vilaVista = true; flash('🏘️ Você chegou à Vila do Carvalho!'); sfx('ready'); }
       // partículas mágicas: derivam, caem/sobem conforme a era e seguem o jogador
@@ -2482,6 +2561,8 @@
         else if (livre && nearMata()) setHint('☀️ Abrir uma clareira de luz na Mata' + a);
         else if (livre && nearCipo()) setHint('🌉 Ensinar o Mestre Cipó a tecer a ponte' + a);
         else if (livre && nearIlhaTesouro()) setHint('🍎 Colher os Frutos da ilhota' + a);
+        else if (livre && nearMudinha()) setHint('🌱 Replantar a mudinha da Bromélia' + a);
+        else if (livre && nearLampiaoSQ()) setHint('🏮 Acender o lampião do Tonico' + a);
         else if (livre && nearConstructo()) setHint('🗿 Dar companhia ao Constructo' + a);
         else if (livre && nearCovinha()) setHint('🌱 Plantar a Semente-do-Amanhã' + a);
         else if (livre && nearFox()) setHint('🦊 Libertar a Fagulha' + a);

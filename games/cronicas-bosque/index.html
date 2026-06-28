@@ -760,6 +760,7 @@
         if (al.hp <= 0) { al.alive = false; flash('🦊 Fagulha ficou tonta…'); puff(al.actor.wrap.position); if (al.bar) al.actor.wrap.remove(al.bar); al.actor.wrap.visible = false; }
       } else {
         if (hero.defending) dmg = Math.max(1, Math.round(dmg * 0.5));
+        if (game.flags.gota) dmg = Math.max(1, dmg - 1); // Gota no grupo: você apanha menos
         hero.hp = Math.max(0, hero.hp - dmg); spawnDmg(dolly.position.clone().add(new THREE.Vector3(0, -0.5, 0)), dmg, 0xff6b6b); updateHeroHud(); hurtFlash();
         if (hero.hp <= 0) loseBattle();
       }
@@ -1232,7 +1233,7 @@
     // ======================= MOTOR DE HISTÓRIA (10 fases) =======================
     const game = { fase: 0, vovoFalou: false, objetivo: '', vistoMudanca: false, coletados: 0,
       harmonia: 100, lacos: {}, folhas: [], sidequests: {}, // [2.0] Teia de Causalidade + Canção das Quatro Folhas (estado base; conteúdo vem nos Atos)
-      flags: { cogu: false, vila: false, vilaVista: false, lanterna: false, fagulha: false, folho: false, momento: false, semente: false, sementePlantada: false } };
+      flags: { cogu: false, vila: false, vilaVista: false, lanterna: false, fagulha: false, folho: false, gota: false, momento: false, semente: false, sementePlantada: false } };
     const FASE_TITULOS = { 1: 'O Bosque Doente', 2: 'A Lanterna-Vagalume', 3: 'O Ermo', 4: 'A Semente do Passado', 5: 'O Amanhã Plantado', 6: 'A Cura Começa', 7: 'O Coração da Murcha', 8: 'Epílogo' };
     function setObjetivo(txt) {
       game.objetivo = txt; const q = document.getElementById('questBar');
@@ -1453,7 +1454,10 @@
       startNarration('Broto', ['Você plantou! Olha ele crescendo…', 'Esse carvalhinho vai virar o Vovô de todas as árvores. Cuida dele no teu tempo, tá?'], () => { iniciarFase(5); });
     }
 
-    // ===================== TEIA DE CAUSALIDADE — Laço 1: O Riacho Represado [2.0] =====================
+    // ===================== TEIA DE CAUSALIDADE [2.0] =====================
+    // Harmonia = 100 menos 25 por laço deixado em consequência (em aberto)
+    function recomputeHarmonia() { let p = 0; for (const k in game.lacos) if (game.lacos[k] === 'ativo') p += 25; game.harmonia = Math.max(0, 100 - p); updateHarmonia(); }
+    // ----- Laço 1: O Riacho Represado -----
     const TEIA = { pedra: { x: -16, z: 44 }, folha: { x: -17, z: 35 }, cavar: { x: -23, z: 46 }, fenda: { x: 34, z: 2 } };
     let teiaPedra = null, teiaRiacho = null, teiaFolha = null, teiaCavar = null, fendaMesh = null;
     const fendaEnemies = [];
@@ -1475,7 +1479,7 @@
     function nearFolhaPrimavera() { return teiaFolha && !game.folhas.includes('primavera') && game.lacos.riacho && nearTeiaP(TEIA.folha); }
     function nearCavar() { return game.lacos.riacho === 'ativo' && nearTeiaP(TEIA.cavar); }
     function moveRiachoPedra() {
-      game.lacos.riacho = 'ativo'; game.harmonia = 70; sfx('poof'); abrirFenda(); updateHarmonia(); renderJournal(); saveGame('auto');
+      game.lacos.riacho = 'ativo'; sfx('poof'); abrirFenda(); recomputeHarmonia(); renderJournal(); saveGame('auto');
       startNarration('', ['Você empurra a pedra… o riacho corre livre e abre caminho pra Folha verde lá adiante.', 'Mas longe dali, no AGORA, algo treme: a água que você desvia aqui faz falta noutro tempo. Volte ao 🌳 Bosque e veja o que mudou.'], () => { });
     }
     function collectFolhaPrimavera() {
@@ -1486,7 +1490,7 @@
       }
     }
     function equilibrarRiacho() {
-      game.lacos.riacho = 'equilibrado'; game.harmonia = 100; sfx('fanfare'); fecharFenda(); updateHarmonia(); renderJournal(); saveGame('auto');
+      game.lacos.riacho = 'equilibrado'; sfx('fanfare'); fecharFenda(); recomputeHarmonia(); renderJournal(); saveGame('auto');
       flash('💧 Você cavou um novo curso — a água voltou ao presente e a fenda se fechou! Harmonia restaurada.');
     }
     function abrirFenda() {
@@ -1508,6 +1512,39 @@
       if (teiaCavar) teiaCavar.visible = sem && game.lacos.riacho === 'ativo';
       if (fendaMesh) { fendaMesh.visible = currentEra === 'bosque'; fendaMesh.rotation.z += 0.01; fendaMesh.material.opacity = 0.45 + Math.sin(t * 0.004) * 0.15; }
       if (currentEra === 'bosque' && game.lacos.riacho === 'ativo') { lake.material.color.setHex(0x6a5a3a); lake.material.opacity = 0.22; } // lago secou
+    }
+
+    // ----- Laço 2: O Corvo Espantado (resolução gentil = Folha do Verão) -----
+    const TEIA2 = { corvo: { x: -30, z: 30 }, praga: { x: 46, z: 26 } };
+    let teia2Corvo = null, besourosGroup = null;
+    function criarTeia2() {
+      const g = new THREE.Group();
+      const corpoMat = new THREE.MeshStandardMaterial({ color: 0x33333a, roughness: 1, flatShading: true });
+      const corpo = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5, 0), corpoMat); corpo.position.y = 1.0; g.add(corpo);
+      for (const sx of [-1, 1]) { const asa = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.1, 0.4), corpoMat); asa.position.set(sx * 0.55, 1.0, 0); asa.rotation.z = sx * 0.3; g.add(asa); }
+      const bico = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.35, 5), new THREE.MeshStandardMaterial({ color: 0xe0a040 })); bico.rotation.x = Math.PI / 2; bico.position.set(0, 1.05, 0.5); g.add(bico);
+      for (let i = 0; i < 3; i++) { const br = new THREE.Mesh(new THREE.ConeGeometry(0.25, 0.7, 6), new THREE.MeshStandardMaterial({ color: 0x6cba56, flatShading: true })); br.position.set((i - 1) * 0.8, 0.35, 1.6); g.add(br); }
+      g.position.set(TEIA2.corvo.x, heightAt(TEIA2.corvo.x, TEIA2.corvo.z), TEIA2.corvo.z); scene.add(g); teia2Corvo = g; teia2Corvo.visible = false;
+      besourosGroup = new THREE.Group();
+      for (let i = 0; i < 9; i++) { const b = new THREE.Mesh(new THREE.IcosahedronGeometry(0.22, 0), new THREE.MeshStandardMaterial({ color: 0x2a2a18, roughness: 1, flatShading: true })); b.position.set((Math.random() - 0.5) * 4, 0.3 + Math.random() * 0.6, (Math.random() - 0.5) * 4); b.userData.ph = Math.random() * 6.28; besourosGroup.add(b); }
+      besourosGroup.position.set(TEIA2.praga.x, heightAt(TEIA2.praga.x, TEIA2.praga.z), TEIA2.praga.z); scene.add(besourosGroup); besourosGroup.visible = false;
+    }
+    criarTeia2();
+    function nearCorvo() { return teia2Corvo && !game.lacos.corvo && currentEra === 'semente' && Math.hypot(dolly.position.x - TEIA2.corvo.x, dolly.position.z - TEIA2.corvo.z) < 3.5; }
+    function nearPragaVerao() { return game.lacos.corvo === 'ativo' && !game.folhas.includes('verao') && currentEra === 'bosque' && Math.hypot(dolly.position.x - TEIA2.praga.x, dolly.position.z - TEIA2.praga.z) < 4; }
+    function espantarCorvo() {
+      game.lacos.corvo = 'ativo'; sfx('poof'); recomputeHarmonia(); renderJournal(); hero.itens.mel = (hero.itens.mel || 0) + 2; saveGame('auto');
+      startNarration('', ['Você espanta o Corvo Cinza! Os brotinhos crescem felizes e te dão 2 Mel-do-Bosque de presente. 🍯', 'Mas sem o corvo por perto, no AGORA os besouros-da-folha se soltam e roem as árvores. Volte ao 🌳 Bosque e dê um jeito — com gentileza.'], () => { });
+    }
+    function cantarVerao() {
+      if (game.folhas.includes('verao')) return;
+      game.lacos.corvo = 'equilibrado'; game.folhas.push('verao'); sfx('fanfare'); recomputeHarmonia(); renderJournal();
+      const recruta = !game.flags.gota; if (recruta) game.flags.gota = true; saveGame('auto');
+      startNarration('', ['Você lembra de um canto de pássaro bem velho e assobia baixinho…', 'Os besouros param, escutam… e vão embora sozinhos. Sem expulsar ninguém — só lembrando o bosque de uma música. Você aprendeu a Folha do Verão ☀️!'], () => { if (recruta) startNarration('Gota', ['💧 Blub! Ouvi seu canto lá do riacho e vim ver!', 'Eu sou a Gota. Sei guiar a água e segurar o tranco — enquanto eu tô no grupo, você apanha menos na luta. 🐢'], () => { flash('🐢 Gota entrou no grupo!'); }); });
+    }
+    function updateTeia2(t) {
+      if (teia2Corvo) { teia2Corvo.visible = currentEra === 'semente' && !game.lacos.corvo; if (teia2Corvo.visible) teia2Corvo.children[0].position.y = 1.0 + Math.sin(t * 0.005) * 0.12; }
+      if (besourosGroup) { besourosGroup.visible = currentEra === 'bosque' && game.lacos.corvo === 'ativo'; if (besourosGroup.visible) for (const b of besourosGroup.children) { b.position.y = 0.3 + Math.abs(Math.sin(t * 0.01 + b.userData.ph)) * 0.5; b.rotation.y += 0.12; } }
     }
 
     // ---------- construção (Kenney Building Kit, CC0) ----------
@@ -1897,6 +1934,8 @@
       if (nearPedra()) { moveRiachoPedra(); return; }                  // [2.0] laço do riacho
       if (nearFolhaPrimavera()) { collectFolhaPrimavera(); return; }
       if (nearCavar()) { equilibrarRiacho(); return; }
+      if (nearCorvo()) { espantarCorvo(); return; }                    // [2.0] laço do corvo
+      if (nearPragaVerao()) { cantarVerao(); return; }
       if (nearCovinha()) { plantarSemente(); return; }
       if (nearFox()) { recruitFagulha(); return; }
       if (nearLantern()) { pickLantern(); return; }
@@ -2136,7 +2175,7 @@
       if (brotoNovo) { brotoNovo.visible = currentEra === 'bosque' && game.flags.sementePlantada;
         if (brotoNovo.visible && brotoGrow < 1) { brotoGrow = Math.min(1, brotoGrow + dt * 0.5); const e = 1 - Math.pow(1 - brotoGrow, 3); brotoNovo.scale.setScalar(0.06 + 0.94 * e); } }
       updateCollectibles(dt, t); // frutos de luz giram, boiam e são coletados ao chegar perto
-      updateTeia(t); // [2.0] Teia de Causalidade: laço do riacho (objetos por era, fenda, lago seco)
+      updateTeia(t); updateTeia2(t); // [2.0] Teia de Causalidade: laços (riacho/lago, corvo/besouros) por era
       if (shopOpen && !nearShop()) closeShop(); // saiu de perto da banca → fecha a loja
       if (!game.flags.vilaVista && currentEra === 'bosque' && Math.hypot(dolly.position.x - VILA.x, dolly.position.z - VILA.z) < 24) { game.flags.vilaVista = true; flash('🏘️ Você chegou à Vila do Carvalho!'); sfx('ready'); }
       // partículas mágicas: derivam, caem/sobem conforme a era e seguem o jogador
@@ -2179,6 +2218,8 @@
         else if (livre && nearPedra()) setHint('🪨 Mover a pedra do riacho' + a);
         else if (livre && nearFolhaPrimavera()) setHint('🍃 Cantar a Folha da Primavera' + a);
         else if (livre && nearCavar()) setHint('⛏️ Cavar um novo curso pro riacho' + a);
+        else if (livre && nearCorvo()) setHint('🐦 Espantar o Corvo Cinza' + a);
+        else if (livre && nearPragaVerao()) setHint('🎵 Cantar o canto de pássaro' + a);
         else if (livre && nearCovinha()) setHint('🌱 Plantar a Semente-do-Amanhã' + a);
         else if (livre && nearFox()) setHint('🦊 Libertar a Fagulha' + a);
         else if (livre && nearLantern()) setHint('✨ Pegar a Lanterna-Vagalume' + a);

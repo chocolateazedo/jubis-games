@@ -802,6 +802,7 @@
       });
     }
     function allyAttackEnemy(al) {
+      if (!battle) return;
       const alvos = battle.enemies.filter(x => x.alive); if (!alvos.length) return;
       const tgt = alvos[(Math.random() * alvos.length) | 0];
       const mult = essMult(al.ess, tgt.def.ess), dmg = Math.max(1, Math.round((al.mag + 4 - tgt.def.def / 2) * (0.9 + Math.random() * 0.2) * mult));
@@ -810,6 +811,7 @@
       if (tgt.hp <= 0) { tgt.alive = false; defeatEnemy(tgt); }
     }
     function allyAct(al) {
+      if (!battle) return; // a luta pode ter acabado neste mesmo frame (aliado anterior deu o golpe final, ou o herói caiu)
       if (al.role === 'heal') { // Folho cura o mais ferido do grupo; se ninguém precisa, ataca
         const party = [{ frac: hero.hp / hero.hpMax, heal: h => { hero.hp = Math.min(hero.hpMax, hero.hp + h); updateHeroHud(); }, pos: dolly.position.clone().add(new THREE.Vector3(0, -0.4, 0)), nome: 'Você' }].concat(battle.allies.filter(x => x.alive).map(x => ({ frac: x.hp / x.hpMax, heal: h => { x.hp = Math.min(x.hpMax, x.hp + h); }, pos: x.actor.wrap.position, nome: x.nome })));
         let worst = null; for (const p of party) if (!worst || p.frac < worst.frac) worst = p;
@@ -905,8 +907,8 @@
       game.flags.bossDone = true;
       if (!game.folhas.includes('inverno')) game.folhas.push('inverno'); // o 4º verso, aprendido no clímax
       game.flags.brisa = true; game.flags.renascer = true;               // a Murcha vira Brisa; o futuro curado se abre
-      renderJournal(); updateHarmonia(); endBattle(); sfx('fanfare'); reverdecerErmo(); saveGame('auto');
-      chooseEnding();
+      renderJournal(); updateHarmonia(); endBattle(); sfx('fanfare'); reverdecerErmo();
+      chooseEnding(); // o save definitivo do epílogo acontece em iniciarFase(8), no fim da narração — assim a aba fechada no meio não trava o jogo na fase 7
     }
     function chooseEnding() {
       const todasFolhas = game.folhas.length >= 4;
@@ -1370,7 +1372,9 @@
       game.harmonia = s.harmonia != null ? s.harmonia : 100; game.lacos = s.lacos || {}; game.folhas = s.folhas || []; game.sidequests = s.sidequests || {};
       if (s.flags) Object.assign(game.flags, s.flags);
       if (s.hero) Object.assign(hero, s.hero);
-      currentEra = s.currentEra || 'bosque'; applyEra(currentEra);
+      currentEra = s.currentEra || 'bosque';
+      if (game.flags.bossDone || game.flags.renascer) reverdecerErmo(); // [2.0] o Ermo curado é mutação de runtime — recura ao Continuar um save pós-clímax
+      applyEra(currentEra);
       rebuildWorldFromState();
       if (game.objetivo) setObjetivo(game.objetivo);
       const cn = document.getElementById('collectN'); if (cn) cn.textContent = game.coletados;
@@ -1471,8 +1475,9 @@
     }
     function nearLantern() { return lanternItem && Math.hypot(dolly.position.x - lanternItem.position.x, dolly.position.z - lanternItem.position.z) < 2.8; }
     function pickLantern() {
-      if (!lanternItem) return; scene.remove(lanternItem); lanternItem = null; game.flags.lanterna = true; saveGame('auto');
-      flash('✨ Você pegou a Lanterna-Vagalume! O caminho do Ermo se abriu.'); sfx('fanfare'); setObjetivo('Toque o Vovô e viaje ao 🥀 Ermo');
+      if (!lanternItem) return; scene.remove(lanternItem); lanternItem = null; game.flags.lanterna = true;
+      flash('✨ Você pegou a Lanterna-Vagalume! O caminho do Ermo se abriu.'); sfx('fanfare');
+      iniciarFase(3); // Cap.3 "O Ermo" vira a missão ativa (e autosalva com a Lanterna já pega)
     }
     // ---------- o Vovô: conversa (Fase 1) e depois abre o menu das Eras ----------
     function tocarVovo() {
@@ -2091,7 +2096,6 @@
     addEventListener('keydown', e => {
       if (e.code === 'KeyE' && !e.repeat) interact();
       if (e.code === 'KeyJ' && !e.repeat) toggleJournal(); // diário de missões (PC)
-      if (e.code === 'KeyT' && !e.repeat) { const o = ['bosque', 'ermo', 'semente']; travelEra(o[(o.indexOf(currentEra) + 1) % 3]); } // TEMP: ciclar eras
       if (e.code === 'KeyR' && !e.repeat && buildPiece) ghostRY += Math.PI / 4;
       if (e.code === 'KeyX' && !e.repeat && removeMode) doRemove(removeTarget);
     });

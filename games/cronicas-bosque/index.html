@@ -77,11 +77,6 @@
       padding: 10px 16px; font-weight: 700; font-size: 15px; cursor: pointer; }
     #collectHud { position: fixed; z-index: 27; top: max(12px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); display: none;
       background: rgba(8,24,16,.78); color: #ffe39a; border: 1px solid rgba(255,225,140,.55); border-radius: 12px; padding: 6px 12px; font-weight: 800; font-size: 15px; pointer-events: none; }
-    #mountBar { position: fixed; z-index: 27; top: max(96px, calc(env(safe-area-inset-top) + 90px)); left: 50%; transform: translateX(-50%); display: none; gap: 6px; }
-    #mountBar .mb { width: 46px; height: 46px; border: 2px solid rgba(160,230,180,.4); background: rgba(8,24,16,.7); color: #fff; font-size: 22px; border-radius: 12px; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: none; padding: 0; line-height: 1; }
-    #mountBar .mb.on { border-color: #ffe6a0; background: rgba(255,210,100,.35); }
-    #mountBar .mb:active { transform: scale(.92); }
-    body.inbattle #mountBar { display: none !important; } /* sem trocar de transporte no meio da luta */
     #questBar { position: fixed; z-index: 27; top: max(58px, calc(env(safe-area-inset-top) + 52px)); left: 50%; transform: translateX(-50%); display: none;
       background: rgba(8,24,16,.82); color: #eaffee; border: 1px solid rgba(255,225,140,.55); border-radius: 12px;
       padding: 7px 16px; font-weight: 700; font-size: 14px; max-width: 92vw; text-align: center; pointer-events: none; }
@@ -164,13 +159,6 @@
   <div id="collectHud">✨ <b id="collectN">0</b>/<span id="collectT">0</span></div>
   <button id="journalBtn">📜</button>
   <div id="journal"><div class="jhead">📜 Diário de Missões</div><div class="jbody"></div><button class="jclose" id="journalClose">Fechar</button></div>
-  <div id="mountBar">
-    <button class="mb on" data-m="">🚶</button>
-    <button class="mb" data-m="carro">🚗</button>
-    <button class="mb" data-m="moto">🏍️</button>
-    <button class="mb" data-m="cavalo">🐴</button>
-    <button class="mb" data-m="aviao">✈️</button>
-  </div>
   <div id="talkHint">💬 Conversar</div>
   <div id="battleBar"></div>
   <!-- painéis HTML nítidos do Modo Celular (o 3D embaça na resolução reduzida) -->
@@ -363,6 +351,7 @@
     // ---------- VOVÔ CARVALHO (o portal do tempo, que fala) ----------
     const PORTAL = { x: 6, z: 22 };
     const VILA = { x: -64, z: -54 }, SHOP = { x: -64, z: -67 }; // a Vila do Carvalho fica numa clareira a noroeste
+    const AIRSTRIP = { x: 84, z: 48 }; // a pista de pouso do avião, numa clareira a leste
     const vovo = new THREE.Group();
     let treeVariants = []; // variações de árvore extraídas do trees.glb (pro Vovô e a muda)
     // Vovô Carvalho: um ENT ancião esculpido — rosto na casca, barba de musgo, braços-galho, pés-raiz e copa frondosa.
@@ -968,6 +957,7 @@
         if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 5) continue;
         if (Math.hypot(x - dolly.position.x, z - dolly.position.z) < 7) continue;
         if (Math.hypot(x - VILA.x, z - VILA.z) < 34) continue; // clareira da Vila do Carvalho
+        if (Math.hypot(x - AIRSTRIP.x, z - AIRSTRIP.z) < 32) continue; // clareira da pista de pouso
         const y = heightAt(x, z), s = 0.8 + Math.random() * 0.7, yaw = Math.random() * Math.PI * 2, vi = (Math.random() * 5) | 0;
         (Math.random() < 0.38 ? pine : broad).push({ x, y, z, s, yaw, vi });
         m.compose(pos.set(x, y + 0.06, z), ID, scl.set(s * 2.2, 1, s * 2.2)); blobMesh.setMatrixAt(placed, m);
@@ -1778,8 +1768,7 @@
         const sx = ax[2] !== undefined ? ax[2] : (ax[0] || 0), sy = ax[3] !== undefined ? ax[3] : (ax[1] || 0);
         if (src.handedness === 'right') {
           s.tx = sx; s.ty = sy;
-          if (bt[0] && bt[0].pressed) s.interact = true; // gatilho direito = conversar / agir / escolher
-          if (bt[4] && bt[4].pressed) s.cyc = true;      // botão A = trocar de transporte
+          if (bt[0] && bt[0].pressed) s.interact = true; // gatilho direito = conversar / agir / entrar/descer do transporte
         } else {
           s.x = sx; s.y = sy;
           if (bt[0] && bt[0].pressed) s.run = true;  // gatilho (controle esquerdo) = correr
@@ -1795,6 +1784,8 @@
       if (narration) { advanceNarration(); return; } // diálogo/narração tem prioridade (inclusive no meio da batalha)
       if (inBattle) { battleInteract(); return; }
       if (eraMenuOpen) { eraSelect(eraHover); return; }
+      if (mount) { dismount(); return; }                         // dirigindo → desce
+      const vm = nearMount(); if (vm) { enterMount(vm); return; } // perto de um transporte → entra
       if (activeNPC) { advanceTalk(); return; }
       if (nearCovinha()) { plantarSemente(); return; }
       if (nearFox()) { recruitFagulha(); return; }
@@ -1806,7 +1797,6 @@
     addEventListener('keydown', e => {
       if (e.code === 'KeyE' && !e.repeat) interact();
       if (e.code === 'KeyJ' && !e.repeat) toggleJournal(); // diário de missões (PC)
-      if (!e.repeat && e.code.startsWith('Digit')) { const map = { Digit1: null, Digit2: 'carro', Digit3: 'moto', Digit4: 'cavalo', Digit5: 'aviao' }; if (e.code in map) setMount(map[e.code]); } // 1-5 = transporte (PC)
       if (e.code === 'KeyT' && !e.repeat) { const o = ['bosque', 'ermo', 'semente']; travelEra(o[(o.indexOf(currentEra) + 1) % 3]); } // TEMP: ciclar eras
       if (e.code === 'KeyR' && !e.repeat && buildPiece) ghostRY += Math.PI / 4;
       if (e.code === 'KeyX' && !e.repeat && removeMode) doRemove(removeTarget);
@@ -1826,7 +1816,7 @@
     }
 
     // ===================== TRANSPORTES (carro 🚗, moto 🏍️, cavalo 🐴, avião ✈️) =====================
-    let mount = null, flyAlt = 0, cycWas = false; // montaria atual e altura de voo do avião
+    let mount = null, flyAlt = 0; // montaria atual e altura de voo do avião
     const MOUNT_MULT = { carro: 2.4, moto: 2.7, cavalo: 2.0, aviao: 3.2 };
     // posição da câmera (altura, recuo) ao montar: você vira motorista/cavaleiro e VÊ o veículo à frente (fora do VR)
     const MOUNT_CAM = { carro: [1.5, 0.7], moto: [1.5, 0.4], cavalo: [2.2, 0.7], aviao: [1.7, 0.6] };
@@ -1866,8 +1856,20 @@
       tbox(prop, 0.12, 1.4, 0.08, 0x333333, 0, 0, 0); tbox(prop, 1.4, 0.12, 0.08, 0x333333, 0, 0, 0);
       g.add(prop); g.userData = { prop }; return g;
     }
-    const MOUNTS = { carro: buildCarro(), moto: buildMoto(), cavalo: buildCavalo(), aviao: buildAviao() };
-    for (const k in MOUNTS) { MOUNTS[k].visible = false; dolly.add(MOUNTS[k]); }
+    const MOUNT_BUILD = { carro: buildCarro, moto: buildMoto, cavalo: buildCavalo, aviao: buildAviao };
+    const MOUNT_NOME = { cavalo: 'no cavalo', carro: 'no carro', moto: 'na moto', aviao: 'no avião' };
+    // ONDE cada transporte fica no mundo (você anda até ele e ENTRA): cavalo no bosque, carro/moto na vila, avião na pista
+    const MOUNT_SPAWN = { cavalo: { x: 24, z: 56, ry: 2.0 }, carro: { x: VILA.x + 16, z: VILA.z + 6, ry: -1.2 }, moto: { x: VILA.x + 16, z: VILA.z - 6, ry: -1.2 }, aviao: { x: AIRSTRIP.x, z: AIRSTRIP.z + 18, ry: 0 } };
+    const MOUNTS = {}, parked = {};
+    for (const k in MOUNT_BUILD) {
+      const mounted = MOUNT_BUILD[k](); mounted.visible = false; dolly.add(mounted); MOUNTS[k] = mounted;          // o que você "dirige" (preso à câmera)
+      const p = MOUNT_BUILD[k](); const s = MOUNT_SPAWN[k]; p.position.set(s.x, heightAt(s.x, s.z), s.z); p.rotation.y = s.ry; scene.add(p); parked[k] = p; // o que fica parado no mundo
+    }
+    // pista de pouso (em segmentos, acompanhando o relevo) + faixas brancas
+    { const RG = new THREE.Group(), asph = new THREE.MeshStandardMaterial({ color: 0x3a3a40, roughness: 1 }), paint = new THREE.MeshStandardMaterial({ color: 0xe6e6e6, roughness: 1 });
+      for (let i = -5; i < 5; i++) { const z = AIRSTRIP.z + i * 5 + 2.5; const seg = new THREE.Mesh(new THREE.BoxGeometry(9, 0.12, 5.1), asph); seg.position.set(AIRSTRIP.x, heightAt(AIRSTRIP.x, z) + 0.06, z); RG.add(seg);
+        const dash = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 2.4), paint); dash.position.set(AIRSTRIP.x, heightAt(AIRSTRIP.x, z) + 0.12, z); RG.add(dash); }
+      scene.add(mergeByMaterial(RG)); }
     let engine = null; // ronco contínuo (carro/moto/avião)
     function setEngine(type) {
       if (engine) { try { engine.g.gain.setTargetAtTime(0.0001, actx.currentTime, 0.15); const e = engine; setTimeout(() => { try { e.o.stop(); } catch (_) {} }, 350); } catch (_) {} engine = null; }
@@ -1882,18 +1884,34 @@
       if (inBattle || mount === type) return;
       mount = type;
       for (const k in MOUNTS) MOUNTS[k].visible = false;
-      document.querySelectorAll('#mountBar .mb').forEach(b => b.classList.toggle('on', (b.dataset.m || '') === (type || '')));
       setEngine(type);
       if (type) { MOUNTS[type].visible = true; sfx(type === 'cavalo' ? 'neigh' : 'vroom'); flash(MOUNT_EMOJI[type] + ' ' + MOUNT_MSG[type]); }
       else { sfx('poof'); }
       // sobe e recua a câmera pra você ver a cabine/o cavalo à sua frente (no VR a cabeça é livre, não mexe)
       if (!renderer.xr.isPresenting) { const o = type ? MOUNT_CAM[type] : null; camera.position.set(0, o ? o[0] : 1.6, o ? o[1] : 0); }
     }
-    function cycleMount() { const order = [null, 'carro', 'moto', 'cavalo', 'aviao']; setMount(order[(order.indexOf(mount) + 1) % order.length]); }
-    document.querySelectorAll('#mountBar .mb').forEach(b => {
-      b.addEventListener('click', () => setMount(b.dataset.m || null));
-      b.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); setMount(b.dataset.m || null); }, { passive: false });
-    });
+    function nearMount() { // tipo do transporte parado por perto (e nada montado) — pra "Entrar"
+      if (mount || inBattle) return null;
+      let best = null, bd = 4.5;
+      for (const k in parked) { const p = parked[k]; if (!p.visible) continue; const d = Math.hypot(dolly.position.x - p.position.x, dolly.position.z - p.position.z); if (d < bd) { bd = d; best = k; } }
+      return best;
+    }
+    function enterMount(type) { // anda até o veículo e entra: encaixa no lugar dele e some o modelo parado
+      if (!type || inBattle) return;
+      if (activeNPC) { hideDialogue(); try { playClip(activeNPC, 'idle'); } catch (_) {} activeNPC = null; } // fecha conversa aberta ao entrar
+      const p = parked[type]; dolly.position.x = p.position.x; dolly.position.z = p.position.z; yaw = p.rotation.y; dolly.rotation.y = yaw;
+      p.visible = false; setMount(type);
+    }
+    function dismount() { // desce: o veículo (e você) fica num ponto livre, nunca dentro do lago/obstáculo
+      const type = mount; if (!type) return;
+      setMount(null); flyAlt = 0; // se for avião, pousa na hora
+      let px = dolly.position.x, pz = dolly.position.z;
+      const dx = px - LAKE.x, dz = pz - LAKE.z, ld = Math.hypot(dx, dz), min = LAKE.r + 1.2; // não pousar dentro do lago
+      if (ld < min) { const ang = ld > 0.01 ? Math.atan2(dz, dx) : 0; px = LAKE.x + Math.cos(ang) * min; pz = LAKE.z + Math.sin(ang) * min; }
+      for (const o of obstacles) { const ox = px - o.x, oz = pz - o.z, od = Math.hypot(ox, oz), md = o.r + 1.0; if (od < md) { const k = md / (od || 1); px = o.x + ox * k; pz = o.z + oz * k; } } // sair de cima de árvore/pedra/casa
+      dolly.position.x = px; dolly.position.z = pz; // você desce junto, no ponto livre
+      const p = parked[type]; p.position.set(px, floorHeightAt(px, pz, dolly.position.y), pz); p.rotation.y = dolly.rotation.y; p.visible = true;
+    }
 
     // ---------- loop ----------
     const fwd = new THREE.Vector3(), right = new THREE.Vector3(), mv = new THREE.Vector3();
@@ -1912,7 +1930,6 @@
         // gatilho direito = conversar / agir (avançar diálogo, abrir menu de batalha, escolher)
         if (s.interact && !interactWas) interact();
         interactWas = !!s.interact;
-        if (s.cyc && !cycWas) cycleMount(); cycWas = !!s.cyc; // botão A troca de transporte no VR
         // analógico direito = giro em passos (snap turn)
         if (Math.abs(s.tx) > 0.7 && !turned) { dolly.rotation.y -= Math.sign(s.tx) * Math.PI / 6; turned = true; }
         if (Math.abs(s.tx) < 0.3) turned = false;
@@ -1963,6 +1980,7 @@
         if (mdl.userData.legs) { const sw = moving ? Math.sin(t * 0.018) * 0.5 : 0; mdl.userData.legs.forEach((lg, i) => { lg.rotation.x = sw * ((i % 2) ? 1 : -1); }); }
         if (engine) engine.g.gain.setTargetAtTime(moving ? (mount === 'aviao' ? 0.05 : 0.04) : 0.006, actx.currentTime, 0.15);
       }
+      if (parked.aviao.visible && parked.aviao.userData.prop) parked.aviao.userData.prop.rotation.z += dt * 1.2; // avião parado: hélice gira devagar
       // brilho leve do lago
       lake.material.opacity = 0.8 + Math.sin(t * 0.001) * 0.06;
       // animações de todos os bichos/NPCs
@@ -2045,7 +2063,9 @@
         else setHint('');
       } else {
         const livre = !activeNPC && !eraMenuOpen, a = ' (' + actHint() + ')';
-        if (livre && nearCovinha()) setHint('🌱 Plantar a Semente-do-Amanhã' + a);
+        if (mount) setHint('🚶 Descer' + a);
+        else if (livre && nearMount()) setHint(MOUNT_EMOJI[nearMount()] + ' Entrar ' + MOUNT_NOME[nearMount()] + a);
+        else if (livre && nearCovinha()) setHint('🌱 Plantar a Semente-do-Amanhã' + a);
         else if (livre && nearFox()) setHint('🦊 Libertar a Fagulha' + a);
         else if (livre && nearLantern()) setHint('✨ Pegar a Lanterna-Vagalume' + a);
         else if (livre && nearPortal()) setHint('🌳 Tocar o Vovô Carvalho' + a);
@@ -2259,7 +2279,6 @@
       document.getElementById('intro').classList.add('hidden'); // some o card e os botões de modo
       const h = document.getElementById('hint'); h.textContent = startHintText(); h.style.display = 'block';
       const ch = document.getElementById('collectHud'); if (ch) ch.style.display = 'block'; // mostra o contador de Frutos de Luz
-      const mbar = document.getElementById('mountBar'); if (mbar) mbar.style.display = 'flex'; // mostra a barra de transportes
       const jb = document.getElementById('journalBtn'); if (jb) jb.style.display = 'block'; // botão do diário
       if (game.fase === 0) iniciarFase(1); // começa a campanha
       if (playMode === 'mobile') goFullscreen(); // celular: tela cheia + paisagem

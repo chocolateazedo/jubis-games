@@ -594,12 +594,12 @@
       bsAddRow(root, '❤ HP', '#5be07a', () => [hero.hp / hero.hpMax, hero.hp + '/' + hero.hpMax]);
       bsAddRow(root, '💧 MP', '#5aa0ff', () => [hero.mp / hero.mpMax, hero.mp + '/' + hero.mpMax]);
       bsAddRow(root, '⚡ AÇÃO', '#ffd86b', () => [battle ? battle.heroAtb : 0, battle && battle.ready ? 'PRONTO!' : '']);
-      if (b.ally) { const al = b.ally; bsAddRow(root, '🦊 ' + al.nome, '#9be07a', () => [al.hp / al.hpMax, Math.max(0, al.hp) + '']); }
+      for (const al of (b.allies || [])) if (al.alive) { const a = al; bsAddRow(root, (a.emoji || '') + ' ' + a.nome, '#9be07a', () => [a.hp / a.hpMax, Math.max(0, a.hp) + '']); }
       root.style.display = 'flex';
     }
     function tickBattleStatus() {
       if (!battle) return;
-      const sig = (battle.ally ? 1 : 0) + '|' + battle.enemies.filter(e => e.alive).map(e => e.def.nome).join(',');
+      const sig = (battle.allies || []).filter(a => a.alive).length + '|' + battle.enemies.filter(e => e.alive).map(e => e.def.nome).join(',');
       if (sig !== _bsSig) { _bsSig = sig; rebuildBattleStatus(); }
       for (const r of _bsRows) { const v = r.valFn(), pct = Math.round(Math.max(0, Math.min(1, v[0])) * 100);
         if (pct !== r.lastF) { r.lastF = pct; r.fill.style.width = pct + '%'; }
@@ -751,22 +751,57 @@
       e.hp -= dmg; sfx('hit'); spawnDmg(e.actor.wrap.position, dmg, 0xffffff); playClip(e.actor, 'eat');
       if (e.hp <= 0) { e.alive = false; defeatEnemy(e); } resetHeroTurn();
     }
-    function allyAct(al) {
+    // [2.0] PARTY: cada companheiro recrutado entra na luta com um papel próprio
+    const ALLY_DEF = {
+      fagulha: { nome: 'Fagulha', emoji: '🦊', glb: 'fox', ess: 'sol', role: 'atk', hp: 15, def: 2, mag: 5, agi: 13, h: 0.85 },
+      folho: { nome: 'Folho', emoji: '🐛', glb: 'caterpillar', tint: 0x6cba56, ess: 'folha', role: 'heal', hp: 14, def: 2, mag: 6, agi: 10, h: 0.8 },
+      gota: { nome: 'Gota', emoji: '🐢', glb: 'beaver', tint: 0x4fa0d0, ess: 'agua', role: 'atk', hp: 22, def: 5, mag: 4, agi: 8, h: 0.85 },
+    };
+    function spawnPartyAllies() {
+      if (!battle) return; battle.allies = [];
+      const recruited = ['fagulha', 'folho', 'gota'].filter(k => game.flags[k]);
+      camera.getWorldDirection(rcDir); rcDir.y = 0; rcDir.normalize(); const rvx = -rcDir.z, rvz = rcDir.x;
+      recruited.forEach((k, i) => {
+        const d = ALLY_DEF[k];
+        getGLB('../bosque-vr/pets/animal-' + d.glb + '.glb').then(g => {
+          if (!battle) return;
+          const fa = spawnActor(g, 'idle', d.h);
+          if (d.tint) { const tint = mm => { const c = mm.clone(); if (c.color) c.color.setHex(d.tint); return c; }; fa.wrap.traverse(o => { if (o.isMesh && o.material) o.material = Array.isArray(o.material) ? o.material.map(tint) : tint(o.material); }); }
+          const off = (i - (recruited.length - 1) / 2) * 1.8, ax = dolly.position.x - rcDir.x * 1.2 + rvx * off, az = dolly.position.z - rcDir.z * 1.2 + rvz * off;
+          fa.wrap.position.set(ax, heightAt(ax, az), az);
+          const hp = d.hp + hero.lvl * 2, al = { actor: fa, kind: k, nome: d.nome, emoji: d.emoji, hp, hpMax: hp, def: d.def + hero.lvl, mag: d.mag + hero.lvl, agi: d.agi, role: d.role, ess: d.ess, atb: Math.random() * 0.3, alive: true, bar: makeBar() };
+          al.bar.position.set(0, d.h + 0.6, 0); fa.wrap.add(al.bar); drawBar(al.bar, 1, d.nome + ' ' + hp);
+          battle.allies.push(al); _bsSig = null; // força rebuild do status DOM
+        }).catch(() => {});
+      });
+    }
+    function allyAttackEnemy(al) {
       const alvos = battle.enemies.filter(x => x.alive); if (!alvos.length) return;
       const tgt = alvos[(Math.random() * alvos.length) | 0];
       const mult = essMult(al.ess, tgt.def.ess), dmg = Math.max(1, Math.round((al.mag + 4 - tgt.def.def / 2) * (0.9 + Math.random() * 0.2) * mult));
       tgt.hp -= dmg; sfx('hit'); spawnDmg(tgt.actor.wrap.position, dmg, mult >= 2 ? 0xffe24a : 0xffd86b);
-      if (mult >= 2) flash('🦊 Fagulha acertou a fraqueza! ×2');
+      if (mult >= 2) flash((al.emoji || '') + ' ' + al.nome + ' acertou a fraqueza! ×2');
       if (tgt.hp <= 0) { tgt.alive = false; defeatEnemy(tgt); }
     }
+    function allyAct(al) {
+      if (al.role === 'heal') { // Folho cura o mais ferido do grupo; se ninguém precisa, ataca
+        const party = [{ frac: hero.hp / hero.hpMax, heal: h => { hero.hp = Math.min(hero.hpMax, hero.hp + h); updateHeroHud(); }, pos: dolly.position.clone().add(new THREE.Vector3(0, -0.4, 0)), nome: 'Você' }].concat(battle.allies.filter(x => x.alive).map(x => ({ frac: x.hp / x.hpMax, heal: h => { x.hp = Math.min(x.hpMax, x.hp + h); }, pos: x.actor.wrap.position, nome: x.nome })));
+        let worst = null; for (const p of party) if (!worst || p.frac < worst.frac) worst = p;
+        if (worst && worst.frac < 0.92) { const h = Math.round(al.mag + 4); worst.heal(h); sfx('ready'); spawnDmg(worst.pos, '+' + h, 0x5be07a); flash('🐛 Folho curou ' + worst.nome + '! +' + h + ' HP'); return; }
+      }
+      allyAttackEnemy(al);
+    }
     function enemyAttack(e) {
-      const al = battle.ally, miraAliada = al && al.alive && Math.random() < 0.45;
-      let dmg = Math.max(1, Math.round((e.def.atk * 2 - (miraAliada ? al.def : hero.def)) * (0.9 + Math.random() * 0.2)));
+      const aliveAllies = (battle.allies || []).filter(a => a.alive);
+      const miraAliada = aliveAllies.length && Math.random() < (aliveAllies.length / (aliveAllies.length + 1.6)); // mais aliados = herói apanha menos
       sfx('hurt'); playClip(e.actor, 'gesture-negative'); e.atb = 0;
       if (miraAliada) {
+        const al = aliveAllies[(Math.random() * aliveAllies.length) | 0];
+        const dmg = Math.max(1, Math.round((e.def.atk * 2 - al.def) * (0.9 + Math.random() * 0.2)));
         al.hp = Math.max(0, al.hp - dmg); spawnDmg(al.actor.wrap.position, dmg, 0xff6b6b);
-        if (al.hp <= 0) { al.alive = false; flash('🦊 Fagulha ficou tonta…'); puff(al.actor.wrap.position); if (al.bar) al.actor.wrap.remove(al.bar); al.actor.wrap.visible = false; }
+        if (al.hp <= 0) { al.alive = false; flash((al.emoji || '') + ' ' + al.nome + ' ficou tonto…'); puff(al.actor.wrap.position); if (al.bar) al.actor.wrap.remove(al.bar); al.actor.wrap.visible = false; }
       } else {
+        let dmg = Math.max(1, Math.round((e.def.atk * 2 - hero.def) * (0.9 + Math.random() * 0.2)));
         if (hero.defending) dmg = Math.max(1, Math.round(dmg * 0.5));
         if (game.flags.gota) dmg = Math.max(1, dmg - 1); // Gota no grupo: você apanha menos
         hero.hp = Math.max(0, hero.hp - dmg); spawnDmg(dolly.position.clone().add(new THREE.Vector3(0, -0.5, 0)), dmg, 0xff6b6b); updateHeroHud(); hurtFlash();
@@ -799,7 +834,7 @@
       inBattle = false; document.body.classList.remove('inbattle'); closeBattleMenu(); updateMusicTrack();
       if (battle && battle.ring) scene.remove(battle.ring);
       if (battle) for (const e of battle.enemies) if (e.alive && e.bar) e.actor.wrap.remove(e.bar);
-      if (battle && battle.ally && battle.ally.actor) { scene.remove(battle.ally.actor.wrap); const mi = mixers.indexOf(battle.ally.actor.mixer); if (mi >= 0) mixers.splice(mi, 1); }
+      if (battle && battle.allies) for (const al of battle.allies) { if (al.actor) { scene.remove(al.actor.wrap); const mi = mixers.indexOf(al.actor.mixer); if (mi >= 0) mixers.splice(mi, 1); } }
       battle = null; heroHud.visible = false; hideBattleStatus();
     }
 
@@ -821,15 +856,8 @@
         const e = { actor: a, def: d, hp: d.hp, hpMax: d.hp, atb: 0.2, alive: true, bar: makeBar(), boss: true };
         e.bar.position.set(0, d.h + 0.7, 0); a.wrap.add(e.bar); drawBar(e.bar, 1, d.nome + ' ' + d.hp);
         inBattle = true; document.body.classList.add('inbattle'); updateMusicTrack();
-        battle = { enemies: [e], ally: null, heroAtb: 0, ready: false, menuOpen: false, hover: -1, ring: null, boss: e, faseBatalha: 'luta', cantar: 0 };
-        if (game.flags.fagulha) { /* aliada entra também */
-          getGLB('../bosque-vr/pets/animal-fox.glb').then(g2 => {
-            if (!battle) return; const fa = spawnActor(g2, 'idle', 0.85);
-            const ax = dolly.position.x - rcDir.z * 1.7, az = dolly.position.z + rcDir.x * 1.7; fa.wrap.position.set(ax, heightAt(ax, az), az);
-            const al = { actor: fa, nome: 'Fagulha', hp: 15 + hero.lvl * 2, hpMax: 15 + hero.lvl * 2, def: 2 + hero.lvl, mag: 5 + hero.lvl, agi: 13, atb: 0, alive: true, ess: 'sol', bar: makeBar() };
-            al.bar.position.set(0, 1.3, 0); fa.wrap.add(al.bar); drawBar(al.bar, 1, 'Fagulha ' + al.hp); battle.ally = al;
-          }).catch(() => {});
-        }
+        battle = { enemies: [e], allies: [], heroAtb: 0, ready: false, menuOpen: false, hover: -1, ring: null, boss: e, faseBatalha: 'luta', cantar: 0 };
+        spawnPartyAllies(); // o grupo recrutado entra também
         const ring = new THREE.Mesh(new THREE.RingGeometry(5.0, 5.8, 48), new THREE.MeshBasicMaterial({ color: 0xb09ad0, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false }));
         ring.rotation.x = -Math.PI / 2; ring.position.set(dolly.position.x, heightAt(dolly.position.x, dolly.position.z) + 0.12, dolly.position.z); scene.add(ring); battle.ring = ring;
         heroHud.visible = !onTouchUI(); updateHeroHud(); sfx('start'); setObjetivo('Vença a Murcha… mas talvez vencer seja CUIDAR.');
@@ -874,20 +902,8 @@
       actor.wrap.position.set(ex, heightAt(ex, ez), ez);
       const d = ENEMY_DEF[actor.enemyKey], e = { actor, def: d, hp: d.hp, hpMax: d.hp, atb: Math.random() * 0.3, alive: true, bar: makeBar() };
       e.bar.position.set(0, d.h + 0.7, 0); actor.wrap.add(e.bar);
-      battle = { enemies: [e], ally: null, heroAtb: 0, ready: false, menuOpen: false, hover: -1, ring: null };
-      if (game.flags.fagulha) { // companheira entra na luta
-        const lvl = hero.lvl;
-        getGLB('../bosque-vr/pets/animal-fox.glb').then(g => {
-          if (!battle) return;
-          const fa = spawnActor(g, 'idle', 0.85);
-          camera.getWorldDirection(rcDir); rcDir.y = 0; rcDir.normalize();
-          const ax = dolly.position.x - rcDir.z * 1.7, az = dolly.position.z + rcDir.x * 1.7;
-          fa.wrap.position.set(ax, heightAt(ax, az), az);
-          const al = { actor: fa, nome: 'Fagulha', hp: 15 + lvl * 2, hpMax: 15 + lvl * 2, def: 2 + lvl, mag: 5 + lvl, agi: 13, atb: 0, alive: true, ess: 'sol', bar: makeBar() };
-          al.bar.position.set(0, 1.3, 0); fa.wrap.add(al.bar); drawBar(al.bar, 1, 'Fagulha ' + al.hp);
-          battle.ally = al;
-        }).catch(() => {});
-      }
+      battle = { enemies: [e], allies: [], heroAtb: 0, ready: false, menuOpen: false, hover: -1, ring: null };
+      spawnPartyAllies(); // o grupo recrutado (Fagulha/Folho/Gota) entra na luta
       const ring = new THREE.Mesh(new THREE.RingGeometry(4.6, 5.3, 48), new THREE.MeshBasicMaterial({ color: 0xffd86b, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false }));
       ring.rotation.x = -Math.PI / 2; ring.position.set(dolly.position.x, heightAt(dolly.position.x, dolly.position.z) + 0.12, dolly.position.z); scene.add(ring); battle.ring = ring;
       heroHud.visible = !onTouchUI(); updateHeroHud(); sfx('start'); flash('⚔ ' + d.nome + ' apareceu! Encha a barra de AÇÃO e aperte pra agir.');
@@ -913,12 +929,12 @@
         if (!b.ready) { b.heroAtb += dt * (0.30 + hero.agi / 300); if (b.heroAtb >= 1) { b.heroAtb = 1; b.ready = true; sfx('ready'); if (game.flags.folho && hero.hp < hero.hpMax) { hero.hp = Math.min(hero.hpMax, hero.hp + 1); } } } // Folho cuida do herói
         if (!acalanto) { // no Acalanto a Murcha só treme de frio, não ataca
           for (const e of b.enemies) { if (!e.alive) continue; e.atb += dt * (0.16 + e.def.agi / 220); if (e.atb >= 1) enemyAttack(e); }
-          if (b.ally && b.ally.alive) { b.ally.atb += dt * (0.16 + b.ally.agi / 200); if (b.ally.atb >= 1) { b.ally.atb = 0; allyAct(b.ally); } }
+          for (const al of b.allies) { if (!al.alive) continue; al.atb += dt * (0.16 + al.agi / 200); if (al.atb >= 1) { al.atb = 0; allyAct(al); } }
         }
       }
       camera.getWorldPosition(camW); const mob = onTouchUI(); // celular usa o status HTML; PC/VR usam as barrinhas 3D
       for (const e of b.enemies) { if (!e.alive) continue; e.actor.wrap.lookAt(dolly.position.x, e.actor.wrap.position.y, dolly.position.z); e.bar.visible = !mob; if (!mob) { if (e.bar.userData.last !== e.hp) { e.bar.userData.last = e.hp; drawBar(e.bar, e.hp / e.hpMax, e.def.nome + ' ' + Math.max(0, e.hp)); } e.bar.lookAt(camW); } }
-      if (b.ally && b.ally.alive) { const al = b.ally, en = b.enemies.find(x => x.alive); if (en) al.actor.wrap.lookAt(en.actor.wrap.position.x, al.actor.wrap.position.y, en.actor.wrap.position.z); al.bar.visible = !mob; if (!mob) { if (al.bar.userData.last !== al.hp) { al.bar.userData.last = al.hp; drawBar(al.bar, al.hp / al.hpMax, 'Fagulha ' + Math.max(0, al.hp)); } al.bar.lookAt(camW); } }
+      for (const al of b.allies) { if (!al.alive) continue; const en = b.enemies.find(x => x.alive); if (en) al.actor.wrap.lookAt(en.actor.wrap.position.x, al.actor.wrap.position.y, en.actor.wrap.position.z); al.bar.visible = !mob; if (!mob) { if (al.bar.userData.last !== al.hp) { al.bar.userData.last = al.hp; drawBar(al.bar, al.hp / al.hpMax, al.nome + ' ' + Math.max(0, al.hp)); } al.bar.lookAt(camW); } }
       // celular: quando o herói está pronto, abre a barra de ações sozinha (sem precisar mirar)
       if (b.ready && !b.menuOpen && !narration && (onTouchUI() || renderer.xr.isPresenting)) openBattleMenu(); // celular E VR: abre o menu sozinho ao ficar pronto
       if (b.menuOpen && !onTouchUI()) { const h = battlePick(); if (h >= 0 && h !== b.hover) { b.hover = h; drawBattleMenu(); } } // mira só troca a seleção quando acerta um botão (senão mantém a anterior)

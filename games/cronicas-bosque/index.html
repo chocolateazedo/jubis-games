@@ -19,9 +19,9 @@
     canvas { display: block; }
     a.back { position: fixed; top: max(12px, env(safe-area-inset-top)); left: 12px; z-index: 30; color: #fff;
       text-decoration: none; font-weight: 800; background: rgba(10,30,20,.5); padding: 7px 12px; border-radius: 12px; }
-    /* controle de toque (só em celular/tablet) */
+    /* controle de toque (só no Modo Celular, escolhido na tela inicial) */
     .touch { display: none; }
-    @media (hover: none) and (pointer: coarse) { .touch { display: block; } }
+    body.mode-mobile .touch { display: block; }
     #joy { position: fixed; left: 22px; bottom: max(26px, env(safe-area-inset-bottom)); width: 128px; height: 128px;
       border-radius: 50%; background: rgba(255,255,255,.18); border: 2px solid rgba(255,255,255,.4); z-index: 25; }
     #stick { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px; border-radius: 50%; background: rgba(120,220,150,.85); }
@@ -34,7 +34,10 @@
     #btnPular, #btnCorrer { width: 60px; height: 60px; font-size: 24px; background: rgba(255,255,255,.18); }
     #fsBtn { position: fixed; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); z-index: 25; width: 46px; height: 46px; font-size: 20px; background: rgba(0,0,0,.35); }
     /* botão VR (gerado pelo three) e o nosso start */
-    #VRButton { z-index: 30; }
+    #VRButton { display: none !important; } /* escondido: o VR é acionado pelo botão "Entrar VR" da tela inicial */
+    .modes { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+    .modes .go { width: 100%; margin-top: 0; }
+    .modes .go:disabled { opacity: .45; cursor: default; box-shadow: none; }
     #intro { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; padding: 18px;
       background: radial-gradient(circle at 50% 30%, rgba(20,40,30,.55), rgba(6,14,10,.82)); }
     #intro.hidden { display: none; }
@@ -69,7 +72,7 @@
     #bPlace { background: linear-gradient(90deg, #7be88f, #43d977); } #bRot { background: #cfe9ff; } #bCancel { background: #ffd0d0; }
     #bUp, #bDown { background: #ffe6a8; min-width: 46px; }
     .hidden { display: none !important; }
-    #talkHint { position: fixed; z-index: 26; left: 50%; bottom: 22%; transform: translateX(-50%); display: none;
+    #talkHint { position: fixed; z-index: 26; left: 50%; bottom: max(84px, calc(env(safe-area-inset-bottom) + 70px)); transform: translateX(-50%); display: none;
       background: rgba(8,24,16,.78); color: #eaffee; border: 1px solid rgba(160,230,180,.5); border-radius: 14px;
       padding: 10px 16px; font-weight: 700; font-size: 15px; cursor: pointer; }
     #questBar { position: fixed; z-index: 27; top: max(58px, calc(env(safe-area-inset-top) + 52px)); left: 50%; transform: translateX(-50%); display: none;
@@ -109,7 +112,7 @@
   <p id="hint">Arraste/mouse para olhar · WASD ou direcional para andar</p>
 
   <div id="questBar"></div>
-  <div id="talkHint">💬 Conversar (E / gatilho)</div>
+  <div id="talkHint">💬 Conversar</div>
   <div id="battleBar"></div>
   <div id="toast"></div>
 
@@ -123,7 +126,13 @@
         📱 <b>Celular:</b> <b>arraste</b> pra olhar, <b>direcional</b> pra andar, toque pra falar.<br>
         <span style="opacity:.7">Chegue perto do <b>Vovô Carvalho</b> pra viajar entre as eras.</span>
       </div>
-      <button class="go" id="goBtn">▶ Começar a aventura</button>
+      <p style="margin:14px 0 2px; font-weight:700;">Escolha como vai jogar:</p>
+      <div class="modes">
+        <button class="go" id="modeMobile">📱 Modo Celular</button>
+        <button class="go" id="modePC">🖥️ Modo PC</button>
+        <button class="go" id="modeVR">🥽 Entrar VR</button>
+      </div>
+      <p id="vrNote" style="display:none; margin:8px 0 0; font-size:13px; opacity:.7;">VR não disponível neste aparelho — escolha Celular ou PC.</p>
     </div>
   </div>
   <div id="roomCode" style="display:none"></div>
@@ -435,7 +444,9 @@
       }
       c.textAlign = 'left'; c.textBaseline = 'alphabetic'; batTex.needsUpdate = true;
     }
-    function onTouchUI() { return (('ontouchstart' in window) || navigator.maxTouchPoints > 0) && !renderer.xr.isPresenting; }
+    let playMode = 'pc'; // 'mobile' | 'pc' | 'vr' — escolhido na tela inicial
+    function onTouchUI() { return playMode === 'mobile'; } // barra de ações DOM só no Modo Celular
+    function actHint() { return playMode === 'vr' ? 'aperte o gatilho' : playMode === 'mobile' ? 'toque em Ação' : 'tecla E'; }
     function renderBattleBar() {
       const bb = document.getElementById('battleBar'); if (!bb || !battle) return;
       bb.innerHTML = '';
@@ -1485,9 +1496,16 @@
       if (activeNPC) {
         camera.getWorldPosition(camTmp); activeNPC.wrap.getWorldPosition(npcTmp);
         dlgPlane.position.set(npcTmp.x, npcTmp.y + 2.2, npcTmp.z); dlgPlane.lookAt(camTmp);
-      } else if (narration) { // balão da narração: na frente do jogador
-        camera.getWorldPosition(camTmp); camera.getWorldDirection(rcDir); rcDir.y = 0; rcDir.normalize();
-        dlgPlane.position.set(camTmp.x + rcDir.x * 2.4, camTmp.y - 0.1, camTmp.z + rcDir.z * 2.4); dlgPlane.lookAt(camTmp);
+      } else if (narration) { // balão da narração
+        camera.getWorldPosition(camTmp);
+        if (renderer.xr.isPresenting) { // VR: fixa no mundo (não segue a cabeça) — dá pra ler virando o pescoço
+          if (!narration.wpos) { camera.getWorldDirection(rcDir); rcDir.y = 0; rcDir.normalize(); narration.wpos = new THREE.Vector3(camTmp.x + rcDir.x * 2.2, camTmp.y - 0.05, camTmp.z + rcDir.z * 2.2); }
+          dlgPlane.position.copy(narration.wpos);
+        } else { // PC/celular: confortável à frente da câmera
+          camera.getWorldDirection(rcDir); rcDir.y = 0; rcDir.normalize();
+          dlgPlane.position.set(camTmp.x + rcDir.x * 2.4, camTmp.y - 0.1, camTmp.z + rcDir.z * 2.4);
+        }
+        dlgPlane.lookAt(camTmp);
       }
       // NPCs visíveis só na sua era; a Lanterna boia e gira
       for (const a of npcs) if (a.story) a.wrap.visible = a.story.era === currentEra;
@@ -1523,18 +1541,21 @@
       if (inBattle) updateBattle(dt); else { checkAggro(); checkBoss(); }
       updateDying(dt);
       // dica de interação (contextual) — a narração tem prioridade (até no meio da batalha)
-      if (narration) { talkHint.textContent = '▶ Continuar (toque / E / gatilho)'; talkHint.style.display = 'block'; }
+      if (narration) { talkHint.textContent = '▶ Continuar (' + actHint() + ')'; talkHint.style.display = 'block'; }
       else if (inBattle) {
-        if (battle && battle.ready && !battle.menuOpen) { talkHint.textContent = '⚔ Agir! (toque / E / gatilho)'; talkHint.style.display = 'block'; }
-        else if (battle && battle.menuOpen) { talkHint.textContent = 'Toque a opção / mire e confirme'; talkHint.style.display = 'block'; }
+        if (battle && battle.ready && !battle.menuOpen) { talkHint.textContent = '⚔ Agir! (' + actHint() + ')'; talkHint.style.display = 'block'; }
+        else if (battle && battle.menuOpen) {
+          if (playMode === 'mobile') talkHint.style.display = 'none'; // a barra de ações já está na tela
+          else { talkHint.textContent = playMode === 'vr' ? 'Mire a ação e aperte o gatilho' : 'Mire a ação e tecle E'; talkHint.style.display = 'block'; }
+        }
         else talkHint.style.display = 'none';
       } else {
-        const livre = !activeNPC && !eraMenuOpen;
-        if (livre && nearCovinha()) { talkHint.textContent = '🌱 Plantar a Semente-do-Amanhã (E / gatilho)'; talkHint.style.display = 'block'; }
-        else if (livre && nearFox()) { talkHint.textContent = '🦊 Libertar a Fagulha (E / gatilho)'; talkHint.style.display = 'block'; }
-        else if (livre && nearLantern()) { talkHint.textContent = '✨ Pegar a Lanterna-Vagalume (E / gatilho)'; talkHint.style.display = 'block'; }
-        else if (livre && nearPortal()) { talkHint.textContent = '🌳 Tocar o Vovô Carvalho (E / gatilho)'; talkHint.style.display = 'block'; }
-        else if (livre && nearestNPC()) { talkHint.textContent = '💬 Conversar (E / gatilho)'; talkHint.style.display = 'block'; }
+        const livre = !activeNPC && !eraMenuOpen, a = ' (' + actHint() + ')';
+        if (livre && nearCovinha()) { talkHint.textContent = '🌱 Plantar a Semente-do-Amanhã' + a; talkHint.style.display = 'block'; }
+        else if (livre && nearFox()) { talkHint.textContent = '🦊 Libertar a Fagulha' + a; talkHint.style.display = 'block'; }
+        else if (livre && nearLantern()) { talkHint.textContent = '✨ Pegar a Lanterna-Vagalume' + a; talkHint.style.display = 'block'; }
+        else if (livre && nearPortal()) { talkHint.textContent = '🌳 Tocar o Vovô Carvalho' + a; talkHint.style.display = 'block'; }
+        else if (livre && nearestNPC()) { talkHint.textContent = '💬 Conversar' + a; talkHint.style.display = 'block'; }
         else talkHint.style.display = 'none';
       }
       renderer.render(scene, camera);
@@ -1727,17 +1748,38 @@
       }
     }
 
-    // ---------- início (solo ou multiplayer) ----------
+    // ---------- início: escolha do modo (Celular / PC / VR) ----------
+    function startHintText() {
+      if (playMode === 'vr') return 'Use a alavanca pra andar · gatilho pra agir';
+      if (playMode === 'mobile') return 'Direcional pra andar · arraste pra olhar · botão Ação pra agir';
+      return 'WASD pra andar · mouse pra olhar · tecla E pra agir';
+    }
     function startGame() {
       startAudio();
-      document.getElementById('intro').classList.add('hidden');
-      document.getElementById('hint').style.display = 'block';
+      document.getElementById('intro').classList.add('hidden'); // some o card e os botões de modo
+      const h = document.getElementById('hint'); h.textContent = startHintText(); h.style.display = 'block';
       if (game.fase === 0) iniciarFase(1); // começa a campanha
-      if (touchDev) goFullscreen(); // celular: tela cheia + paisagem
-      if (!renderer.xr.isPresenting && cv.requestPointerLock && !('ontouchstart' in window)) cv.requestPointerLock();
-      setTimeout(() => { document.getElementById('hint').style.display = 'none'; }, 6000);
+      if (playMode === 'mobile') goFullscreen(); // celular: tela cheia + paisagem
+      if (playMode === 'pc' && cv.requestPointerLock) cv.requestPointerLock();
+      setTimeout(() => { h.style.display = 'none'; }, 6000);
     }
-    document.getElementById('goBtn').addEventListener('click', startGame);
+    function setMode(m) {
+      playMode = m;
+      document.body.classList.remove('mode-mobile', 'mode-pc', 'mode-vr');
+      document.body.classList.add('mode-' + m);
+    }
+    document.getElementById('modeMobile').addEventListener('click', () => { setMode('mobile'); startGame(); });
+    document.getElementById('modePC').addEventListener('click', () => { setMode('pc'); startGame(); });
+    document.getElementById('modeVR').addEventListener('click', () => {
+      setMode('vr'); startGame();
+      const vb = document.getElementById('VRButton'); if (vb) vb.click(); // aciona a sessão WebXR criada pelo three
+    });
+    // habilita "Entrar VR" só se o aparelho suportar
+    (function () {
+      const disableVR = () => { const b = document.getElementById('modeVR'); if (b) b.disabled = true; const n = document.getElementById('vrNote'); if (n) n.style.display = 'block'; };
+      if (navigator.xr && navigator.xr.isSessionSupported) navigator.xr.isSessionSupported('immersive-vr').then(ok => { if (!ok) disableVR(); }).catch(disableVR);
+      else disableVR();
+    })();
   </script>
 </body>
 </html>

@@ -167,10 +167,32 @@
     const UP = new THREE.Vector3(0, 1, 0);
 
     // ---------- renderer / cena ----------
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    // chute inicial de "celular" (refina quando o jogador escolhe o modo): sem antialias e em 1x
+    const guessMobile = matchMedia('(hover: none) and (pointer: coarse)').matches || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    const renderer = new THREE.WebGLRenderer({ antialias: !guessMobile, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(guessMobile ? 1 : Math.min(devicePixelRatio, 2));
     renderer.setSize(innerWidth, innerHeight);
     renderer.xr.enabled = true;
+    // ---------- qualidade: perfil por modo + resolução adaptativa (mantém o FPS no celular) ----------
+    let qBase = guessMobile ? 1 : Math.min(devicePixelRatio, 2), qScale = 1, fpsEMA = 60, lastQAdjust = 0;
+    function applyQuality() {
+      if (playMode === 'mobile') qBase = 1;            // 1x: maior ganho de FPS no celular
+      else if (playMode === 'pc') qBase = Math.min(devicePixelRatio, 2);
+      qScale = 1; if (!renderer.xr.isPresenting) renderer.setPixelRatio(qBase * qScale);
+      // menos partículas (blending/overdraw) no celular
+      if (typeof pGeo !== 'undefined' && pGeo.setDrawRange) pGeo.setDrawRange(0, playMode === 'mobile' ? 70 : PCOUNT);
+      // névoa mais curta no celular reduz o que aparece ao fundo
+      if (scene.fog) scene.fog.far = playMode === 'mobile' ? 150 : 230;
+    }
+    function adaptiveQuality(t, dt) { // só no celular: baixa a resolução se o FPS cair, sobe se sobrar folga
+      if (playMode !== 'mobile' || renderer.xr.isPresenting || dt <= 0) return;
+      fpsEMA = fpsEMA * 0.9 + (1 / dt) * 0.1;
+      if (t - lastQAdjust < 1500) return; lastQAdjust = t;
+      let ns = qScale;
+      if (fpsEMA < 45 && qScale > 0.6) ns = Math.max(0.6, qScale - 0.15);
+      else if (fpsEMA > 56 && qScale < 1) ns = Math.min(1, qScale + 0.15);
+      if (ns !== qScale) { qScale = ns; renderer.setPixelRatio(qBase * qScale); }
+    }
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     document.body.appendChild(renderer.domElement);
 
@@ -1414,6 +1436,12 @@
     let interactWas = false, rotWas = false, menuWas = false, remWas = false, liftWas = false;
     let toastT = 0;
     function flash(msg) { const el = document.getElementById('toast'); el.textContent = msg; el.style.opacity = '1'; clearTimeout(toastT); toastT = setTimeout(() => el.style.opacity = '0', 2800); }
+    // dica de ação: só toca o DOM quando o texto/visibilidade muda (evita recalcular layout todo frame no celular)
+    let _hintTxt = '', _hintShown = false;
+    function setHint(txt) {
+      if (txt) { if (txt !== _hintTxt) { talkHint.textContent = txt; _hintTxt = txt; } if (!_hintShown) { talkHint.style.display = 'block'; _hintShown = true; } }
+      else if (_hintShown) { talkHint.style.display = 'none'; _hintShown = false; }
+    }
 
     // ---------- loop ----------
     const fwd = new THREE.Vector3(), right = new THREE.Vector3(), mv = new THREE.Vector3();
@@ -1541,23 +1569,21 @@
       if (inBattle) updateBattle(dt); else { checkAggro(); checkBoss(); }
       updateDying(dt);
       // dica de interação (contextual) — a narração tem prioridade (até no meio da batalha)
-      if (narration) { talkHint.textContent = '▶ Continuar (' + actHint() + ')'; talkHint.style.display = 'block'; }
+      if (narration) setHint('▶ Continuar (' + actHint() + ')');
       else if (inBattle) {
-        if (battle && battle.ready && !battle.menuOpen) { talkHint.textContent = '⚔ Agir! (' + actHint() + ')'; talkHint.style.display = 'block'; }
-        else if (battle && battle.menuOpen) {
-          if (playMode === 'mobile') talkHint.style.display = 'none'; // a barra de ações já está na tela
-          else { talkHint.textContent = playMode === 'vr' ? 'Mire a ação e aperte o gatilho' : 'Mire a ação e tecle E'; talkHint.style.display = 'block'; }
-        }
-        else talkHint.style.display = 'none';
+        if (battle && battle.ready && !battle.menuOpen) setHint('⚔ Agir! (' + actHint() + ')');
+        else if (battle && battle.menuOpen) setHint(playMode === 'mobile' ? '' : (playMode === 'vr' ? 'Mire a ação e aperte o gatilho' : 'Mire a ação e tecle E'));
+        else setHint('');
       } else {
         const livre = !activeNPC && !eraMenuOpen, a = ' (' + actHint() + ')';
-        if (livre && nearCovinha()) { talkHint.textContent = '🌱 Plantar a Semente-do-Amanhã' + a; talkHint.style.display = 'block'; }
-        else if (livre && nearFox()) { talkHint.textContent = '🦊 Libertar a Fagulha' + a; talkHint.style.display = 'block'; }
-        else if (livre && nearLantern()) { talkHint.textContent = '✨ Pegar a Lanterna-Vagalume' + a; talkHint.style.display = 'block'; }
-        else if (livre && nearPortal()) { talkHint.textContent = '🌳 Tocar o Vovô Carvalho' + a; talkHint.style.display = 'block'; }
-        else if (livre && nearestNPC()) { talkHint.textContent = '💬 Conversar' + a; talkHint.style.display = 'block'; }
-        else talkHint.style.display = 'none';
+        if (livre && nearCovinha()) setHint('🌱 Plantar a Semente-do-Amanhã' + a);
+        else if (livre && nearFox()) setHint('🦊 Libertar a Fagulha' + a);
+        else if (livre && nearLantern()) setHint('✨ Pegar a Lanterna-Vagalume' + a);
+        else if (livre && nearPortal()) setHint('🌳 Tocar o Vovô Carvalho' + a);
+        else if (livre && nearestNPC()) setHint('💬 Conversar' + a);
+        else setHint('');
       }
+      adaptiveQuality(t, dt); // celular: ajusta a resolução pra segurar o FPS
       renderer.render(scene, camera);
     }
     renderer.setAnimationLoop(frame);
@@ -1767,6 +1793,7 @@
       playMode = m;
       document.body.classList.remove('mode-mobile', 'mode-pc', 'mode-vr');
       document.body.classList.add('mode-' + m);
+      applyQuality(); // aplica o perfil de desempenho do modo escolhido
     }
     document.getElementById('modeMobile').addEventListener('click', () => { setMode('mobile'); startGame(); });
     document.getElementById('modePC').addEventListener('click', () => { setMode('pc'); startGame(); });

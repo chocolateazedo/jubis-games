@@ -193,6 +193,7 @@
     import { VRButton } from 'three/addons/webxr/VRButton.js';
     import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
     const SPEED = 3.2;                 // metros por segundo
     const WORLD_R = 178;               // raio andável
@@ -340,14 +341,68 @@
     const PORTAL = { x: 6, z: 22 };
     const vovo = new THREE.Group();
     let treeVariants = []; // variações de árvore extraídas do trees.glb (pro Vovô e a muda)
+    // Vovô Carvalho: um ENT ancião esculpido — rosto na casca, barba de musgo, braços-galho, pés-raiz e copa frondosa.
+    // (peças mescladas por material → ~10 draw calls em vez de ~70, leve no celular)
+    function buildVovo() {
+      const bark = new THREE.MeshStandardMaterial({ color: 0x7a5736, roughness: 1, flatShading: true });
+      const barkM = new THREE.MeshStandardMaterial({ color: 0x5e4126, roughness: 1, flatShading: true });
+      const barkD = new THREE.MeshStandardMaterial({ color: 0x231711, roughness: 1 });
+      const moss = new THREE.MeshStandardMaterial({ color: 0x5f8a3a, roughness: 1, flatShading: true });
+      const mossD = new THREE.MeshStandardMaterial({ color: 0x47702c, roughness: 1, flatShading: true });
+      const leafA = new THREE.MeshStandardMaterial({ color: 0x4f9a44, roughness: 0.9, flatShading: true });
+      const leafB = new THREE.MeshStandardMaterial({ color: 0x3c8038, roughness: 0.9, flatShading: true });
+      const leafC = new THREE.MeshStandardMaterial({ color: 0x6cba56, roughness: 0.9, flatShading: true });
+      const bloss = new THREE.MeshStandardMaterial({ color: 0xffd2e4, roughness: 0.8, flatShading: true });
+      const rnd = (s => () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; })(98765); // pseudo-aleatório fixo
+      const parts = [];
+      const ICO = r => new THREE.IcosahedronGeometry(r, 0), BOX = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+      const CONE = (r, h, s) => new THREE.ConeGeometry(r, h, s || 6), CYL = (a, b, h, s) => new THREE.CylinderGeometry(a, b, h, s || 7);
+      const mk = (geo, mat, x, y, z, rx, ry, rz, sx, sy, sz) => { const m = new THREE.Mesh(geo, mat); m.position.set(x || 0, y || 0, z || 0); m.rotation.set(rx || 0, ry || 0, rz || 0); if (sx !== undefined) m.scale.set(sx, sy, sz); parts.push(m); return m; };
+      // TRONCO (lathe — silhueta orgânica)
+      const prof = [[2.6, 0], [2.2, 0.7], [1.6, 1.7], [1.95, 3.1], [1.55, 4.3], [1.8, 5.5], [2.0, 6.4], [1.5, 7.3], [0.8, 8.0]].map(p => new THREE.Vector2(p[0], p[1]));
+      mk(new THREE.LatheGeometry(prof, 16), bark, 0, 0, 0);
+      for (let i = 0; i < 6; i++) { const a = i / 6 * 6.2832 + 0.2; mk(CYL(0.1, 0.16, 6.0, 5), barkM, Math.cos(a) * 1.7, 3.1, Math.sin(a) * 1.7, Math.sin(a) * 0.05, 0, -Math.cos(a) * 0.05); }
+      for (const k of [[1.3, 2.4, 1.1, 0.4], [-1.2, 3.6, 1.0, 0.3], [1.0, 5.0, -1.0, 0.35], [-1.4, 1.6, 0.4, 0.45]]) mk(ICO(k[3]), barkM, k[0], k[1], k[2], 0, 0, 0, 1, 0.7, 1);
+      // ROSTO (frente +z, y≈6)
+      const fz = 1.45;
+      mk(BOX(1.05, 0.4, 0.55), barkM, -0.55, 6.55, fz, 0, 0, 0.12); mk(BOX(1.05, 0.4, 0.55), barkM, 0.55, 6.55, fz, 0, 0, -0.12); // sobrancelhas pesadas
+      const eyes = [];
+      for (const ex of [-0.58, 0.58]) {
+        mk(ICO(0.46), barkD, ex, 6.2, fz - 0.02, 0, 0, 0, 1.1, 1, 0.55);                      // soquete fundo
+        const pup = new THREE.Mesh(new THREE.SphereGeometry(0.23, 14, 12), new THREE.MeshStandardMaterial({ color: 0x4a3414, emissive: 0xffdf80, emissiveIntensity: 1.8 })); pup.position.set(ex, 6.18, fz + 0.24); eyes.push(pup);
+        for (let k = 0; k < 3; k++) mk(ICO(0.17), moss, ex - 0.2 + k * 0.2, 6.74, fz, 0, 0, 0, 1, 0.7, 0.7); // sobrancelha de musgo
+      }
+      mk(BOX(0.5, 1.4, 0.7), bark, 0, 5.75, fz + 0.16, -0.18, 0, 0); mk(BOX(0.66, 0.34, 0.5), barkM, 0, 5.05, fz + 0.28); // nariz
+      for (const sx of [-1, 1]) mk(BOX(0.7, 0.14, 0.3), barkM, sx * 0.85, 5.55, fz - 0.08, 0, 0, sx * 0.5);            // rugas/bochecha
+      mk(new THREE.TorusGeometry(0.78, 0.13, 8, 20, Math.PI), barkD, 0, 4.92, fz + 0.12, Math.PI, 0, 0); mk(BOX(1.25, 0.18, 0.34), barkM, 0, 4.6, fz + 0.02); // boca (sorriso) + lábio
+      for (let i = 0; i < 9; i++) { const sx = (i - 4) / 4, len = 1.6 + rnd() * 1.6; mk(CYL(0.06, 0.14, len, 5), i % 3 ? moss : mossD, sx * 1.0, 4.4 - len / 2, fz - 0.12 - Math.abs(sx) * 0.3, 0.12, 0, 0); } // BARBA
+      // BRAÇOS-GALHO
+      for (const side of [-1, 1]) {
+        const raise = side < 0 ? 1 : -1, ey = 5.0 + (raise > 0 ? 0.5 : -0.6), hx = side * 3.2, hy = ey + (raise > 0 ? 1.0 : -0.8);
+        mk(CYL(0.3, 0.42, 2.2, 6), bark, side * 1.5, 5.0, 0.1, 0, 0, side * 1.0);
+        mk(CYL(0.2, 0.3, 1.9, 6), bark, side * 2.7, ey, 0.3, -0.3, 0, side * (raise > 0 ? -0.6 : 0.5));
+        for (let k = -1; k <= 1; k++) mk(CONE(0.06, 0.7, 5), bark, hx, hy + k * 0.18, 0.5, 0, 0, side * 0.2 + k * 0.2);
+        for (let k = 0; k < 4; k++) mk(ICO(0.5), [leafA, leafC, leafB][k % 3], hx + (k - 1.5) * 0.3, hy + 0.3 + (k % 2) * 0.3, 0.5 + (k % 2) * 0.3, 0, 0, 0, 1, 0.9, 1);
+      }
+      // PÉS-RAIZ
+      for (let i = 0; i < 8; i++) { const a = i / 8 * 6.2832; mk(CYL(0.16, 0.55, 2.3, 6), bark, Math.cos(a) * 1.7, 0.5, Math.sin(a) * 1.7, Math.sin(a) * 1.0, 0, -Math.cos(a) * 1.0); }
+      for (const m of [[1.4, 4.0, 0.9], [-1.5, 5.2, 0.6], [0.9, 2.0, 1.3], [-1.0, 6.2, -0.8]]) mk(ICO(0.5), moss, m[0], m[1], m[2], 0, 0, 0, 1.2, 0.5, 1.2); // musgo no corpo
+      // COPA
+      const crown = [[0, 9.4, 0, 2.5], [-1.9, 8.9, 0.4, 1.7], [1.9, 9.0, -0.3, 1.7], [0.4, 10.5, 0.2, 1.7], [-0.9, 9.6, -1.6, 1.5], [1.2, 9.5, 1.5, 1.5], [0, 8.6, 1.9, 1.3], [-2.2, 9.8, -0.6, 1.2], [2.1, 10.0, 0.5, 1.2]];
+      crown.forEach((c, i) => mk(ICO(c[3]), [leafA, leafB, leafC][i % 3], c[0], c[1], c[2], 0, 0, 0, 1, 0.92, 1));
+      for (let i = 0; i < 7; i++) { const a = rnd() * 6.2832, r = 1.5 + rnd() * 1.8; mk(ICO(0.18), bloss, Math.cos(a) * r, 9 + rnd() * 1.6, Math.sin(a) * r); }
+      // MESCLAGEM por material
+      const g = new THREE.Group(), buckets = new Map();
+      for (const m of parts) { m.updateMatrix(); let baked = m.geometry.clone().applyMatrix4(m.matrix); if (baked.index) baked = baked.toNonIndexed(); baked.deleteAttribute('uv2'); if (!buckets.has(m.material)) buckets.set(m.material, []); buckets.get(m.material).push(baked); }
+      for (const [mat, geos] of buckets) { const merged = mergeGeometries(geos, false); if (merged) g.add(new THREE.Mesh(merged, mat)); else geos.forEach(gg => g.add(new THREE.Mesh(gg, mat))); }
+      for (const e of eyes) g.add(e);
+      g.userData.eyes = eyes; return g;
+    }
     {
-      // carinha gentil do Vovô (olhos que brilham + sorriso), na frente do tronco — a copa vem do modelo real
-      const dark = new THREE.MeshStandardMaterial({ color: 0x2a1a08 });
-      for (const ex of [-0.7, 0.7]) { const eye = new THREE.Mesh(new THREE.SphereGeometry(0.3, 14, 12), new THREE.MeshStandardMaterial({ color: 0x2a1a08, emissive: 0xffe39a, emissiveIntensity: 0.7 })); eye.position.set(ex, 4.2, 1.85); vovo.add(eye); }
-      const sm = new THREE.Mesh(new THREE.TorusGeometry(0.72, 0.14, 8, 18, Math.PI), dark); sm.position.set(0, 3.5, 1.8); sm.rotation.x = Math.PI; vovo.add(sm);
-      const ring = new THREE.Mesh(new THREE.RingGeometry(3.4, 4.6, 48), new THREE.MeshBasicMaterial({ color: 0x9be8ff, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
-      ring.rotation.x = -Math.PI / 2; ring.position.y = 0.18; vovo.add(ring); vovo.userData.ring = ring;
-      const glow = new THREE.PointLight(0xffd98a, 1.1, 26, 2); glow.position.set(0, 6, 0); vovo.add(glow); vovo.userData.glow = glow; // brilho mágico quentinho
+      const vv = buildVovo(); vovo.add(vv); vovo.userData.eyes = vv.userData.eyes;
+      const ring = new THREE.Mesh(new THREE.RingGeometry(3.6, 4.9, 56), new THREE.MeshBasicMaterial({ color: 0x9be8ff, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
+      ring.rotation.x = -Math.PI / 2; ring.position.y = 0.16; vovo.add(ring); vovo.userData.ring = ring;
+      const glow = new THREE.PointLight(0xffd98a, 1.2, 30, 2); glow.position.set(0, 6.2, 1.6); vovo.add(glow); vovo.userData.glow = glow;
       vovo.position.set(PORTAL.x, heightAt(PORTAL.x, PORTAL.z), PORTAL.z); scene.add(vovo);
     }
     // monta uma árvore avulsa (Group de meshes) a partir de uma variação do GLB, na altura desejada
@@ -900,10 +955,7 @@
 
     const gltfLoader = new GLTFLoader();
     gltfLoader.load('../bosque-vr/models/trees.glb', g => {
-      treeVariants = extractVariants(g); buildInstanced(treeVariants, broad, 6.5);
-      // Vovô Carvalho: a árvore real maior e mais bonita do bosque (copa do modelo, bem grande)
-      const big = treeVariants.reduce((a, b) => (b.h > a.h ? b : a), treeVariants[0]);
-      const vt = buildTreeFromVariant(big, 13, true); vovo.add(vt); vovo.userData.tree = vt;
+      treeVariants = extractVariants(g); buildInstanced(treeVariants, broad, 6.5); // (Vovô agora é esculpido à parte; o GLB serve à floresta e à muda)
     });
     gltfLoader.load('../bosque-vr/models/pines.glb', g => buildInstanced(extractVariants(g), pine, 8.5));
 
@@ -1791,6 +1843,7 @@
       // VOVÔ/eras: anel girando, clarão de transição, hover do menu das eras
       vovo.userData.ring.rotation.z += dt * 0.6;
       vovo.userData.ring.material.opacity = 0.4 + Math.sin(t * 0.003) * 0.15;
+      { const pulse = 1.0 + Math.sin(t * 0.0025) * 0.4; if (vovo.userData.eyes) for (const e of vovo.userData.eyes) e.material.emissiveIntensity = pulse; if (vovo.userData.glow) vovo.userData.glow.intensity = 1.0 + Math.sin(t * 0.0025) * 0.35; }
       updateFade(dt);
       if (eraMenuOpen && !onTouchUI()) { const h = eraPick(); if (h !== eraHover) { eraHover = h; drawEraMenu(); } }
       // COMBATE: tick da batalha ou checa aproximação de inimigo; efeitos morrendo

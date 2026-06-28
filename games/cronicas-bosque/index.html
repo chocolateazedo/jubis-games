@@ -341,6 +341,9 @@
       semente: { bg: 0xffe0c0, useEnv: false, fog: [0xffe6c8, 70, 260], sun: [0xffe6b0, 1.25], hemi: [0xfff0d8, 0x6f8f5a, 0.60], ground: 0xbfe6a0, shore: 0xe8d2a0, water: 0x4fd0c0, waterOp: 0.80, tree: 0xcfffcf, part: { color: 0xffd4e6, size: 0.55, add: false, fall: -0.35 } },
     };
     const treeMeshes = []; // árvores/pedras instanciadas, tingidas por era
+    // [2.0] Vila e transportes mudam de cara por era: no Ermo ficam murchos/acinzentados e as luzes apagam
+    const eraTintMats = [], _eraTintSeen = new Set(), ERMO_GREY = new THREE.Color(0x5a5348);
+    function registerEraTint(root) { root.traverse(o => { if (o.isMesh && o.material && !Array.isArray(o.material) && !_eraTintSeen.has(o.material)) { _eraTintSeen.add(o.material); eraTintMats.push({ m: o.material, c: o.material.color.clone(), e: o.material.emissiveIntensity || 0 }); } }); }
     let currentEra = 'bosque';
     function applyEra(e) {
       const E = ERAS[e] || ERAS.bosque; currentEra = e;
@@ -354,6 +357,7 @@
       shore.material.color.setHex(E.shore);
       lake.material.color.setHex(E.water); lake.material.opacity = E.waterOp;
       for (const tm of treeMeshes) tm.material.color.setHex(E.tree);
+      for (const it of eraTintMats) { if (e === 'ermo') { it.m.color.copy(it.c).lerp(ERMO_GREY, 0.62); if (it.e) it.m.emissiveIntensity = it.e * 0.08; } else { it.m.color.copy(it.c); if (it.e) it.m.emissiveIntensity = it.e; } } // Vila/transportes por era
       pMat.color.setHex(E.part.color); pMat.size = E.part.size; pMat.blending = E.part.add ? THREE.AdditiveBlending : THREE.NormalBlending; pMat.needsUpdate = true; partFall = E.part.fall;
     }
     applyEra('bosque');
@@ -1167,7 +1171,7 @@
         well.position.set(VILA.x, wy, VILA.z); VG.add(well); obstacles.push({ x: VILA.x, z: VILA.z, r: 1.3 }); }
       for (let i = 0; i < NC; i++) { const a = (i + 0.5) / NC * 6.2832, lx = VILA.x + Math.cos(a) * 8.5, lz = VILA.z + Math.sin(a) * 8.5, ly = heightAt(lx, lz), lp = new THREE.Group(); box(lp, 0.18, 3.0, 0.18, M.wood, 0, 1.5, 0); const lan = new THREE.Mesh(new THREE.IcosahedronGeometry(0.34, 0), M.lamp); lan.position.y = 3.1; lp.add(lan); lp.position.set(lx, ly, lz); VG.add(lp); }
       { const sx = VILA.x + 24, sz = VILA.z + 18, sy = heightAt(sx, sz), sg = new THREE.Group(); box(sg, 0.16, 2.4, 0.16, M.wood, 0, 1.2, 0); box(sg, 2.6, 1.0, 0.12, M.wallA, 0, 2.1, 0); sg.position.set(sx, sy, sz); sg.rotation.y = Math.atan2(10 - sx, 64 - sz); VG.add(sg); }
-      scene.add(mergeByMaterial(VG));
+      { const villa = mergeByMaterial(VG); scene.add(villa); registerEraTint(villa); } // a Vila muda de cor por era
       const vlight = new THREE.PointLight(0xffe0a0, 0.85, 44, 2); vlight.position.set(VILA.x, heightAt(VILA.x, VILA.z) + 5, VILA.z); scene.add(vlight);
     }
     // moradores da vila (só no presente)
@@ -2060,7 +2064,7 @@
     const MOUNTS = {}, parked = {};
     for (const k in MOUNT_BUILD) {
       const mounted = MOUNT_BUILD[k](); mounted.visible = false; dolly.add(mounted); MOUNTS[k] = mounted;          // o que você "dirige" (preso à câmera)
-      const p = MOUNT_BUILD[k](); const s = MOUNT_SPAWN[k]; p.position.set(s.x, heightAt(s.x, s.z), s.z); p.rotation.y = s.ry; scene.add(p); parked[k] = p; // o que fica parado no mundo
+      const p = MOUNT_BUILD[k](); const s = MOUNT_SPAWN[k]; p.position.set(s.x, heightAt(s.x, s.z), s.z); p.rotation.y = s.ry; scene.add(p); parked[k] = p; registerEraTint(p); // o que fica parado no mundo (muda de cor por era)
     }
     // pista de pouso (em segmentos, acompanhando o relevo) + faixas brancas
     { const RG = new THREE.Group(), asph = new THREE.MeshStandardMaterial({ color: 0x3a3a40, roughness: 1 }), paint = new THREE.MeshStandardMaterial({ color: 0xe6e6e6, roughness: 1 });

@@ -2646,7 +2646,7 @@
       if (!stepBufs.length) for (let n = 0; n < 10; n++) {
         fetch(`../bosque-vr/sounds/footstep0${n}.ogg`).then(r => r.arrayBuffer()).then(b => actx.decodeAudioData(b)).then(b => stepBufs.push(b)).catch(() => {});
       }
-      scheduleBird(); startMusic();
+      scheduleBird(); startMusic(); startAmbience();
     }
     // passo na grama: toca uma amostra real aleatória, com leve variação de tom/volume
     function step() {
@@ -2696,7 +2696,7 @@
         nextNoteT += six; step16++;
       }
     }
-    function setTrack(name) { if (name !== curTrack) { curTrack = name; step16 = 0; nextNoteT = Math.max(nextNoteT, actx.currentTime + 0.05); } }
+    function setTrack(name) { if (name !== curTrack) { curTrack = name; step16 = 0; nextNoteT = Math.max(nextNoteT, actx.currentTime + 0.05); setAmbience(name); } }
     function updateMusicTrack() { if (musicBus) setTrack(inBattle ? 'batalha' : (TRACKS[currentEra] ? currentEra : 'bosque')); }
     function startMusic() {
       if (!actx || musicBus) return;
@@ -2704,6 +2704,25 @@
       musicBus.gain.setTargetAtTime(0.5, actx.currentTime, 1.5); // fade-in suave
       nextNoteT = actx.currentTime + 0.1; step16 = 0; updateMusicTrack();
       musicTimer = setInterval(musicScheduler, 30);
+    }
+    // ambiência sustentada por era: um drone tonal que NUNCA para, pra ter som o tempo todo em cada era
+    let ambBus = null, ambOscs = [], ambFilter = null;
+    function startAmbience() {
+      if (!actx || ambBus) return;
+      ambBus = actx.createGain(); ambBus.gain.value = 0.0001; ambBus.connect(actx.destination);
+      ambBus.gain.setTargetAtTime(0.06, actx.currentTime, 2.5); // fade-in suave
+      ambFilter = actx.createBiquadFilter(); ambFilter.type = 'lowpass'; ambFilter.frequency.value = 700; ambFilter.Q.value = 0.7; ambFilter.connect(ambBus);
+      const gains = [0.5, 0.34, 0.22]; // raiz, quinta, oitava — um acorde aberto e grave
+      for (let i = 0; i < 3; i++) { const o = actx.createOscillator(); o.type = 'sine'; const g = actx.createGain(); g.gain.value = gains[i]; o.connect(g).connect(ambFilter); o.start(); ambOscs.push(o); }
+      const lfo = actx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 0.05; const lg = actx.createGain(); lg.gain.value = 140; lfo.connect(lg).connect(ambFilter.frequency); lfo.start(); // respira devagar
+      setAmbience(curTrack);
+    }
+    function setAmbience(name) {
+      if (!ambOscs.length) return;
+      const T = TRACKS[name] || TRACKS.bosque, rootM = T.root - 12, now = actx.currentTime;
+      const tones = [rootM, rootM + (T.chord[2] || 7), rootM + 12];
+      ambOscs.forEach((o, i) => o.frequency.setTargetAtTime(m2f(tones[i]), now, 1.0));
+      ambFilter.frequency.setTargetAtTime(T.scale === SCALE_MAJ ? 1000 : 560, now, 1.5); // era alegre = mais aberto; murcho = mais fechado
     }
     renderer.xr.addEventListener('sessionstart', startAudio);
 

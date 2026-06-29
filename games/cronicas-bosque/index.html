@@ -1352,7 +1352,7 @@
     const LACO_NOME = { riacho: 'O Riacho Represado', corvo: 'O Corvo Espantado', lampiao: 'O Lampião Aceso', muda: 'A Muda Curada Demais', cipo: 'A Ponte de Cipó' }; // [2.0] nomes dos laços/folhas/companheiros pro Diário
     const FOLHA_NOME = { primavera: '🍃 Primavera', verao: '☀️ Verão', chuvas: '💧 Chuvas', inverno: '🩶 Inverno' };
     const COMP_NOME = { fagulha: '🦊 Fagulha', folho: '🐛 Folho', gota: '🐢 Gota', brisa: '🦋 Brisa' };
-    const SQ_NOME = { bromelia: 'Dona Bromélia — replantar as mudinhas', tonico: 'Tonico — reacender os lampiões', brotinhos: 'Os Brotinhos — cantar a Canção' }; // [2.0] Missões da Vila pro Diário
+    const SQ_NOME = { bromelia: 'Dona Bromélia — replantar as mudinhas', tonico: 'Tonico — reacender os lampiões', brotinhos: 'Os Brotinhos — cantar a Canção', samambaia: 'Vovó Samambaia — o segredo da Última Cantora (Renascer)' }; // [2.0] Missões da Vila pro Diário
     function renderJournal() {
       const b = document.querySelector('#journal .jbody'); if (!b) return; b.innerHTML = '';
       const lacoKeys = game.lacos ? Object.keys(game.lacos) : [], teiaAtiva = (game.folhas && game.folhas.length) || lacoKeys.length;
@@ -1832,6 +1832,47 @@
       const bosque = currentEra === 'bosque';
       for (const g of sqMarkers.mudinha) g.visible = bosque && game.sidequests.bromelia === 'ativa' && !g.userData.planted;
       for (const g of sqMarkers.lampiao) g.visible = bosque;
+    }
+    // ---------- Era Renascer (futuro curado): epílogo visitável — Vovó Samambaia (cena secreta) + a Brisa ----------
+    function fimDeColecao() { return game.coletados >= (typeof COLLECT_N !== 'undefined' ? COLLECT_N : 16); }
+    getGLB('../bosque-vr/npcs/character-e.glb').then(g => { // Vovó Samambaia no Renascer: o segredo da Última Cantora (SQ6)
+      const rx = PORTAL.x + 4, rz = PORTAL.z + 5;
+      const a = spawnActor(g, 'idle', 1.5); a.wrap.position.set(rx, heightAt(rx, rz), rz); a.wrap.rotation.y = Math.atan2(-rx, -rz);
+      a.wrap.userData = {
+        nome: 'Vovó Samambaia',
+        falasFn: () => {
+          const base = ['Você conseguiu, criança… olha o amanhã: voltou a ser verde. 🌳💚',
+            'Quer saber quem era a Murcha? Era a Última Cantora. Há muito tempo ela ficou sozinha e, com medo do silêncio, engoliu o último verso — pra que o Inverno nunca acabasse e ninguém fosse embora.',
+            'Mas você cantou COM ela, não contra. O medo virou Brisa. Aquela borboleta de luz ali… é o coração dela, leve enfim. 🦋'];
+          return fimDeColecao()
+            ? base.concat(['E porque você cuidou de cada cantinho e juntou TODOS os Frutos de Luz, ela volta — só uma vez mais — pra cantar com você o verso que faltava. Escuta… 🌟', '🎶 …e por um instante, as Quatro Folhas cantam juntas no céu do Renascer: 🍃 Primavera, ☀️ Verão, 💧 Chuvas e 🩶 Inverno, em paz. Fim. 💚'])
+            : base.concat(['Volte quando juntar TODOS os Frutos de Luz, criança — aí eu te mostro o segredo da última canção dela. 🌟']);
+        },
+        onEnd: () => {
+          if (fimDeColecao()) { if (game.sidequests.samambaia !== 'feita') { game.sidequests.samambaia = 'feita'; sfx('fanfare'); flash('🌟 Você viu a cena secreta da Última Cantora!'); } }
+          else if (!game.sidequests.samambaia) game.sidequests.samambaia = 'ativa';
+          renderJournal(); saveGame('auto');
+        }
+      };
+      a.story = { era: 'renascer' }; npcs.push(a);
+    }).catch(() => {});
+    let brisaBorboleta = null;
+    function criarBrisa() { // a Brisa: a Murcha redimida, borboleta de luz que voa no futuro curado
+      brisaBorboleta = new THREE.Group();
+      const corpo = new THREE.Mesh(new THREE.IcosahedronGeometry(0.18, 0), new THREE.MeshStandardMaterial({ color: 0xffe24a, emissive: 0xffcc33, emissiveIntensity: 0.5, roughness: 0.5, flatShading: true })); brisaBorboleta.add(corpo);
+      for (const sx of [-1, 1]) { const asa = new THREE.Mesh(new THREE.IcosahedronGeometry(0.42, 0), new THREE.MeshStandardMaterial({ color: 0xff9ec9, emissive: 0xd84a8a, emissiveIntensity: 0.4, roughness: 0.6, flatShading: true })); asa.scale.set(1.1, 0.7, 0.18); asa.position.set(sx * 0.42, 0.06, 0); brisaBorboleta.add(asa); }
+      brisaBorboleta.position.set(PORTAL.x + 2, heightAt(PORTAL.x + 2, PORTAL.z + 2) + 2.2, PORTAL.z + 2); scene.add(brisaBorboleta); brisaBorboleta.visible = false;
+    }
+    criarBrisa();
+    function updateBrisa(t) {
+      if (!brisaBorboleta) return;
+      brisaBorboleta.visible = currentEra === 'renascer';
+      if (!brisaBorboleta.visible) return;
+      const cx = PORTAL.x + 2, cz = PORTAL.z + 2;
+      brisaBorboleta.position.x = cx + Math.cos(t * 0.0009) * 3; brisaBorboleta.position.z = cz + Math.sin(t * 0.0009) * 3;
+      brisaBorboleta.position.y = heightAt(brisaBorboleta.position.x, brisaBorboleta.position.z) + 2.0 + Math.sin(t * 0.003) * 0.4;
+      brisaBorboleta.rotation.y = -t * 0.0009 + Math.PI / 2;
+      for (let i = 1; i <= 2; i++) brisaBorboleta.children[i].rotation.z = Math.sin(t * 0.02) * 0.7 * (i === 1 ? 1 : -1);
     }
     function checkUnlockRaiz() { if (!game.flags.raiz && game.folhas.length >= 2) { game.flags.raiz = true; setTimeout(() => flash('🌰 Uma raiz mais funda se abriu! Toque o Vovô e viaje à RAIZ, o passado profundo.'), 1400); } }
 
@@ -2510,7 +2551,7 @@
       if (brotoNovo) { brotoNovo.visible = currentEra === 'bosque' && game.flags.sementePlantada;
         if (brotoNovo.visible && brotoGrow < 1) { brotoGrow = Math.min(1, brotoGrow + dt * 0.5); const e = 1 - Math.pow(1 - brotoGrow, 3); brotoNovo.scale.setScalar(0.06 + 0.94 * e); } }
       updateCollectibles(dt, t); // frutos de luz giram, boiam e são coletados ao chegar perto
-      updateTeia(t); updateTeia2(t); updateTeia3(t); updateTeia4(t); updateTeia5(t); updateSidequests(); updateConstructo(t); // [2.0] Teia + Constructo (era Raiz) + sidequests
+      updateTeia(t); updateTeia2(t); updateTeia3(t); updateTeia4(t); updateTeia5(t); updateSidequests(); updateBrisa(t); updateConstructo(t); // [2.0] Teia + Constructo (era Raiz) + sidequests + Brisa (Renascer)
       if (shopOpen && !nearShop()) closeShop(); // saiu de perto da banca → fecha a loja
       if (!game.flags.vilaVista && currentEra === 'bosque' && Math.hypot(dolly.position.x - VILA.x, dolly.position.z - VILA.z) < 24) { game.flags.vilaVista = true; flash('🏘️ Você chegou à Vila do Carvalho!'); sfx('ready'); }
       // partículas mágicas: derivam, caem/sobem conforme a era e seguem o jogador

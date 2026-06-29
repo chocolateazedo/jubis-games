@@ -1880,6 +1880,39 @@
       brisaBorboleta.rotation.y = -t * 0.0009 + Math.PI / 2;
       for (let i = 1; i <= 2; i++) brisaBorboleta.children[i].rotation.z = Math.sin(t * 0.02) * 0.7 * (i === 1 ? 1 : -1);
     }
+    // ---------- Seta-guia da missão: aponta na visão pra onde ir (estilo clássico do gênero) ----------
+    const QUEST = { covinha: { x: 9, z: 50 }, cogu: { x: 6, z: 56 }, samambaia: { x: VILA.x + 4, z: VILA.z - 8 } };
+    function questTarget() { // {x,z,era} da missão principal atual; null = sem alvo
+      const f = game.fase, fl = game.flags;
+      if (f < 1) return null;
+      if (f === 1) { if (!fl.cogu) return { x: QUEST.cogu.x, z: QUEST.cogu.z, era: 'bosque' };
+        if (!fl.vila) return { x: QUEST.samambaia.x, z: QUEST.samambaia.z, era: 'bosque' };
+        return { x: PORTAL.x, z: PORTAL.z, era: 'bosque' }; }                                  // volte e toque o Vovô
+      if (f === 2) return lanternItem ? { x: lanternItem.position.x, z: lanternItem.position.z, era: 'bosque' } : { x: PORTAL.x, z: PORTAL.z, era: 'bosque' }; // ache a Lanterna
+      if (f === 3) return { x: PORTAL.x, z: PORTAL.z, era: 'bosque' };                          // toque o Vovô e viaje ao Ermo
+      if (f === 4) return { x: QUEST.covinha.x, z: QUEST.covinha.z, era: 'semente' };           // plante na Semente
+      if (f === 5) return { x: QUEST.covinha.x, z: QUEST.covinha.z, era: 'bosque' };            // veja o que mudou no presente
+      if (f === 6 || f === 7) return { x: PORTAL.x, z: PORTAL.z, era: 'ermo' };                 // encare a Murcha no Ermo
+      return null; // fim (fase 8): missão principal concluída
+    }
+    const questArrow = new THREE.Group();
+    { const am = new THREE.MeshBasicMaterial({ color: 0xffd84a, transparent: true, opacity: 0.92, depthTest: false });
+      const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.07, 0.55), am); shaft.position.z = -0.12; questArrow.add(shaft);
+      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.24, 0.42, 4), am); tip.rotation.x = Math.PI / 2; tip.position.z = 0.34; questArrow.add(tip); // ponta aponta +Z
+      questArrow.renderOrder = 998; questArrow.visible = false; scene.add(questArrow);
+    }
+    const qaPos = new THREE.Vector3(), qaDir = new THREE.Vector3();
+    function updateQuestArrow(t) {
+      let tgt = (inBattle || activeNPC || narration || eraMenuOpen) ? null : questTarget();
+      if (tgt && tgt.era && tgt.era !== currentEra) tgt = { x: PORTAL.x, z: PORTAL.z }; // alvo noutra era → vá ao Vovô pra viajar
+      if (!tgt) { questArrow.visible = false; return; }
+      const dx = tgt.x - dolly.position.x, dz = tgt.z - dolly.position.z, dist = Math.hypot(dx, dz);
+      if (dist < 4.5) { questArrow.visible = false; return; } // já chegou pertinho
+      camera.getWorldPosition(qaPos); camera.getWorldDirection(qaDir); qaDir.y = 0; if (qaDir.lengthSq() < 1e-4) qaDir.set(0, 0, -1); qaDir.normalize();
+      questArrow.position.set(qaPos.x + qaDir.x * 2.4, qaPos.y - 0.75 + Math.sin(t * 0.004) * 0.07, qaPos.z + qaDir.z * 2.4);
+      questArrow.rotation.set(0, Math.atan2(dx, dz), 0);
+      questArrow.visible = true;
+    }
     function checkUnlockRaiz() { if (!game.flags.raiz && game.folhas.length >= 2) { game.flags.raiz = true; setTimeout(() => flash('🌰 Uma raiz mais funda se abriu! Toque o Vovô e viaje à RAIZ, o passado profundo.'), 1400); } }
 
     // ----- ATO III — A RAIZ: o Constructo de Pedra (chefe-coração resolvido com companhia) → Folha das Chuvas -----
@@ -2557,7 +2590,7 @@
       if (brotoNovo) { brotoNovo.visible = currentEra === 'bosque' && game.flags.sementePlantada;
         if (brotoNovo.visible && brotoGrow < 1) { brotoGrow = Math.min(1, brotoGrow + dt * 0.5); const e = 1 - Math.pow(1 - brotoGrow, 3); brotoNovo.scale.setScalar(0.06 + 0.94 * e); } }
       updateCollectibles(dt, t); // frutos de luz giram, boiam e são coletados ao chegar perto
-      updateTeia(t); updateTeia2(t); updateTeia3(t); updateTeia4(t); updateTeia5(t); updateSidequests(); updateBrisa(t); updateConstructo(t); // [2.0] Teia + Constructo (era Raiz) + sidequests + Brisa (Renascer)
+      updateTeia(t); updateTeia2(t); updateTeia3(t); updateTeia4(t); updateTeia5(t); updateSidequests(); updateBrisa(t); updateQuestArrow(t); updateConstructo(t); // [2.0] Teia + Constructo (era Raiz) + sidequests + Brisa (Renascer) + seta-guia
       if (shopOpen && !nearShop()) closeShop(); // saiu de perto da banca → fecha a loja
       if (!game.flags.vilaVista && currentEra === 'bosque' && Math.hypot(dolly.position.x - VILA.x, dolly.position.z - VILA.z) < 24) { game.flags.vilaVista = true; flash('🏘️ Você chegou à Vila do Carvalho!'); sfx('ready'); }
       // partículas mágicas: derivam, caem/sobem conforme a era e seguem o jogador

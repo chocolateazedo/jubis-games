@@ -118,18 +118,19 @@
     #journal .jclose { display: block; margin: 12px auto 0; border: none; border-radius: 12px; padding: 10px 22px; font-weight: 800; cursor: pointer; color: #06321b; background: linear-gradient(90deg, #7be88f, #43d977); }
     /* ===== painéis HTML nítidos do Modo Celular (substituem os canvas 3D, que embaçam em baixa resolução) ===== */
     #dialogBox { position: fixed; z-index: 30; left: 50%; top: 11%; transform: translateX(-50%); display: none;
-      width: min(92vw, 560px); background: linear-gradient(180deg, rgba(16,40,28,.96), rgba(8,22,16,.97));
+      width: min(92vw, 560px); max-height: 74vh; overflow-y: auto; -webkit-overflow-scrolling: touch; background: linear-gradient(180deg, rgba(16,40,28,.96), rgba(8,22,16,.97));
       border: 2px solid rgba(160,230,180,.6); border-radius: 16px; padding: 14px 18px; box-shadow: 0 14px 40px rgba(0,0,0,.5); cursor: pointer; }
     #dialogBox .dname { color: #bdf5c8; font-weight: 800; font-size: 18px; margin-bottom: 5px; }
-    #dialogBox .dtext { color: #fff; font-size: 17px; line-height: 1.45; }
+    #dialogBox .dtext { color: #fff; font-size: 17px; line-height: 1.45; overflow-wrap: break-word; word-break: break-word; }
     #dialogBox .dcont { color: #8fdfa0; font-size: 13px; margin-top: 9px; }
     #eraMenu { position: fixed; z-index: 31; left: 50%; top: 15%; transform: translateX(-50%); display: none;
       width: min(94vw, 560px); background: rgba(8,22,16,.96); border: 2px solid rgba(160,230,180,.6); border-radius: 16px; padding: 14px; text-align: center; box-shadow: 0 14px 40px rgba(0,0,0,.5); }
     #eraMenu .emtitle { color: #bdf5c8; font-weight: 800; font-size: 18px; margin-bottom: 12px; }
     #eraMenu .embtns { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
-    #eraMenu .ebtn { flex: 1; border: 2px solid rgba(160,230,180,.4); background: rgba(255,255,255,.06); color: #eaffee; border-radius: 12px;
-      padding: 14px 6px; font-weight: 800; font-size: 16px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-    #eraMenu .ebtn .esub { display: block; color: #9fdfae; font-size: 12px; font-weight: 600; margin-top: 5px; }
+    #eraMenu .ebtn { flex: 1 1 96px; min-width: 88px; max-width: 168px; border: 2px solid rgba(160,230,180,.4); background: rgba(255,255,255,.06); color: #eaffee; border-radius: 12px;
+      padding: 12px 6px; font-weight: 800; font-size: 15px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    #eraMenu .ebtn .etag { display: block; white-space: nowrap; }
+    #eraMenu .ebtn .esub { display: block; color: #9fdfae; font-size: 12px; font-weight: 600; margin-top: 5px; white-space: nowrap; }
     #eraMenu .ebtn.cur { border-color: #ffe6a0; color: #ffe6a0; }
     #eraMenu .ebtn:active { background: rgba(120,220,150,.35); }
     #battleStatus { position: fixed; z-index: 27; left: 50%; top: max(96px, calc(env(safe-area-inset-top) + 90px)); transform: translateX(-50%); display: none;
@@ -482,12 +483,13 @@
       c.strokeStyle = 'rgba(160,230,180,0.6)'; c.lineWidth = 5; c.stroke();
       c.textAlign = 'center'; c.textBaseline = 'middle';
       c.fillStyle = '#bdf5c8'; c.font = 'bold 30px Arial'; c.fillText('Pra qual tempo, broto?', W / 2, 24);
+      const fit = (text, start, min, pad) => { let f = start; c.font = f + 'px Arial'; while (c.measureText(text).width > cw - pad && f > min) { f -= 2; c.font = f + 'px Arial'; } return f; }; // encolhe pra caber na célula
       for (let i = 0; i < n; i++) {
         const x = i * cw, k = list[i], info = ERA_INFO[k];
         c.fillStyle = eraHover === i ? 'rgba(120,220,150,0.45)' : 'rgba(255,255,255,0.06)';
         rr(c, x + 8, 60, cw - 16, H - 80, 14); c.fill();
-        c.fillStyle = currentEra === k ? '#ffe6a0' : '#eaffee'; c.font = (n > 3 ? '28px' : '38px') + ' Arial'; c.fillText(info.tag, x + cw / 2, H / 2);
-        c.fillStyle = '#9fdfae'; c.font = (n > 3 ? '17px' : '22px') + ' Arial'; c.fillText(info.sub, x + cw / 2, H / 2 + 46);
+        c.fillStyle = currentEra === k ? '#ffe6a0' : '#eaffee'; c.font = fit(info.tag, n > 3 ? 28 : 38, 14, 22) + 'px Arial'; c.fillText(info.tag, x + cw / 2, H / 2);
+        c.fillStyle = '#9fdfae'; c.font = fit(info.sub, n > 3 ? 17 : 22, 11, 18) + 'px Arial'; c.fillText(info.sub, x + cw / 2, H / 2 + 42);
       }
       c.textAlign = 'left'; c.textBaseline = 'alphabetic'; eraTex.needsUpdate = true;
     }
@@ -495,7 +497,7 @@
       const box = document.getElementById('eraMenu'), wrap = box.querySelector('.embtns'); wrap.innerHTML = '';
       eraList().forEach((k, i) => {
         const info = ERA_INFO[k], b = document.createElement('button'); b.className = 'ebtn' + (currentEra === k ? ' cur' : '');
-        b.innerHTML = info.tag + '<span class="esub">' + info.sub + '</span>';
+        b.innerHTML = '<span class="etag">' + info.tag + '</span><span class="esub">' + info.sub + '</span>';
         b.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); eraSelect(i); }, { passive: false });
         b.addEventListener('click', () => eraSelect(i));
         wrap.appendChild(b);
@@ -869,7 +871,7 @@
 
     // ===================== CHEFE: MURCHA, a Mariposa =====================
     function checkBoss() {
-      if (inBattle || game.flags.bossDone) return;
+      if (inBattle || game.flags.bossDone || activeNPC || narration) return; // nunca entra em batalha durante um diálogo
       if (currentEra === 'ermo' && game.fase >= 6 && Math.hypot(dolly.position.x - PORTAL.x, dolly.position.z - PORTAL.z) < 14) startBossBattle();
     }
     function startBossBattle() {
@@ -953,7 +955,7 @@
       heroHud.visible = !onTouchUI(); updateHeroHud(); sfx('start'); flash('⚔ ' + d.nome + ' apareceu! Encha a barra de AÇÃO e aperte pra agir.');
     }
     function checkAggro() {
-      if (inBattle) return;
+      if (inBattle || activeNPC || narration) return; // ou está em diálogo, ou em batalha — nunca os dois
       for (const a of overworldEnemies) { if (a.defeated) continue; if (Math.hypot(dolly.position.x - a.wrap.position.x, dolly.position.z - a.wrap.position.z) < 4.5) { startBattle(a); break; } }
     }
     function updateOverworldEnemies(dt) { // inimigos perto caminham na sua direção (mais ação)
@@ -1456,16 +1458,20 @@
       new THREE.MeshBasicMaterial({ map: dlgTex, transparent: true, depthTest: false }));
     dlgPlane.renderOrder = 999; dlgPlane.visible = false; scene.add(dlgPlane);
     function rr(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+    function wrapLines(c, texto, maxW) { const words = texto.split(' '); const lines = []; let line = '';
+      for (const w of words) { if (line && c.measureText(line + w).width > maxW) { lines.push(line.trimEnd()); line = w + ' '; } else line += w + ' '; } if (line.trim()) lines.push(line.trimEnd()); return lines; }
     function drawDialogue(nome, texto) {
       const c = dlgCtx; c.clearRect(0, 0, 1024, 320);
       c.fillStyle = 'rgba(8,22,16,0.92)'; rr(c, 8, 8, 1008, 304, 36); c.fill();
       c.strokeStyle = 'rgba(160,230,180,0.6)'; c.lineWidth = 5; c.stroke();
-      c.fillStyle = '#bdf5c8'; c.font = 'bold 52px Arial'; c.fillText(nome, 44, 86);
-      c.fillStyle = '#fff'; c.font = '42px Arial';
-      const words = texto.split(' '); let line = '', y = 156;
-      for (const w of words) { if (c.measureText(line + w).width > 940) { c.fillText(line, 44, y); line = w + ' '; y += 56; } else line += w + ' '; }
-      c.fillText(line, 44, y);
-      c.fillStyle = '#8fdfa0'; c.font = '30px Arial'; c.fillText('▶ continuar', 44, 286);
+      const hasName = !!nome; const maxW = 936;
+      if (hasName) { c.fillStyle = '#bdf5c8'; c.font = 'bold 46px Arial'; c.fillText(nome, 44, 74); }
+      const top = hasName ? 104 : 56, bottom = 268; // região de texto entre o nome e o "continuar"
+      let fs = 42; c.font = fs + 'px Arial'; let lines = wrapLines(c, texto, maxW), lh = fs + 12; // encolhe a fonte até o texto caber sempre
+      while (lines.length * lh > (bottom - top) && fs > 20) { fs -= 3; c.font = fs + 'px Arial'; lines = wrapLines(c, texto, maxW); lh = fs + 10; }
+      c.fillStyle = '#fff'; c.font = fs + 'px Arial';
+      let y = top + fs; for (const ln of lines) { c.fillText(ln, 44, y); y += lh; }
+      c.fillStyle = '#8fdfa0'; c.font = '28px Arial'; c.fillText('▶ continuar', 44, 300);
       dlgTex.needsUpdate = true;
     }
     let activeNPC = null, talkIdx = 0, narration = null;

@@ -2713,7 +2713,9 @@
     };
     let musicBus = null, curTrack = 'bosque', step16 = 0, nextNoteT = 0, musicTimer = null;
     function m2f(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+    function scaleNote(scale, deg) { const L = scale.length; return scale[((deg % L) + L) % L] + 12 * Math.floor(deg / L); } // grau >= 7 sobe de oitava (antes virava NaN e travava a trilha)
     function mvoz(freq, t, dur, gain, wave) {
+      if (!isFinite(freq) || freq <= 0) return; // nunca deixa um valor ruim travar o agendador
       const o = actx.createOscillator(), g = actx.createGain(); o.type = wave; o.frequency.value = freq;
       g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + 0.03); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
       o.connect(g).connect(musicBus); o.start(t); o.stop(t + dur + 0.05);
@@ -2725,7 +2727,7 @@
         const t = nextNoteT, s = step16 % 16, bar = Math.floor(step16 / 16) % T.prog.length, rootM = T.root + T.prog[bar];
         if (s % 8 === 0) mvoz(m2f(rootM - 12), t, spb * 0.95, 0.10, 'sine');                       // baixo
         if (s === 0) for (const iv of T.chord) mvoz(m2f(rootM + iv), t, spb * 3.6, 0.028, 'sine');  // acorde/pad
-        const deg = T.mel[s]; if (deg >= 0) mvoz(m2f(rootM + 12 + T.scale[deg]), t, six * 1.7, 0.07, T.wave); // melodia
+        const deg = T.mel[s]; if (deg >= 0) mvoz(m2f(rootM + 12 + scaleNote(T.scale, deg)), t, six * 1.7, 0.07, T.wave); // melodia
         nextNoteT += six; step16++;
       }
     }

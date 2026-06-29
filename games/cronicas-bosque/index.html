@@ -133,8 +133,8 @@
     #eraMenu .ebtn .esub { display: block; color: #9fdfae; font-size: 12px; font-weight: 600; margin-top: 5px; white-space: nowrap; }
     #eraMenu .ebtn.cur { border-color: #ffe6a0; color: #ffe6a0; }
     #eraMenu .ebtn:active { background: rgba(120,220,150,.35); }
-    #battleStatus { position: fixed; z-index: 27; left: 50%; top: max(96px, calc(env(safe-area-inset-top) + 90px)); transform: translateX(-50%); display: none;
-      flex-direction: column; gap: 5px; width: min(92vw, 460px); pointer-events: none; }
+    #battleStatus { position: fixed; z-index: 27; right: max(10px, env(safe-area-inset-right)); top: max(64px, calc(env(safe-area-inset-top) + 58px)); display: none;
+      flex-direction: column; gap: 5px; width: min(86vw, 360px); pointer-events: none; }
     #battleStatus .bsrow { display: flex; align-items: center; gap: 8px; }
     #battleStatus .bsname { color: #eaffee; font-weight: 700; font-size: 13px; min-width: 84px; text-align: right; text-shadow: 0 1px 3px #000; }
     #battleStatus .bstrack { position: relative; flex: 1; height: 19px; background: rgba(0,0,0,.55); border-radius: 10px; overflow: hidden; border: 1px solid rgba(160,230,180,.35); }
@@ -679,6 +679,7 @@
     let playMode = 'pc'; // 'mobile' | 'pc' | 'vr' — escolhido na tela inicial
     // UI DOM do celular: NUNCA dentro do headset (o DOM não aparece na camada XR — usaria painéis invisíveis e travaria a luta)
     function onTouchUI() { return playMode === 'mobile' && !renderer.xr.isPresenting; }
+    function battleDomUI() { return !renderer.xr.isPresenting; } // [3.0] batalha em 3ª pessoa: PC e celular usam a UI HTML (ficha + barra); só o VR fica 3D/1ª pessoa
     function actHint() { return playMode === 'vr' ? 'aperte o gatilho' : playMode === 'mobile' ? 'toque em Ação' : 'tecla E'; }
     function renderBattleBar() {
       const bb = document.getElementById('battleBar'); if (!bb || !battle) return;
@@ -696,7 +697,7 @@
     }
     function openBattleMenu() {
       hero.defending = false; battle.menuOpen = true; battle.hover = 0; battle.sub = null; // já abre com "Atacar" pré-selecionado (VR não fica preso na mira)
-      if (onTouchUI()) { renderBattleBar(); return; } // celular: barra de botões tocáveis (sem mira)
+      if (battleDomUI()) { renderBattleBar(); return; } // PC/celular: barra de botões (sem mira 3D)
       camera.getWorldPosition(rcPos); camera.getWorldDirection(rcDir); rcDir.y = 0; rcDir.normalize();
       battlePanel.position.set(rcPos.x + rcDir.x * 1.6, rcPos.y - 0.1, rcPos.z + rcDir.z * 1.6); battlePanel.lookAt(rcPos.x, rcPos.y - 0.1, rcPos.z);
       battlePanel.visible = true; drawBattleMenu();
@@ -711,7 +712,7 @@
     }
     function aliveEnemy() { return battle && battle.enemies.find(e => e.alive); }
     function resetHeroTurn() { battle.heroAtb = 0; battle.ready = false; }
-    function refreshMenu() { if (!battle || !battle.menuOpen) return; if (onTouchUI()) renderBattleBar(); else drawBattleMenu(); }
+    function refreshMenu() { if (!battle || !battle.menuOpen) return; if (battleDomUI()) renderBattleBar(); else drawBattleMenu(); }
     function battleSelect(i) {
       if (i < 0 || !battle) return;
       if (battle.faseBatalha === 'acalanto') { cantar(); refreshMenu(); return; } // canta sem fechar o menu (3 notas seguidas)
@@ -785,25 +786,32 @@
       gota: { nome: 'Gota', emoji: '🐢', glb: 'beaver', tint: 0x4fa0d0, ess: 'agua', role: 'atk', hp: 22, def: 5, mag: 4, agi: 8, h: 0.85 },
       brisa: { nome: 'Brisa', emoji: '🦋', glb: 'bee', tint: 0xb0a0d8, ess: 'cinza', role: 'heal', hp: 18, def: 3, mag: 7, agi: 12, h: 0.9 },
     };
-    function spawnPartyAllies() {
+    function spawnPartyAllies() { // [3.0] modelos procedurais em formação ao lado do herói (de costas, encarando o inimigo)
       if (!battle) return; battle.allies = [];
       const recruited = ['fagulha', 'folho', 'gota', 'brisa'].filter(k => game.flags[k]);
-      camera.getWorldDirection(rcDir); rcDir.y = 0; rcDir.normalize(); const rvx = -rcDir.z, rvz = rcDir.x;
+      const fx = battle.fx, fz = battle.fz, rvx = -fz, rvz = fx, encara = Math.atan2(fx, fz);
       recruited.forEach((k, i) => {
-        const d = ALLY_DEF[k];
-        getGLB('../bosque-vr/pets/animal-' + d.glb + '.glb').then(g => {
-          if (!battle) return;
-          const fa = spawnActor(g, 'idle', d.h);
-          if (d.tint) { const tint = mm => { const c = mm.clone(); if (c.color) c.color.setHex(d.tint); return c; }; fa.wrap.traverse(o => { if (o.isMesh && o.material) o.material = Array.isArray(o.material) ? o.material.map(tint) : tint(o.material); }); }
-          const off = (i - (recruited.length - 1) / 2) * 1.8, ax = dolly.position.x - rcDir.x * 1.2 + rvx * off, az = dolly.position.z - rcDir.z * 1.2 + rvz * off;
-          fa.wrap.position.set(ax, heightAt(ax, az), az);
-          let hp = d.hp + hero.lvl * 2; if (game.flags.coro) hp = Math.round(hp * 1.25); // [2.0] coro dos Brotinhos reforça a party
-          const al = { actor: fa, kind: k, nome: d.nome, emoji: d.emoji, hp, hpMax: hp, def: d.def + hero.lvl, mag: d.mag + hero.lvl, agi: d.agi, role: d.role, ess: d.ess, atb: Math.random() * 0.3, alive: true, bar: makeBar() };
-          al.bar.position.set(0, d.h + 0.6, 0); fa.wrap.add(al.bar); drawBar(al.bar, 1, d.nome + ' ' + hp);
-          battle.allies.push(al); _bsSig = null; // força rebuild do status DOM
-        }).catch(() => {});
+        const d = ALLY_DEF[k], pb = PARTY_BUILD[k] || PARTY_BUILD.fagulha;
+        const fa = spawnProc(pb.fn, pb.h);
+        const off = ((i % 2 === 0 ? 1 : -1) * (Math.floor(i / 2) + 1)) * 1.7; // flanqueia o herói (que fica no centro)
+        const ax = dolly.position.x + rvx * off - fx * 0.3, az = dolly.position.z + rvz * off - fz * 0.3;
+        fa.wrap.position.set(ax, heightAt(ax, az), az); fa.wrap.rotation.y = encara;
+        let hp = d.hp + hero.lvl * 2; if (game.flags.coro) hp = Math.round(hp * 1.25); // [2.0] coro dos Brotinhos reforça a party
+        const al = { actor: fa, kind: k, nome: d.nome, emoji: d.emoji, hp, hpMax: hp, def: d.def + hero.lvl, mag: d.mag + hero.lvl, agi: d.agi, role: d.role, ess: d.ess, atb: Math.random() * 0.3, alive: true, bar: makeBar() };
+        al.bar.position.set(0, pb.h + 0.5, 0); fa.wrap.add(al.bar); drawBar(al.bar, 1, d.nome + ' ' + hp);
+        battle.allies.push(al);
       });
+      _bsSig = null; // força rebuild do status DOM
     }
+    let heroBattleActor = null;
+    function spawnHeroBattle() { // [3.0] o Broto visível na formação (só fora do VR — no VR você é 1ª pessoa)
+      if (renderer.xr.isPresenting || !battle) return;
+      const fa = spawnProc(pmBroto, PARTY_BUILD.broto.h);
+      fa.wrap.position.set(dolly.position.x, heightAt(dolly.position.x, dolly.position.z), dolly.position.z);
+      fa.wrap.rotation.y = Math.atan2(battle.fx, battle.fz);
+      heroBattleActor = fa;
+    }
+    function despawnHeroBattle() { if (heroBattleActor) { scene.remove(heroBattleActor.wrap); heroBattleActor = null; } }
     function allyAttackEnemy(al) {
       if (!battle) return;
       const alvos = battle.enemies.filter(x => x.alive); if (!alvos.length) return;
@@ -866,6 +874,8 @@
       if (battle && battle.ring) scene.remove(battle.ring);
       if (battle) for (const e of battle.enemies) if (e.alive && e.bar) e.actor.wrap.remove(e.bar);
       if (battle && battle.allies) for (const al of battle.allies) { if (al.actor) { scene.remove(al.actor.wrap); const mi = mixers.indexOf(al.actor.mixer); if (mi >= 0) mixers.splice(mi, 1); } }
+      despawnHeroBattle(); // [3.0] tira o Broto da formação
+      if (!renderer.xr.isPresenting) { camera.position.set(0, 1.6, 0); camera.rotation.set(0, 0, 0); } // restaura a 1ª pessoa
       battle = null; heroHud.visible = false; hideBattleStatus();
     }
 
@@ -893,11 +903,11 @@
         const e = { actor: a, def: d, hp: d.hp, hpMax: d.hp, atb: 0.2, alive: true, bar: makeBar(), boss: true };
         e.bar.position.set(0, d.h + 0.7, 0); a.wrap.add(e.bar); drawBar(e.bar, 1, d.nome + ' ' + d.hp);
         inBattle = true; document.body.classList.add('inbattle'); updateMusicTrack();
-        battle = { enemies: [e], allies: [], heroAtb: 0, ready: false, menuOpen: false, hover: -1, ring: null, boss: e, faseBatalha: 'luta', cantar: 0 };
-        spawnPartyAllies(); // o grupo recrutado entra também
+        battle = { enemies: [e], allies: [], heroAtb: 0, ready: false, menuOpen: false, hover: -1, ring: null, boss: e, faseBatalha: 'luta', cantar: 0, fx: rcDir.x, fz: rcDir.z, yaw: Math.atan2(rcDir.x, rcDir.z) };
+        spawnPartyAllies(); spawnHeroBattle(); // o grupo recrutado + o Broto visível na formação
         const ring = new THREE.Mesh(new THREE.RingGeometry(5.0, 5.8, 48), new THREE.MeshBasicMaterial({ color: 0xb09ad0, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false }));
         ring.rotation.x = -Math.PI / 2; ring.position.set(dolly.position.x, heightAt(dolly.position.x, dolly.position.z) + 0.12, dolly.position.z); scene.add(ring); battle.ring = ring;
-        heroHud.visible = !onTouchUI(); updateHeroHud(); sfx('start'); setObjetivo('Vença a Murcha… mas talvez vencer seja CUIDAR.');
+        heroHud.visible = !battleDomUI(); updateHeroHud(); sfx('start'); setObjetivo('Vença a Murcha… mas talvez vencer seja CUIDAR.');
         flash('🦋 A Murcha aparece — de frio e sozinha, roendo a seiva do Vovô.');
       }).catch(() => {});
     }
@@ -954,11 +964,11 @@
       actor.wrap.position.set(ex, heightAt(ex, ez), ez);
       const d = ENEMY_DEF[actor.enemyKey], e = { actor, def: d, hp: d.hp, hpMax: d.hp, atb: Math.random() * 0.3, alive: true, bar: makeBar() };
       e.bar.position.set(0, d.h + 0.7, 0); actor.wrap.add(e.bar);
-      battle = { enemies: [e], allies: [], heroAtb: 0, ready: false, menuOpen: false, hover: -1, ring: null };
-      spawnPartyAllies(); // o grupo recrutado (Fagulha/Folho/Gota) entra na luta
+      battle = { enemies: [e], allies: [], heroAtb: 0, ready: false, menuOpen: false, hover: -1, ring: null, fx: rcDir.x, fz: rcDir.z, yaw: Math.atan2(rcDir.x, rcDir.z) };
+      spawnPartyAllies(); spawnHeroBattle(); // o grupo recrutado + o Broto visível na formação
       const ring = new THREE.Mesh(new THREE.RingGeometry(4.6, 5.3, 48), new THREE.MeshBasicMaterial({ color: 0xffd86b, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false }));
       ring.rotation.x = -Math.PI / 2; ring.position.set(dolly.position.x, heightAt(dolly.position.x, dolly.position.z) + 0.12, dolly.position.z); scene.add(ring); battle.ring = ring;
-      heroHud.visible = !onTouchUI(); updateHeroHud(); sfx('start'); flash('⚔ ' + d.nome + ' apareceu! Encha a barra de AÇÃO e aperte pra agir.');
+      heroHud.visible = !battleDomUI(); updateHeroHud(); sfx('start'); flash('⚔ ' + d.nome + ' apareceu! Encha a barra de AÇÃO e aperte pra agir.');
     }
     function checkAggro() {
       if (inBattle || activeNPC || narration) return; // ou está em diálogo, ou em batalha — nunca os dois
@@ -984,12 +994,12 @@
           for (const al of b.allies) { if (!al.alive) continue; al.atb += dt * (0.16 + al.agi / 200); if (al.atb >= 1) { al.atb = 0; allyAct(al); } }
         }
       }
-      camera.getWorldPosition(camW); const mob = onTouchUI(); // celular usa o status HTML; PC/VR usam as barrinhas 3D
+      camera.getWorldPosition(camW); const mob = battleDomUI(); // PC/celular usam o status HTML; só VR usa as barrinhas 3D
       for (const e of b.enemies) { if (!e.alive) continue; e.actor.wrap.lookAt(dolly.position.x, e.actor.wrap.position.y, dolly.position.z); e.bar.visible = !mob; if (!mob) { if (e.bar.userData.last !== e.hp) { e.bar.userData.last = e.hp; drawBar(e.bar, e.hp / e.hpMax, e.def.nome + ' ' + Math.max(0, e.hp)); } e.bar.lookAt(camW); } }
       for (const al of b.allies) { if (!al.alive) continue; const en = b.enemies.find(x => x.alive); if (en) al.actor.wrap.lookAt(en.actor.wrap.position.x, al.actor.wrap.position.y, en.actor.wrap.position.z); al.bar.visible = !mob; if (!mob) { if (al.bar.userData.last !== al.hp) { al.bar.userData.last = al.hp; drawBar(al.bar, al.hp / al.hpMax, al.nome + ' ' + Math.max(0, al.hp)); } al.bar.lookAt(camW); } }
       // celular: quando o herói está pronto, abre a barra de ações sozinha (sem precisar mirar)
-      if (b.ready && !b.menuOpen && !narration && (onTouchUI() || renderer.xr.isPresenting)) openBattleMenu(); // celular E VR: abre o menu sozinho ao ficar pronto
-      if (b.menuOpen && !onTouchUI()) { const h = battlePick(); if (h >= 0 && h !== b.hover) { b.hover = h; drawBattleMenu(); } } // mira só troca a seleção quando acerta um botão (senão mantém a anterior)
+      if (b.ready && !b.menuOpen && !narration && (battleDomUI() || renderer.xr.isPresenting)) openBattleMenu(); // PC/celular/VR: abre o menu sozinho ao ficar pronto
+      if (b.menuOpen && !battleDomUI()) { const h = battlePick(); if (h >= 0 && h !== b.hover) { b.hover = h; drawBattleMenu(); } } // VR: a mira 3D troca a seleção ao acertar um botão
       if (mob) tickBattleStatus(); else updateHeroHud();
     }
     function updateDying(dt) {
@@ -1133,8 +1143,92 @@
       if (clip) { action = mixer.clipAction(clip); action.play(); }
       return { wrap, model, mixer, gltf, action };
     }
+    // ---------- [3.0] Personagens procedurais da turma (low-poly fofo, a partir das Fichas de Personagens) ----------
+    function pmMat(c, o) { return new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.82, metalness: 0 }, o || {})); }
+    const PM_ESC = pmMat(0x3B2D20, { roughness: 0.4 }), PM_BR = pmMat(0xffffff, { roughness: 0.3 });
+    function pmRosto(g, o) { // olhos grandes + brilho + bochechas + sorriso
+      const cx = o.cx || 0, y = o.y, z = o.z, sep = o.sep || 0.34, r = o.r || 0.2, esc = o.esc || PM_ESC;
+      const sorriso = o.sorriso !== false, boch = (o.bochechas === undefined) ? 0xF2A187 : o.bochechas;
+      const by = (o.by != null) ? o.by : y, bz = (o.bz != null) ? o.bz : z;
+      for (const sx of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 14), esc); e.scale.set(0.85, 1.12, 0.7); e.position.set(cx + sx * sep, y, z); g.add(e);
+        const l = new THREE.Mesh(new THREE.SphereGeometry(r * 0.32, 10, 8), PM_BR); l.position.set(cx + sx * (sep - 0.04), y + 0.08, z + 0.14); g.add(l); }
+      if (boch !== null) for (const sx of [-1, 1]) { const b = new THREE.Mesh(new THREE.SphereGeometry(r * 0.9, 14, 10), pmMat(boch)); b.scale.set(1, 0.7, 0.45); b.position.set(cx + sx * (sep + 0.22), by - 0.22, bz - 0.02); g.add(b); }
+      if (sorriso) { const m = new THREE.Mesh(new THREE.TorusGeometry(r * 0.85, r * 0.19, 8, 16, Math.PI), esc); m.rotation.z = Math.PI; m.position.set(cx, y - 0.26, z + 0.1); g.add(m); }
+    }
+    function pmBroto() { const g = new THREE.Group();
+      const creme = pmMat(0xFADCAE), torroso = pmMat(0x9A5028), terracota = pmMat(0xC2713E), verde = pmMat(0x7FB83E), verdeEsc = pmMat(0x6BA02E), dourado = pmMat(0xF4B83E, { emissive: 0xF4B83E, emissiveIntensity: 0.4 });
+      const corpo = new THREE.Mesh(new THREE.SphereGeometry(0.84, 24, 18), torroso); corpo.scale.set(1, 0.96, 1); corpo.position.y = 0.95; g.add(corpo);
+      const barr = new THREE.Mesh(new THREE.SphereGeometry(0.6, 18, 14), terracota); barr.scale.set(1, 0.9, 0.55); barr.position.set(0, 0.86, 0.55); g.add(barr);
+      const cab = new THREE.Mesh(new THREE.SphereGeometry(0.99, 26, 20), creme); cab.scale.set(1, 0.98, 0.96); cab.position.y = 2.02; g.add(cab);
+      pmRosto(g, { y: 2.06, z: 0.83, sep: 0.36, r: 0.2, by: 1.84, bz: 0.74 });
+      const caule = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.3, 8), verdeEsc); caule.position.y = 2.95; g.add(caule);
+      for (const sx of [-1, 1]) { const f = new THREE.Mesh(new THREE.SphereGeometry(0.46, 16, 12), verde); f.scale.set(0.5, 0.18, 1); f.position.set(sx * 0.34, 3.18, 0.02); f.rotation.set(0.55, 0, sx * -0.6); g.add(f); }
+      const bud = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 10), dourado); bud.position.y = 3.12; g.add(bud);
+      const bE = new THREE.Mesh(new THREE.CapsuleGeometry(0.14, 0.32, 5, 10), creme); bE.position.set(-0.86, 1.02, 0.12); bE.rotation.z = 0.5; g.add(bE);
+      const bD = new THREE.Mesh(new THREE.CapsuleGeometry(0.14, 0.34, 5, 10), creme); bD.position.set(0.82, 1, 0.42); bD.rotation.set(-0.5, 0, -0.35); g.add(bD);
+      for (const sx of [-1, 1]) { const pe = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 10), torroso); pe.scale.set(1, 0.55, 1.35); pe.position.set(sx * 0.34, 0.16, 0.12); g.add(pe); }
+      const bolsa = new THREE.Mesh(new THREE.SphereGeometry(0.26, 14, 10), pmMat(0x8A6A40)); bolsa.scale.set(1, 0.85, 0.7); bolsa.position.set(-0.7, 0.95, -0.35); g.add(bolsa);
+      const lant = new THREE.Group(); lant.add(new THREE.Mesh(new THREE.IcosahedronGeometry(0.16, 0), pmMat(0xFFE9A0, { emissive: 0xFFD24a, emissiveIntensity: 0.9 })));
+      const ga = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.34, 8, 1, true), pmMat(0xC9962E)); ga.material.side = THREE.DoubleSide; lant.add(ga);
+      const tp = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.12, 8), pmMat(0xC9962E)); tp.position.y = 0.22; lant.add(tp); lant.scale.setScalar(0.8); lant.position.set(1.02, 0.95, 0.66); g.add(lant);
+      return g; }
+    function pmFagulha() { const g = new THREE.Group();
+      const lar = pmMat(0xEC8A38), larEsc = pmMat(0xCF6E22), creme = pmMat(0xFBE7C8);
+      const corpo = new THREE.Mesh(new THREE.SphereGeometry(0.78, 22, 16), lar); corpo.scale.set(1, 1.05, 0.95); corpo.position.y = 0.9; g.add(corpo);
+      const peito = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 12), creme); peito.scale.set(0.9, 1, 0.6); peito.position.set(0, 0.78, 0.5); g.add(peito);
+      const cab = new THREE.Mesh(new THREE.SphereGeometry(0.82, 24, 18), lar); cab.scale.set(1.05, 0.95, 0.98); cab.position.y = 1.95; g.add(cab);
+      const foc = new THREE.Mesh(new THREE.SphereGeometry(0.42, 16, 12), creme); foc.scale.set(0.95, 0.7, 0.95); foc.position.set(0, 1.74, 0.62); g.add(foc);
+      const nar = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 10), PM_ESC); nar.scale.set(1.2, 0.9, 1); nar.position.set(0, 1.84, 0.98); g.add(nar);
+      for (const sx of [-1, 1]) { const o = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.6, 5), lar); o.position.set(sx * 0.5, 2.5, 0); o.rotation.z = sx * -0.25; g.add(o);
+        const oi = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.4, 5), pmMat(0x3A2A20)); oi.position.set(sx * 0.5, 2.52, 0.06); oi.rotation.z = sx * -0.25; g.add(oi); }
+      pmRosto(g, { y: 2.02, z: 0.74, sep: 0.34, r: 0.17, bochechas: null, sorriso: false });
+      const cauda = new THREE.Mesh(new THREE.SphereGeometry(0.45, 16, 12), lar); cauda.scale.set(0.7, 0.7, 1.5); cauda.position.set(0.55, 0.95, -0.7); cauda.rotation.set(0.3, 0.5, 0); g.add(cauda);
+      const cpta = new THREE.Mesh(new THREE.SphereGeometry(0.3, 14, 10), creme); cpta.position.set(0.78, 1.2, -1.15); g.add(cpta);
+      for (const sx of [-1, 1]) { const p = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), larEsc); p.scale.set(1, 0.6, 1.3); p.position.set(sx * 0.3, 0.14, 0.18); g.add(p); }
+      return g; }
+    function pmFolho() { const g = new THREE.Group();
+      const verde = pmMat(0x86C24A), verdeEsc = pmMat(0x66A02E), verdeC = pmMat(0xA9D86A);
+      const seg2 = new THREE.Mesh(new THREE.SphereGeometry(0.5, 20, 14), verde); seg2.position.set(0, 0.5, -1.05); g.add(seg2);
+      const seg1 = new THREE.Mesh(new THREE.SphereGeometry(0.6, 20, 14), verdeC); seg1.position.set(0, 0.58, -0.4); g.add(seg1);
+      const cab = new THREE.Mesh(new THREE.SphereGeometry(0.74, 24, 18), verde); cab.position.set(0, 0.78, 0.45); g.add(cab);
+      pmRosto(g, { y: 0.86, z: 1.12, sep: 0.26, r: 0.17, by: 0.66, bz: 1.05 });
+      for (const sx of [-1, 1]) { const a = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.4, 6), verdeEsc); a.position.set(sx * 0.16, 1.42, 0.42); a.rotation.z = sx * 0.3; g.add(a);
+        const tip = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8), pmMat(0xF4B83E)); tip.position.set(sx * 0.28, 1.62, 0.42); g.add(tip); }
+      const folha = new THREE.Mesh(new THREE.SphereGeometry(0.42, 14, 10), verdeC); folha.scale.set(0.5, 0.15, 0.9); folha.position.set(0.1, 1.0, -0.8); folha.rotation.set(-0.5, 0.3, 0.3); g.add(folha);
+      for (let i = 0; i < 3; i++) for (const sx of [-1, 1]) { const pe = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), verdeEsc); pe.position.set(sx * 0.42, 0.1, 0.4 - i * 0.62); g.add(pe); }
+      return g; }
+    function pmGota() { const g = new THREE.Group();
+      const azul = pmMat(0x3FB6D6), azulEsc = pmMat(0x2E8FB0), creme = pmMat(0xFBE7C8), verde = pmMat(0x7FB83E);
+      const corpo = new THREE.Mesh(new THREE.SphereGeometry(0.82, 24, 18), azul); corpo.scale.set(1.1, 0.85, 1); corpo.position.y = 0.78; g.add(corpo);
+      const casco = new THREE.Mesh(new THREE.SphereGeometry(0.7, 20, 14), azulEsc); casco.scale.set(1, 0.6, 1); casco.position.set(0, 1.05, -0.15); g.add(casco);
+      const cab = new THREE.Mesh(new THREE.SphereGeometry(0.62, 22, 16), azul); cab.position.set(0, 1.35, 0.55); g.add(cab);
+      const face = new THREE.Mesh(new THREE.SphereGeometry(0.42, 16, 12), creme); face.scale.set(1, 0.95, 0.7); face.position.set(0, 1.28, 0.92); g.add(face);
+      pmRosto(g, { y: 1.34, z: 1.08, sep: 0.24, r: 0.15, by: 1.18, bz: 1.0 });
+      const cr = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.42, 10), verde); cr.position.set(0, 1.95, 0.45); g.add(cr);
+      const gota = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 10), pmMat(0x9fe0f5, { emissive: 0x3FB6D6, emissiveIntensity: 0.4 })); gota.position.set(0, 2.1, 0.45); g.add(gota);
+      for (const sx of [-1, 1]) { const p = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), azulEsc); p.scale.set(0.9, 0.5, 1.2); p.position.set(sx * 0.55, 0.32, 0.3); g.add(p); }
+      return g; }
+    function pmBrisa() { const g = new THREE.Group();
+      const cinza = pmMat(0xCBCBD8), cinzaC = pmMat(0xE2E2EC), lav = pmMat(0xD8D2E6);
+      for (const p of [[0, 1.5, 0, 0.42], [-0.18, 1.6, 0.05, 0.3], [0.18, 1.6, 0.05, 0.3], [0, 1.32, 0, 0.34]]) { const b = new THREE.Mesh(new THREE.SphereGeometry(p[3], 16, 12), cinza); b.position.set(p[0], p[1], p[2]); g.add(b); }
+      for (const sx of [-1, 1]) for (const a of [[1.62, 0.55, -0.1], [1.2, 0.42, -0.05]]) { const w = new THREE.Mesh(new THREE.SphereGeometry(a[1], 16, 12), lav); w.scale.set(1.15, 1.25, 0.12); w.position.set(sx * (a[1] + 0.25), a[0], a[2]); w.rotation.y = sx * 0.5; g.add(w); }
+      for (const sx of [-1, 1]) { const e = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.025, 8, 12, Math.PI), PM_ESC); e.position.set(sx * 0.16, 1.55, 0.36); g.add(e); }
+      const m = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.025, 8, 12, Math.PI), PM_ESC); m.rotation.z = Math.PI; m.position.set(0, 1.42, 0.38); g.add(m);
+      for (const sx of [-1, 1]) { const b = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 8), pmMat(0xEFB6C4)); b.scale.set(1, 0.7, 0.4); b.position.set(sx * 0.34, 1.46, 0.32); g.add(b); }
+      for (const sx of [-1, 1]) { const a = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.35, 6), cinzaC); a.position.set(sx * 0.12, 1.95, 0); a.rotation.z = sx * 0.4; g.add(a);
+        const t = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), pmMat(0xC0A0D0)); t.position.set(sx * 0.22, 2.12, 0); g.add(t); }
+      return g; }
+    const PARTY_BUILD = { broto: { fn: pmBroto, h: 1.5 }, fagulha: { fn: pmFagulha, h: 1.3 }, folho: { fn: pmFolho, h: 1.05 }, gota: { fn: pmGota, h: 1.2 }, brisa: { fn: pmBrisa, h: 1.3 } };
+    function spawnProc(builder, targetH) { // cria um "ator" procedural compatível com o sistema de batalha (sem mixer/gltf)
+      const model = builder();
+      const bb = new THREE.Box3().setFromObject(model), h = (bb.max.y - bb.min.y) || 1, sc = targetH / h;
+      model.position.y = -bb.min.y;
+      const wrap = new THREE.Group(); wrap.add(model); wrap.scale.setScalar(sc); scene.add(wrap);
+      return { wrap, model, mixer: null, gltf: null, proc: true };
+    }
     // troca o clipe tocado de um ator (fade suave)
     function playClip(actor, name) {
+      if (!actor || !actor.mixer || !actor.gltf) return; // atores procedurais não têm animação de esqueleto
       const clip = bestClip(actor.gltf, name); if (!clip) return;
       const next = actor.mixer.clipAction(clip);
       if (actor.action === next) return;
@@ -2528,6 +2622,7 @@
         mz = (keys['KeyS'] ? 1 : 0) - (keys['KeyW'] ? 1 : 0) + joy.y;
       }
       if (inBattle) { mx = 0; mz = 0; wantJump = false; } // na batalha o jogador fica parado
+      if (inBattle && battle && !renderer.xr.isPresenting) { dolly.rotation.y = battle.yaw; camera.position.set(0, 2.5, 3.9); camera.rotation.set(-0.34, 0, 0); } // [3.0] câmera de batalha em 3ª pessoa (atrás da turma)
       const len = Math.hypot(mx, mz);
       if (len > 0.01) {
         if (len > 1) { mx /= len; mz /= len; }

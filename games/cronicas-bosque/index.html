@@ -870,9 +870,15 @@
     }
 
     // ===================== CHEFE: MURCHA, a Mariposa =====================
+    let _bossZonePrev = false;
     function checkBoss() {
       if (inBattle || game.flags.bossDone || activeNPC || narration) return; // nunca entra em batalha durante um diálogo
-      if (currentEra === 'ermo' && game.fase >= 6 && Math.hypot(dolly.position.x - PORTAL.x, dolly.position.z - PORTAL.z) < 14) startBossBattle();
+      const naZona = currentEra === 'ermo' && game.fase >= 6 && Math.hypot(dolly.position.x - PORTAL.x, dolly.position.z - PORTAL.z) < 14;
+      if (naZona && !_bossZonePrev) { // entrou na zona da Murcha
+        if (cancaoPronta()) startBossBattle();
+        else startNarration('Fagulha', ['A Murcha tá ali, tremendo de frio… mas enfrentar não adianta, broto.', 'Só a CANÇÃO DAS QUATRO FOLHAS acalma ela. Você ainda não tem todos os versos.', 'Vai aprender os que faltam viajando no tempo — a setinha dourada te mostra pra onde ir. 🎵'], () => { });
+      }
+      _bossZonePrev = naZona;
     }
     function startBossBattle() {
       iniciarFase(7);
@@ -1333,7 +1339,7 @@
     const game = { fase: 0, vovoFalou: false, objetivo: '', vistoMudanca: false, coletados: 0,
       harmonia: 100, lacos: {}, folhas: [], sidequests: {}, // [2.0] Teia de Causalidade + Canção das Quatro Folhas (estado base; conteúdo vem nos Atos)
       flags: { cogu: false, vila: false, vilaVista: false, lanterna: false, fagulha: false, folho: false, gota: false, momento: false, semente: false, sementePlantada: false } };
-    const FASE_TITULOS = { 1: 'O Bosque Doente', 2: 'A Lanterna-Vagalume', 3: 'O Ermo', 4: 'A Semente do Passado', 5: 'O Amanhã Plantado', 6: 'A Cura Começa', 7: 'O Coração da Murcha', 8: 'Epílogo' };
+    const FASE_TITULOS = { 1: 'O Bosque Doente', 2: 'A Lanterna-Vagalume', 3: 'O Ermo', 4: 'A Semente do Passado', 5: 'O Amanhã Plantado', 6: 'A Canção das Quatro Folhas', 7: 'O Coração da Murcha', 8: 'Epílogo' };
     function setObjetivo(txt) {
       game.objetivo = txt; const q = document.getElementById('questBar');
       if (q) { q.textContent = 'Fase ' + game.fase + ' · ' + (FASE_TITULOS[game.fase] || '') + ' — ' + txt; q.style.display = 'block'; }
@@ -1345,12 +1351,12 @@
       else if (n === 3) setObjetivo('Toque o Vovô e viaje ao 🥀 Ermo (futuro)');
       else if (n === 4) { setObjetivo('Viaje ao 🌱 Semente (passado) e plante a Semente-do-Amanhã'); criarSementeMundo(); }
       else if (n === 5) setObjetivo('Volte ao 🌳 Bosque (presente) e veja o que mudou!');
-      else if (n === 6) setObjetivo('Volte ao 🥀 Ermo (futuro) e encare o que está secando o Vovô');
+      else if (n === 6) checkCancao(); // objetivo: aprender a Canção (ou ir ao Ermo se já tiver os 3 versos)
       else if (n === 8) setObjetivo('🌟 Você curou o amanhã! Fim da aventura — por enquanto. Obrigado por jogar! 💚');
       renderJournal(); if (typeof saveGame === 'function') saveGame('auto'); // autosave por capítulo
     }
     // ---------- DIÁRIO DE MISSÕES (lista os capítulos e o objetivo atual) ----------
-    const CHAPTER_DESC = { 1: 'Descubra de onde vem o cinza — e ouça os mais velhos da Vila do Carvalho.', 2: 'Pegue a Lanterna-Vagalume, que abre o caminho do futuro.', 3: 'Atravesse pela raiz do Vovô até o Ermo, o amanhã murcho.', 4: 'Volte ao passado e plante a Semente-do-Amanhã.', 5: 'Veja o presente mudar com o que você fez atrás.', 6: 'Volte ao Ermo e encare o que seca o Vovô.', 7: 'Vença a Murcha… cuidando dela, não batendo.', 8: 'O amanhã floresce. 💚' };
+    const CHAPTER_DESC = { 1: 'Descubra de onde vem o cinza — e ouça os mais velhos da Vila do Carvalho.', 2: 'Pegue a Lanterna-Vagalume, que abre o caminho do futuro.', 3: 'Atravesse pela raiz do Vovô até o Ermo, o amanhã murcho.', 4: 'Volte ao passado e plante a Semente-do-Amanhã.', 5: 'Veja o presente mudar com o que você fez atrás.', 6: 'Aprenda a Canção das Quatro Folhas viajando no tempo (Semente → Raiz) — sem ela não dá pra acalmar a Murcha.', 7: 'Vença a Murcha… cuidando dela, não batendo.', 8: 'O amanhã floresce — visite o Renascer. 💚' };
     const LACO_NOME = { riacho: 'O Riacho Represado', corvo: 'O Corvo Espantado', lampiao: 'O Lampião Aceso', muda: 'A Muda Curada Demais', cipo: 'A Ponte de Cipó' }; // [2.0] nomes dos laços/folhas/companheiros pro Diário
     const FOLHA_NOME = { primavera: '🍃 Primavera', verao: '☀️ Verão', chuvas: '💧 Chuvas', inverno: '🩶 Inverno' };
     const COMP_NOME = { fagulha: '🦊 Fagulha', folho: '🐛 Folho', gota: '🐢 Gota', brisa: '🦋 Brisa' };
@@ -1612,7 +1618,7 @@
     }
     function collectFolhaPrimavera() {
       if (game.folhas.includes('primavera')) return;
-      game.folhas.push('primavera'); teiaFolha.visible = false; sfx('fanfare'); renderJournal(); updateHarmonia(); checkUnlockRaiz(); saveGame('auto');
+      game.folhas.push('primavera'); teiaFolha.visible = false; sfx('fanfare'); renderJournal(); updateHarmonia(); checkUnlockRaiz(); checkCancao(); saveGame('auto');
       if (!game.flags.folho) { game.flags.folho = true;
         startNarration('Folho', ['🍃 Você cantou a Folha da Primavera! Eu… eu lembrei dela!', 'Pra te ajudar? Eu? Mas sou só um brotinho medroso… ah, tá bom. Mas só se a gente for juntinho.', 'Enquanto eu tô no grupo, eu cuido de você na batalha — um carinho de HP a cada turno. 💚'], () => { flash('🐛 Folho entrou no grupo!'); });
       }
@@ -1666,7 +1672,7 @@
     }
     function cantarVerao() {
       if (game.folhas.includes('verao')) return;
-      game.lacos.corvo = 'equilibrado'; game.folhas.push('verao'); sfx('fanfare'); recomputeHarmonia(); renderJournal(); checkUnlockRaiz();
+      game.lacos.corvo = 'equilibrado'; game.folhas.push('verao'); sfx('fanfare'); recomputeHarmonia(); renderJournal(); checkUnlockRaiz(); checkCancao();
       const recruta = !game.flags.gota; if (recruta) game.flags.gota = true; saveGame('auto');
       startNarration('', ['Você lembra de um canto de pássaro bem velho e assobia baixinho…', 'Os besouros param, escutam… e vão embora sozinhos. Sem expulsar ninguém — só lembrando o bosque de uma música. Você aprendeu a Folha do Verão ☀️!'], () => { if (recruta) startNarration('Gota', ['💧 Blub! Ouvi seu canto lá do riacho e vim ver!', 'Eu sou a Gota. Sei guiar a água e segurar o tranco — enquanto eu tô no grupo, você apanha menos na luta. 🐢'], () => { flash('🐢 Gota entrou no grupo!'); }); });
     }
@@ -1882,6 +1888,23 @@
     }
     // ---------- Seta-guia da missão: aponta na visão pra onde ir (estilo clássico do gênero) ----------
     const QUEST = { covinha: { x: 9, z: 50 }, cogu: { x: 6, z: 56 }, samambaia: { x: VILA.x + 4, z: VILA.z - 8 } };
+    function cancaoPronta() { return ['primavera', 'verao', 'chuvas'].every(f => game.folhas.includes(f)); } // os 3 versos aprendidos ANTES do clímax (o Inverno vem na luta)
+    function setObjetivoFase6() {
+      if (cancaoPronta()) setObjetivo('Vá ao 🥀 Ermo (futuro) e cante a Canção pra Murcha 🎵');
+      else { const falta = ['primavera', 'verao', 'chuvas'].filter(f => !game.folhas.includes(f)).map(f => FOLHA_NOME[f]).join(' · '); setObjetivo('Aprenda a Canção viajando no tempo — faltam: ' + falta); }
+    }
+    function checkCancao() { // chamado quando se ganha uma Folha: atualiza o objetivo da fase 6 e comemora ao reunir os 3
+      if (game.fase !== 6) return;
+      if (cancaoPronta() && !game.flags.cancaoOk) { game.flags.cancaoOk = true; flash('🎶 Você reuniu os três versos! Vá ao 🥀 Ermo cantar pra Murcha.'); }
+      setObjetivoFase6();
+    }
+    function folhaTarget() { // próximo passo pra reunir a Canção das Quatro Folhas; null = já tem os 3
+      const has = f => game.folhas.includes(f);
+      if (!has('primavera')) return game.lacos.riacho ? { x: TEIA.folha.x, z: TEIA.folha.z, era: 'semente' } : { x: TEIA.pedra.x, z: TEIA.pedra.z, era: 'semente' };
+      if (!has('verao')) return game.lacos.corvo ? { x: TEIA2.praga.x, z: TEIA2.praga.z, era: 'bosque' } : { x: TEIA2.corvo.x, z: TEIA2.corvo.z, era: 'semente' };
+      if (!has('chuvas')) return game.flags.raiz ? { x: CONSTRUCTO.x, z: CONSTRUCTO.z, era: 'raiz' } : { x: PORTAL.x, z: PORTAL.z, era: 'bosque' };
+      return null;
+    }
     function questTarget() { // {x,z,era} da missão principal atual; null = sem alvo
       const f = game.fase, fl = game.flags;
       if (f < 1) return null;
@@ -1892,8 +1915,10 @@
       if (f === 3) return { x: PORTAL.x, z: PORTAL.z, era: 'bosque' };                          // toque o Vovô e viaje ao Ermo
       if (f === 4) return { x: QUEST.covinha.x, z: QUEST.covinha.z, era: 'semente' };           // plante na Semente
       if (f === 5) return { x: QUEST.covinha.x, z: QUEST.covinha.z, era: 'bosque' };            // veja o que mudou no presente
-      if (f === 6 || f === 7) return { x: PORTAL.x, z: PORTAL.z, era: 'ermo' };                 // encare a Murcha no Ermo
-      return null; // fim (fase 8): missão principal concluída
+      if (f === 6) { const ft = folhaTarget(); return ft || { x: PORTAL.x, z: PORTAL.z, era: 'ermo' }; } // junte os 3 versos; com a Canção → Ermo
+      if (f === 7) return { x: PORTAL.x, z: PORTAL.z, era: 'ermo' };                            // cante pra Murcha
+      if (f >= 8) return game.sidequests.samambaia !== 'feita' ? { x: PORTAL.x + 4, z: PORTAL.z + 5, era: 'renascer' } : null; // epílogo: visite o Renascer
+      return null;
     }
     const questArrow = new THREE.Group();
     { const am = new THREE.MeshBasicMaterial({ color: 0xffd84a, transparent: true, opacity: 0.92, depthTest: false });
@@ -1938,7 +1963,7 @@
     function nearConstructo() { return constructoMesh && !game.folhas.includes('chuvas') && currentEra === 'raiz' && Math.hypot(dolly.position.x - CONSTRUCTO.x, dolly.position.z - CONSTRUCTO.z) < 5; }
     function resolverConstructo() {
       if (game.folhas.includes('chuvas')) return;
-      game.folhas.push('chuvas'); sfx('fanfare'); renderJournal(); updateHarmonia(); saveGame('auto');
+      game.folhas.push('chuvas'); sfx('fanfare'); renderJournal(); updateHarmonia(); checkCancao(); saveGame('auto');
       startNarration('Constructo de Pedra', ['…fica? Ninguém ficou. Faz tanto tempo que esqueci o som de outra voz.', 'Você planta um musguinho-amigo no ombro dele. As runas dos olhos brilham mais quentes — ele não está mais sozinho.', 'Agradecido, o Constructo abre a câmara da Última Cantora, e você aprende a Folha das Chuvas. 💧'], () => { });
     }
     function updateConstructo(t) {

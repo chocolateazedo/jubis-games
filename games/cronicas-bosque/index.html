@@ -133,8 +133,8 @@
     #eraMenu .ebtn .esub { display: block; color: #9fdfae; font-size: 12px; font-weight: 600; margin-top: 5px; white-space: nowrap; }
     #eraMenu .ebtn.cur { border-color: #ffe6a0; color: #ffe6a0; }
     #eraMenu .ebtn:active { background: rgba(120,220,150,.35); }
-    #battleStatus { position: fixed; z-index: 27; right: max(10px, env(safe-area-inset-right)); top: max(64px, calc(env(safe-area-inset-top) + 58px)); display: none;
-      flex-direction: column; gap: 5px; width: min(86vw, 360px); pointer-events: none; }
+    #battleStatus { position: fixed; z-index: 27; right: max(8px, env(safe-area-inset-right)); top: max(60px, calc(env(safe-area-inset-top) + 54px)); display: none;
+      flex-direction: column; gap: 4px; width: min(62vw, 300px); pointer-events: none; }
     #battleStatus .bsrow { display: flex; align-items: center; gap: 8px; }
     #battleStatus .bsname { color: #eaffee; font-weight: 700; font-size: 13px; min-width: 84px; text-align: right; text-shadow: 0 1px 3px #000; }
     #battleStatus .bstrack { position: relative; flex: 1; height: 19px; background: rgba(0,0,0,.55); border-radius: 10px; overflow: hidden; border: 1px solid rgba(160,230,180,.35); }
@@ -623,10 +623,11 @@
     // itens do submenu atual (Técnica ou Item) + "Voltar"
     // [2.0] TÉCNICAS-DUPLAS (combos): aparecem no submenu Técnica quando os parceiros estão vivos
     function comboHitAll(ess, power) {
-      for (const en of battle.enemies.filter(x => x.alive)) { const mult = essMult(ess, en.def.ess), dmg = Math.max(1, Math.round((power + hero.mag) * (0.9 + Math.random() * 0.2) * mult)); en.hp -= dmg; spawnDmg(en.actor.wrap.position, dmg, mult >= 2 ? 0xffe24a : 0xffffff); playClip(en.actor, 'eat'); if (en.hp <= 0) { en.alive = false; defeatEnemy(en); } }
+      sfx('magia');
+      for (const en of battle.enemies.filter(x => x.alive)) { const mult = essMult(ess, en.def.ess), dmg = Math.max(1, Math.round((power + hero.mag) * (0.9 + Math.random() * 0.2) * mult)); en.hp -= dmg; spawnHitFx(en.actor.wrap.position, ess); spawnDmg(en.actor.wrap.position, dmg, mult >= 2 ? 0xffe24a : 0xffffff); playClip(en.actor, 'eat'); if (en.hp <= 0) { en.alive = false; defeatEnemy(en); } }
     }
     function comboHitOne(ess, power, after) {
-      const en = aliveEnemy(); if (!en) return; const mult = essMult(ess, en.def.ess), dmg = Math.max(1, Math.round((power + hero.mag) * (0.9 + Math.random() * 0.2) * mult)); en.hp -= dmg; spawnDmg(en.actor.wrap.position, dmg, 0xffe24a); playClip(en.actor, 'eat'); if (after && en.alive) after(en); if (en.hp <= 0) { en.alive = false; defeatEnemy(en); }
+      const en = aliveEnemy(); if (!en) return; const mult = essMult(ess, en.def.ess), dmg = Math.max(1, Math.round((power + hero.mag) * (0.9 + Math.random() * 0.2) * mult)); en.hp -= dmg; sfx('magia'); spawnHitFx(en.actor.wrap.position, ess); spawnDmg(en.actor.wrap.position, dmg, 0xffe24a); playClip(en.actor, 'eat'); if (after && en.alive) after(en); if (en.hp <= 0) { en.alive = false; defeatEnemy(en); }
     }
     const COMBOS = [
       { id: 'clarao', nome: '☀️ Clarão (c/ Fagulha)', need: ['fagulha'], mp: 4, run: () => comboHitAll('sol', 9) },
@@ -711,7 +712,7 @@
       const cy = (1 - hit.uv.y) * 512, idx = Math.floor((cy - top) / rh); return idx >= 0 && idx < n ? idx : -1;
     }
     function aliveEnemy() { return battle && battle.enemies.find(e => e.alive); }
-    function resetHeroTurn() { battle.heroAtb = 0; battle.ready = false; }
+    function resetHeroTurn() { if (!battle) return; battle.heroAtb = 0; battle.ready = false; } // a luta pode ter acabado no golpe final
     function refreshMenu() { if (!battle || !battle.menuOpen) return; if (battleDomUI()) renderBattleBar(); else drawBattleMenu(); }
     function battleSelect(i) {
       if (i < 0 || !battle) return;
@@ -734,18 +735,18 @@
     function heroTecnica(key, target) {
       const tc = TECNICAS[key]; if (hero.mp < tc.mp) { flash('MP insuficiente!'); return; }
       hero.mp -= tc.mp;
-      if (tc.tipo === 'cura') { const h = Math.round(tc.poder + hero.mag); hero.hp = Math.min(hero.hpMax, hero.hp + h); sfx('ready'); spawnDmg(dolly.position.clone().add(new THREE.Vector3(0, -0.4, 0)), '+' + h, 0x5be07a); flash(tc.nome + '! +' + h + ' HP'); }
+      if (tc.tipo === 'cura') { const h = Math.round(tc.poder + hero.mag); hero.hp = Math.min(hero.hpMax, hero.hp + h); sfx('cura'); spawnHitFx(heroFxPos(), 'heal'); spawnDmg(heroFxPos().clone().add(new THREE.Vector3(0, -0.4, 0)), '+' + h, 0x5be07a); flash(tc.nome + '! +' + h + ' HP'); }
       else if (tc.tipo === 'area') {
-        sfx('hit'); flash(tc.nome + '! Atingiu todos!');
+        sfx('magia'); flash(tc.nome + '! Atingiu todos!');
         for (const en of battle.enemies.filter(x => x.alive)) {
           const mult = essMult(tc.ess, en.def.ess), dmg = Math.max(1, Math.round((tc.poder + hero.mag - en.def.def / 2) * (0.85 + Math.random() * 0.3) * mult));
-          en.hp -= dmg; spawnDmg(en.actor.wrap.position, dmg, mult >= 2 ? 0xffe24a : 0xffffff); playClip(en.actor, 'eat');
+          en.hp -= dmg; spawnHitFx(en.actor.wrap.position, tc.ess || 'sol'); spawnDmg(en.actor.wrap.position, dmg, mult >= 2 ? 0xffe24a : 0xffffff); playClip(en.actor, 'eat');
           if (en.hp <= 0) { en.alive = false; defeatEnemy(en); }
         }
       }
       else if (target) {
         const mult = essMult(tc.ess, target.def.ess), dmg = Math.max(1, Math.round((tc.poder + hero.mag - target.def.def / 2) * (0.9 + Math.random() * 0.2) * mult));
-        target.hp -= dmg; sfx('hit'); spawnDmg(target.actor.wrap.position, dmg, mult >= 2 ? 0xffe24a : 0xffffff);
+        target.hp -= dmg; sfx('magia'); spawnHitFx(target.actor.wrap.position, tc.ess || 'sol'); spawnDmg(target.actor.wrap.position, dmg, mult >= 2 ? 0xffe24a : 0xffffff);
         if (mult >= 2) { flash('✨ Acertou a fraqueza! ×2'); sfx('crit'); } playClip(target.actor, 'eat');
         if (target.hp <= 0) { target.alive = false; defeatEnemy(target); }
       }
@@ -773,10 +774,53 @@
     let hurtT = 0;
     function hurtFlash() { const el = document.getElementById('hurt'); if (!el) return; el.style.opacity = '0.85'; clearTimeout(hurtT); hurtT = setTimeout(() => { el.style.opacity = '0'; }, 150); } // clarão vermelho ao levar dano
 
+    // ---------- [3.0] juice de batalha: investida + efeitos de impacto (garras / magia / cura) ----------
+    const battleAnims = [], battleFx = [];
+    function battleLunge(actor, targetPos, onApex) { // investida: avança até perto do alvo e volta; onApex dispara no impacto
+      if (!actor || !actor.wrap) { if (onApex) onApex(); return; }
+      const home = actor.wrap.position.clone();
+      const dx = targetPos.x - home.x, dz = targetPos.z - home.z, d = Math.hypot(dx, dz) || 1;
+      const apex = new THREE.Vector3(targetPos.x - dx / d * 1.3, home.y, targetPos.z - dz / d * 1.3);
+      battleAnims.push({ wrap: actor.wrap, home, apex, t: 0, dur: 0.42, onApex, fired: false });
+    }
+    function updateBattleAnims(dt) {
+      for (let i = battleAnims.length - 1; i >= 0; i--) { const a = battleAnims[i]; a.t += dt; const k = a.t / a.dur;
+        if (!a.fired && k >= 0.4) { a.fired = true; if (a.onApex) a.onApex(); }
+        if (k >= 1) { a.wrap.position.copy(a.home); battleAnims.splice(i, 1); continue; }
+        const u = k < 0.45 ? k / 0.45 : 0, p = k < 0.45 ? u * (2 - u) : 1 - (k - 0.45) / 0.55; // vai rápido (ease-out) e volta
+        a.wrap.position.lerpVectors(a.home, a.apex, Math.max(0, p));
+        a.wrap.position.y = a.home.y + Math.sin(Math.min(1, k) * Math.PI) * 0.16; // pulinho
+      }
+    }
+    function heroFxPos() { return (heroBattleActor && heroBattleActor.wrap) ? heroBattleActor.wrap.position : dolly.position; }
+    const HITCOL = { sol: 0xffd84a, agua: 0x5ad0ff, folha: 0x7be07a, cinza: 0xc8c8d8, melee: 0xfff2c0, heal: 0x6cff9a };
+    function spawnHitFx(pos, type) { // efeito de impacto: garras (melee), faíscas em anel (magia por essência) ou estrelinhas (cura)
+      const g = new THREE.Group(); g.position.copy(pos); g.position.y += 0.9; scene.add(g);
+      const cw = new THREE.Vector3(); camera.getWorldPosition(cw); g.lookAt(cw.x, g.position.y, cw.z);
+      const col = HITCOL[type] || 0xfff2c0, parts = [];
+      const bm = () => new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.95, depthWrite: false, depthTest: false, side: THREE.DoubleSide });
+      if (type === 'melee') { for (let i = 0; i < 3; i++) { const mm = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.13), bm()); mm.position.set((i - 1) * 0.16, (i - 1) * 0.22, 0.02 + i * 0.01); mm.rotation.z = -0.55; mm.renderOrder = 1700; g.add(mm); parts.push({ m: mm, grow: 1 }); } }
+      else if (type === 'heal') { for (let i = 0; i < 9; i++) { const s = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 6), bm()); s.position.set((Math.random() - 0.5) * 0.9, -0.4 + Math.random() * 0.4, (Math.random() - 0.5) * 0.4); s.renderOrder = 1700; g.add(s); parts.push({ m: s, vy: 1.0 + Math.random() * 0.7 }); } }
+      else { const ring = new THREE.Mesh(new THREE.RingGeometry(0.12, 0.32, 22), bm()); ring.renderOrder = 1700; g.add(ring); parts.push({ m: ring, ring: 1 });
+        for (let i = 0; i < 11; i++) { const a = i / 11 * 6.283; const s = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 6), bm()); s.renderOrder = 1700; g.add(s); parts.push({ m: s, vx: Math.cos(a) * 1.9, vy: Math.sin(a) * 1.9 }); } }
+      battleFx.push({ g, parts, t: 0, dur: 0.45 });
+    }
+    function updateBattleFx(dt) {
+      for (let i = battleFx.length - 1; i >= 0; i--) { const f = battleFx[i]; f.t += dt; const k = f.t / f.dur;
+        if (k >= 1) { scene.remove(f.g); battleFx.splice(i, 1); continue; }
+        for (const p of f.parts) { if (p.m.material) p.m.material.opacity = (1 - k) * 0.95;
+          if (p.ring) p.m.scale.setScalar(0.4 + k * 3.2);
+          else if (p.vx !== undefined) { p.m.position.x += p.vx * dt; p.m.position.y += p.vy * dt; p.vy -= 3 * dt; }
+          else if (p.vy !== undefined) p.m.position.y += p.vy * dt;
+          else if (p.grow) p.m.scale.set(1 + k * 1.2, 1 - k * 0.3, 1); }
+      }
+    }
     function heroAttack(e) {
       if (!e) return;
       const dmg = Math.max(1, Math.round((hero.atk * 2 - e.def.def) * (0.9 + Math.random() * 0.2)));
-      e.hp -= dmg; sfx('hit'); spawnDmg(e.actor.wrap.position, dmg, 0xffffff); playClip(e.actor, 'eat');
+      e.hp -= dmg; const tp = e.actor.wrap.position.clone();
+      battleLunge(heroBattleActor, tp, () => { sfx('garra'); spawnHitFx(tp, 'melee'); }); // o Broto investe e dá o golpe
+      spawnDmg(tp, dmg, 0xffffff); playClip(e.actor, 'eat');
       if (e.hp <= 0) { e.alive = false; defeatEnemy(e); } resetHeroTurn();
     }
     // [2.0] PARTY: cada companheiro recrutado entra na luta com um papel próprio
@@ -818,7 +862,9 @@
       const alvos = battle.enemies.filter(x => x.alive); if (!alvos.length) return;
       const tgt = alvos[(Math.random() * alvos.length) | 0];
       const mult = essMult(al.ess, tgt.def.ess), dmg = Math.max(1, Math.round((al.mag + 4 - tgt.def.def / 2) * (0.9 + Math.random() * 0.2) * mult));
-      tgt.hp -= dmg; sfx('hit'); spawnDmg(tgt.actor.wrap.position, dmg, mult >= 2 ? 0xffe24a : 0xffd86b);
+      tgt.hp -= dmg; const tp = tgt.actor.wrap.position.clone();
+      battleLunge(al.actor, tp, () => { sfx('garra'); spawnHitFx(tp, al.ess || 'melee'); }); // o companheiro investe com a cor da sua essência
+      spawnDmg(tp, dmg, mult >= 2 ? 0xffe24a : 0xffd86b);
       if (mult >= 2) flash((al.emoji || '') + ' ' + al.nome + ' acertou a fraqueza! ×2');
       if (tgt.hp <= 0) { tgt.alive = false; defeatEnemy(tgt); }
     }
@@ -827,7 +873,7 @@
       if (al.role === 'heal') { // Folho cura o mais ferido do grupo; se ninguém precisa, ataca
         const party = [{ frac: hero.hp / hero.hpMax, heal: h => { hero.hp = Math.min(hero.hpMax, hero.hp + h); updateHeroHud(); }, pos: dolly.position.clone().add(new THREE.Vector3(0, -0.4, 0)), nome: 'Você' }].concat(battle.allies.filter(x => x.alive).map(x => ({ frac: x.hp / x.hpMax, heal: h => { x.hp = Math.min(x.hpMax, x.hp + h); }, pos: x.actor.wrap.position, nome: x.nome })));
         let worst = null; for (const p of party) if (!worst || p.frac < worst.frac) worst = p;
-        if (worst && worst.frac < 0.92) { const h = Math.round(al.mag + 4); worst.heal(h); sfx('ready'); spawnDmg(worst.pos, '+' + h, 0x5be07a); flash('🐛 Folho curou ' + worst.nome + '! +' + h + ' HP'); return; }
+        if (worst && worst.frac < 0.92) { const h = Math.round(al.mag + 4); worst.heal(h); sfx('cura'); spawnHitFx(worst.pos, 'heal'); spawnDmg(worst.pos, '+' + h, 0x5be07a); flash('🐛 Folho curou ' + worst.nome + '! +' + h + ' HP'); return; }
       }
       allyAttackEnemy(al);
     }
@@ -838,13 +884,15 @@
       if (miraAliada) {
         const al = aliveAllies[(Math.random() * aliveAllies.length) | 0];
         const dmg = Math.max(1, Math.round((e.def.atk * 2 - al.def) * (0.9 + Math.random() * 0.2)));
-        al.hp = Math.max(0, al.hp - dmg); spawnDmg(al.actor.wrap.position, dmg, 0xff6b6b);
+        al.hp = Math.max(0, al.hp - dmg); const tp = al.actor.wrap.position.clone();
+        battleLunge(e.actor, tp, () => spawnHitFx(tp, 'melee')); spawnDmg(tp, dmg, 0xff6b6b);
         if (al.hp <= 0) { al.alive = false; flash((al.emoji || '') + ' ' + al.nome + ' ficou tonto…'); puff(al.actor.wrap.position); if (al.bar) al.actor.wrap.remove(al.bar); al.actor.wrap.visible = false; }
       } else {
         let dmg = Math.max(1, Math.round((e.def.atk * 2 - hero.def) * (0.9 + Math.random() * 0.2)));
         if (hero.defending) dmg = Math.max(1, Math.round(dmg * 0.5));
         if (game.flags.gota) dmg = Math.max(1, dmg - 1); // Gota no grupo: você apanha menos
-        hero.hp = Math.max(0, hero.hp - dmg); spawnDmg(dolly.position.clone().add(new THREE.Vector3(0, -0.5, 0)), dmg, 0xff6b6b); updateHeroHud(); hurtFlash();
+        hero.hp = Math.max(0, hero.hp - dmg); const tp = heroFxPos().clone();
+        battleLunge(e.actor, tp, () => { spawnHitFx(tp, 'melee'); hurtFlash(); }); spawnDmg(tp.clone().add(new THREE.Vector3(0, -0.5, 0)), dmg, 0xff6b6b); updateHeroHud();
         if (hero.hp <= 0) loseBattle();
       }
     }
@@ -1032,6 +1080,9 @@
       else if (kind === 'vroom') { o.type = 'sawtooth'; o.frequency.setValueAtTime(70, t); o.frequency.exponentialRampToValueAtTime(230, t + 0.35); g.gain.setValueAtTime(0.12, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.42); o.start(t); o.stop(t + 0.44); }
       else if (kind === 'neigh') { o.type = 'sawtooth'; o.frequency.setValueAtTime(620, t); o.frequency.linearRampToValueAtTime(840, t + 0.08); o.frequency.linearRampToValueAtTime(360, t + 0.42); g.gain.setValueAtTime(0.001, t); g.gain.exponentialRampToValueAtTime(0.1, t + 0.04); g.gain.exponentialRampToValueAtTime(0.001, t + 0.46); o.start(t); o.stop(t + 0.48); }
       else if (kind === 'clop') { o.type = 'square'; o.frequency.setValueAtTime(180, t); o.frequency.exponentialRampToValueAtTime(80, t + 0.06); g.gain.setValueAtTime(0.11, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.09); o.start(t); o.stop(t + 0.1); }
+      else if (kind === 'garra') { o.type = 'square'; o.frequency.setValueAtTime(1800, t); o.frequency.exponentialRampToValueAtTime(340, t + 0.1); g.gain.setValueAtTime(0.16, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.13); o.start(t); o.stop(t + 0.14); } // golpe físico (garra/corte)
+      else if (kind === 'magia') { o.type = 'triangle'; o.frequency.setValueAtTime(380, t); o.frequency.exponentialRampToValueAtTime(1500, t + 0.22); g.gain.setValueAtTime(0.001, t); g.gain.exponentialRampToValueAtTime(0.13, t + 0.03); g.gain.exponentialRampToValueAtTime(0.001, t + 0.3); o.start(t); o.stop(t + 0.32); const o2 = actx.createOscillator(), g2 = actx.createGain(); o2.type = 'sine'; o2.frequency.setValueAtTime(760, t); o2.frequency.exponentialRampToValueAtTime(3000, t + 0.22); o2.connect(g2).connect(actx.destination); g2.gain.setValueAtTime(0.001, t); g2.gain.exponentialRampToValueAtTime(0.06, t + 0.04); g2.gain.exponentialRampToValueAtTime(0.001, t + 0.28); o2.start(t); o2.stop(t + 0.3); } // magia (faísca subindo)
+      else if (kind === 'cura') { [659, 784, 988, 1319].forEach((f, k) => { const oo = actx.createOscillator(), gg = actx.createGain(); oo.type = 'triangle'; oo.frequency.value = f; oo.connect(gg).connect(actx.destination); const tt = t + k * 0.06; gg.gain.setValueAtTime(0.001, tt); gg.gain.exponentialRampToValueAtTime(0.09, tt + 0.02); gg.gain.exponentialRampToValueAtTime(0.001, tt + 0.34); oo.start(tt); oo.stop(tt + 0.36); }); } // cura (carrilhão gentil)
     }
     // (os inimigos de teste são criados junto com os pets, onde getGLB já existe)
 
@@ -2626,8 +2677,8 @@
       if (inBattle) { mx = 0; mz = 0; wantJump = false; } // na batalha o jogador fica parado
       if (inBattle && battle && !renderer.xr.isPresenting) { // [3.0] câmera de batalha DIAGONAL: atrás + de lado + acima, olhando pro centro da arena (mostra a turma E os inimigos)
         dolly.rotation.y = battle.yaw;                 // dolly -Z aponta pro inimigo
-        camera.position.set(-3.4, 2.9, 5.0);           // diagonal baixa: à esquerda + atrás (turma vai pra esquerda, longe da ficha à direita)
-        _battleLookAt.set(dolly.position.x + battle.fx * 3.4, dolly.position.y + 1.0, dolly.position.z + battle.fz * 3.4);
+        camera.position.set(2.0, 2.8, 4.7);            // diagonal baixa: à direita + atrás → a SUA turma fica à direita e o rival à esquerda
+        _battleLookAt.set(dolly.position.x + battle.fx * 3.0, dolly.position.y + 1.0, dolly.position.z + battle.fz * 3.0);
         camera.updateWorldMatrix(true, false); camera.lookAt(_battleLookAt);
       }
       const len = Math.hypot(mx, mz);
@@ -2746,6 +2797,7 @@
       if (eraMenuOpen && !onTouchUI()) { const h = eraPick(); if (h !== eraHover) { eraHover = h; drawEraMenu(); } }
       // COMBATE: tick da batalha ou checa aproximação de inimigo; efeitos morrendo
       if (inBattle) updateBattle(dt); else if (mount === 'aviao') { /* voando: paz, sem encrenca */ } else { updateOverworldEnemies(dt); checkAggro(); checkBoss(); }
+      updateBattleAnims(dt); updateBattleFx(dt); // [3.0] investidas + efeitos de impacto (terminam mesmo após a luta)
       updateDying(dt);
       // dica de interação (contextual) — a narração tem prioridade (até no meio da batalha)
       if (narration) setHint(onTouchUI() ? '' : '▶ Continuar (' + actHint() + ')'); // no celular a caixa HTML já mostra "continuar"

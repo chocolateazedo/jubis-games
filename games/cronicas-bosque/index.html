@@ -838,12 +838,12 @@
       recruited.forEach((k, i) => {
         const d = ALLY_DEF[k], pb = PARTY_BUILD[k] || PARTY_BUILD.fagulha;
         const fa = spawnProc(pb.fn, pb.h);
-        const off = ((i % 2 === 0 ? 1 : -1) * (Math.floor(i / 2) + 1)) * 0.95; // flanqueia o herói (que fica no centro), em cluster
-        const back = 0.4 + Math.floor(i / 2) * 0.55; // os de fora recuam um pouco → grupo compacto
-        const ax = dolly.position.x + rvx * off - fx * back, az = dolly.position.z + rvz * off - fz * back;
-        fa.wrap.position.set(ax, heightAt(ax, az), az); fa.wrap.rotation.y = encara;
+        const off = ((i % 2 === 0 ? 1 : -1) * (Math.floor(i / 2) + 1)) * 1.25; // [3.3] espalha mais (sem fila)
+        const back = -0.6 + ((i * 37) % 5) * 0.45; // profundidades variadas → não fica enfileirado
+        const ax = dolly.position.x + rvx * off - fx * back, az = dolly.position.z + rvz * off - fz * back, ay = heightAt(ax, az);
+        fa.wrap.position.set(ax, ay, az); fa.wrap.rotation.y = encara;
         let hp = d.hp + hero.lvl * 2; if (game.flags.coro) hp = Math.round(hp * 1.25); // [2.0] coro dos Brotinhos reforça a party
-        const al = { actor: fa, kind: k, nome: d.nome, emoji: d.emoji, hp, hpMax: hp, def: d.def + hero.lvl, mag: d.mag + hero.lvl, agi: d.agi, role: d.role, ess: d.ess, atb: Math.random() * 0.3, alive: true, bar: makeBar() };
+        const al = { actor: fa, kind: k, nome: d.nome, emoji: d.emoji, hp, hpMax: hp, def: d.def + hero.lvl, mag: d.mag + hero.lvl, agi: d.agi, role: d.role, ess: d.ess, atb: Math.random() * 0.3, alive: true, bar: makeBar(), baseY: ay, phase: Math.random() * 6.28 };
         al.bar.position.set(0, pb.h + 0.5, 0); fa.wrap.add(al.bar); drawBar(al.bar, 1, d.nome + ' ' + hp);
         battle.allies.push(al);
       });
@@ -852,10 +852,10 @@
     let heroBattleActor = null;
     function spawnHeroBattle() { // [3.0] o Broto visível na formação (só fora do VR — no VR você é 1ª pessoa)
       if (renderer.xr.isPresenting || !battle) return;
-      const fa = spawnProc(pmBroto, PARTY_BUILD.broto.h);
-      fa.wrap.position.set(dolly.position.x, heightAt(dolly.position.x, dolly.position.z), dolly.position.z);
+      const fa = spawnProc(pmBroto, PARTY_BUILD.broto.h); const hy = heightAt(dolly.position.x, dolly.position.z);
+      fa.wrap.position.set(dolly.position.x, hy, dolly.position.z);
       fa.wrap.rotation.y = Math.atan2(battle.fx, battle.fz);
-      heroBattleActor = fa;
+      fa.baseY = hy; fa.phase = 0; heroBattleActor = fa;
     }
     function despawnHeroBattle() { if (heroBattleActor) { scene.remove(heroBattleActor.wrap); heroBattleActor = null; } }
     function allyAttackEnemy(al) {
@@ -1007,14 +1007,31 @@
         a.enemyKey = key; overworldEnemies.push(a); if (cb) cb(a);
       }).catch(() => {});
     }
+    // [3.3] posição espalhada (sem fila) no lado dos inimigos (à frente da turma)
+    function battleEnemyPos(i, n) {
+      const perpX = -battle.fz, perpZ = battle.fx, spread = (i - (n - 1) / 2) * 1.8, depth = (i % 2 === 0 ? 0 : 1.3) + (i > 2 ? 0.7 : 0);
+      return { x: dolly.position.x + battle.fx * (4.0 + depth) + perpX * spread, z: dolly.position.z + battle.fz * (4.0 + depth) + perpZ * spread };
+    }
+    const EXTRA_ENEMIES = ['brotoca', 'lobinho', 'cinzela', 'caranguejo', 'macaco', 'corvo'];
+    function addBattleEnemy(key, i, n) { // inimigo extra (GLB) numa vaga espalhada
+      const d = ENEMY_DEF[key], p = battleEnemyPos(i, n), y = heightAt(p.x, p.z);
+      getGLB(`../bosque-vr/pets/animal-${d.glb}.glb`).then(g => { if (!battle) return;
+        const a = spawnActor(g, 'idle', d.h); a.wrap.position.set(p.x, y, p.z);
+        const tint = mm => { const c = mm.clone(); if (c.color) c.color.setHex(d.tint); return c; }; a.wrap.traverse(o => { if (o.isMesh && o.material) o.material = Array.isArray(o.material) ? o.material.map(tint) : tint(o.material); });
+        a.enemyKey = key; const e = { actor: a, def: d, hp: d.hp, hpMax: d.hp, atb: Math.random() * 0.3, alive: true, bar: makeBar(), baseY: y, phase: Math.random() * 6.28 };
+        e.bar.position.set(0, d.h + 0.7, 0); a.wrap.add(e.bar); drawBar(e.bar, 1, d.nome);
+        battle.enemies.push(e); _bsSig = null;
+      }).catch(() => {});
+    }
     function startBattle(actor) {
       inBattle = true; document.body.classList.add('inbattle'); updateMusicTrack();
       camera.getWorldDirection(rcDir); rcDir.y = 0; rcDir.normalize();
-      const ex = dolly.position.x + rcDir.x * 4.4, ez = dolly.position.z + rcDir.z * 4.4;
-      actor.wrap.position.set(ex, heightAt(ex, ez), ez);
-      const d = ENEMY_DEF[actor.enemyKey], e = { actor, def: d, hp: d.hp, hpMax: d.hp, atb: Math.random() * 0.3, alive: true, bar: makeBar() };
+      const d = ENEMY_DEF[actor.enemyKey], e = { actor, def: d, hp: d.hp, hpMax: d.hp, atb: Math.random() * 0.3, alive: true, bar: makeBar(), phase: Math.random() * 6.28 };
       e.bar.position.set(0, d.h + 0.7, 0); actor.wrap.add(e.bar);
-      battle = { enemies: [e], allies: [], heroAtb: 0, ready: false, menuOpen: false, hover: -1, ring: null, fx: rcDir.x, fz: rcDir.z, yaw: Math.atan2(rcDir.x, rcDir.z) };
+      battle = { enemies: [e], allies: [], heroAtb: 0, ready: false, menuOpen: false, hover: -1, ring: null, fx: rcDir.x, fz: rcDir.z, yaw: Math.atan2(rcDir.x, rcDir.z), target: 0, clock: 0 };
+      const n = (d.boss || d.miniboss) ? 1 : 2 + (Math.random() * 4 | 0); // [3.3] 2 a 5 inimigos (chefe/mini-chefe ficam sozinhos)
+      const p0 = battleEnemyPos(0, n); e.actor.wrap.position.set(p0.x, heightAt(p0.x, p0.z), p0.z); e.baseY = heightAt(p0.x, p0.z);
+      for (let i = 1; i < n; i++) addBattleEnemy(EXTRA_ENEMIES[Math.random() * EXTRA_ENEMIES.length | 0], i, n);
       spawnPartyAllies(); spawnHeroBattle(); // o grupo recrutado + o Broto visível na formação
       const ring = new THREE.Mesh(new THREE.RingGeometry(4.6, 5.3, 48), new THREE.MeshBasicMaterial({ color: 0xffd86b, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false }));
       ring.rotation.x = -Math.PI / 2; ring.position.set(dolly.position.x, heightAt(dolly.position.x, dolly.position.z) + 0.12, dolly.position.z); scene.add(ring); battle.ring = ring;
@@ -1034,6 +1051,11 @@
     }
     function updateBattle(dt) {
       const b = battle; if (!b) return;
+      b.clock = (b.clock || 0) + dt; // [3.3] respiração/idle: ninguém fica estático
+      const bob = (w, baseY, ph) => { if (w && baseY != null) w.position.y = baseY + Math.sin(b.clock * 3 + ph) * 0.07; };
+      if (heroBattleActor) bob(heroBattleActor.wrap, heroBattleActor.baseY, heroBattleActor.phase || 0);
+      for (const al of b.allies) if (al.alive) bob(al.actor.wrap, al.baseY, al.phase || 0);
+      for (const e of b.enemies) if (e.alive) bob(e.actor.wrap, e.baseY, e.phase || 0);
       // chefe: ao baixar a vida, vira a fase do ACALANTO (cantar, não bater)
       if (b.boss && b.faseBatalha === 'luta' && b.boss.alive && b.boss.hp <= b.boss.hpMax * 0.3) setAcalanto();
       const acalanto = b.faseBatalha === 'acalanto';

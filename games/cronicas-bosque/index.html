@@ -523,7 +523,7 @@
     // ============================================================
     //  COMBATE ATB (por turnos, no próprio mapa — à la Chrono Trigger)
     // ============================================================
-    const hero = { lvl: 1, xp: 0, xpNext: 8, hp: 20, hpMax: 20, mp: 5, mpMax: 5, atk: 4, def: 3, mag: 4, agi: 8, defending: false, tecnicas: ['raio', 'brotar'], itens: { mel: 2 } };
+    const hero = { lvl: 1, xp: 0, xpNext: 8, hp: 26, hpMax: 26, mp: 5, mpMax: 5, atk: 4, def: 3, mag: 4, agi: 8, defending: false, tecnicas: ['raio', 'brotar'], itens: { mel: 2 } };
     const ENEMY_DEF = {
       brotoca: { nome: 'Brotoca', glb: 'caterpillar', tint: 0x7fcf4a, hp: 12, atk: 3, def: 2, agi: 6, xp: 4, h: 0.8, ess: 'folha' },
       lobinho: { nome: 'Lobinho de Musgo', glb: 'dog', tint: 0x6f8f5a, hp: 22, atk: 5, def: 4, agi: 11, xp: 6, h: 0.95, ess: 'folha' },
@@ -913,12 +913,12 @@
       sfx('hurt'); playClip(e.actor, 'gesture-negative'); e.atb = 0;
       if (miraAliada) {
         const al = aliveAllies[(Math.random() * aliveAllies.length) | 0];
-        const dmg = Math.max(1, Math.round((e.def.atk * 2 - al.def) * (0.9 + Math.random() * 0.2)));
+        const dmg = Math.max(1, Math.round((e.def.atk * 1.6 - al.def) * (0.9 + Math.random() * 0.2)));
         al.hp = Math.max(0, al.hp - dmg); const tp = al.actor.wrap.position.clone();
         battleLunge(e.actor, tp, () => spawnHitFx(tp, 'melee')); spawnDmg(tp, dmg, 0xff6b6b);
         if (al.hp <= 0) { al.alive = false; flash((al.emoji || '') + ' ' + al.nome + ' ficou tonto…'); puff(al.actor.wrap.position); if (al.bar) al.actor.wrap.remove(al.bar); al.actor.wrap.visible = false; }
       } else {
-        let dmg = Math.max(1, Math.round((e.def.atk * 2 - hero.def) * (0.9 + Math.random() * 0.2)));
+        let dmg = Math.max(1, Math.round((e.def.atk * 1.6 - hero.def) * (0.9 + Math.random() * 0.2)));
         if (hero.defending) dmg = Math.max(1, Math.round(dmg * 0.5));
         if (game.flags.gota) dmg = Math.max(1, dmg - 1); // Gota no grupo: você apanha menos
         hero.hp = Math.max(0, hero.hp - dmg); const tp = heroFxPos().clone();
@@ -1059,7 +1059,7 @@
       const d = ENEMY_DEF[actor.enemyKey], e = { actor, def: d, hp: d.hp, hpMax: d.hp, atb: Math.random() * 0.3, alive: true, bar: makeBar(), phase: Math.random() * 6.28 };
       e.charH = d.h; scene.add(e.bar);
       battle = { enemies: [e], allies: [], heroAtb: 0, ready: false, menuOpen: false, hover: -1, ring: null, fx: rcDir.x, fz: rcDir.z, yaw: Math.atan2(rcDir.x, rcDir.z), target: 0, clock: 0 };
-      const n = (d.boss || d.miniboss) ? 1 : 2 + (Math.random() * 4 | 0); // [3.3] 2 a 5 inimigos (chefe/mini-chefe ficam sozinhos)
+      const n = (d.boss || d.miniboss) ? 1 : 1 + (Math.random() * 3 | 0); // [3.3] 1 a 3 inimigos (chefe/mini-chefe ficam sozinhos)
       const p0 = battleEnemyPos(0, n); e.actor.wrap.position.set(p0.x, heightAt(p0.x, p0.z), p0.z); e.baseY = heightAt(p0.x, p0.z);
       for (let i = 1; i < n; i++) addBattleEnemy(EXTRA_ENEMIES[Math.random() * EXTRA_ENEMIES.length | 0], i, n);
       spawnPartyAllies(); spawnHeroBattle(); // o grupo recrutado + o Broto visível na formação
@@ -1092,7 +1092,7 @@
       if (!b.menuOpen && !narration) {
         if (!b.ready) { b.heroAtb += dt * (0.30 + hero.agi / 300); if (b.heroAtb >= 1) { b.heroAtb = 1; b.ready = true; sfx('ready'); if (game.flags.folho && hero.hp < hero.hpMax) { hero.hp = Math.min(hero.hpMax, hero.hp + 1); } } } // Folho cuida do herói
         if (!acalanto) { // no Acalanto a Murcha só treme de frio, não ataca
-          for (const e of b.enemies) { if (!e.alive) continue; e.atb += dt * (0.16 + e.def.agi / 220); if (e.atb >= 1) enemyAttack(e); }
+          for (const e of b.enemies) { if (!e.alive) continue; e.atb += dt * (0.11 + e.def.agi / 320); if (e.atb >= 1) enemyAttack(e); } // [3.3] atacam menos vezes (mais fácil)
           for (const al of b.allies) { if (!al.alive) continue; al.atb += dt * (0.16 + al.agi / 200); if (al.atb >= 1) { al.atb = 0; allyAct(al); } }
         }
       }

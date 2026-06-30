@@ -525,15 +525,15 @@
     // ============================================================
     const hero = { lvl: 1, xp: 0, xpNext: 8, hp: 26, hpMax: 26, mp: 5, mpMax: 5, atk: 4, def: 3, mag: 4, agi: 8, defending: false, tecnicas: ['raio', 'brotar'], itens: { mel: 2 } };
     const ENEMY_DEF = {
-      brotoca: { nome: 'Brotoca', glb: 'caterpillar', tint: 0x7fcf4a, hp: 12, atk: 3, def: 2, agi: 6, xp: 4, h: 0.8, ess: 'folha' },
-      lobinho: { nome: 'Lobinho de Musgo', glb: 'dog', tint: 0x6f8f5a, hp: 22, atk: 5, def: 4, agi: 11, xp: 6, h: 0.95, ess: 'folha' },
-      cinzela: { nome: 'Cinzela', glb: 'caterpillar', tint: 0x9a9aa2, hp: 16, atk: 4, def: 3, agi: 8, xp: 5, h: 0.8, ess: 'cinza' },
-      caranguejo: { nome: 'Caranguejo Casca-Dura', glb: 'crab', tint: 0xd87a4a, hp: 28, atk: 5, def: 7, agi: 5, xp: 8, h: 0.7, ess: 'agua' },
-      javali: { nome: 'Javali Espinho', glb: 'hog', tint: 0x8a6a4a, hp: 32, atk: 8, def: 3, agi: 6, xp: 9, h: 0.9, ess: 'folha' },
-      macaco: { nome: 'Macaco Travesso', glb: 'monkey', tint: 0x9a7a4a, hp: 20, atk: 5, def: 3, agi: 14, xp: 8, h: 0.9, ess: 'agua' },
-      corvo: { nome: 'Corvo Cinza', glb: 'parrot', tint: 0x6a6a72, hp: 18, atk: 6, def: 2, agi: 13, xp: 7, h: 0.6, ess: 'cinza' },
-      lobao: { nome: 'Lobão Cinza (Alfa)', glb: 'tiger', tint: 0x8a8a92, hp: 64, atk: 9, def: 6, agi: 10, xp: 28, h: 1.2, ess: 'cinza', miniboss: true, reward: 'amuleto' },
-      murcha: { nome: 'Murcha, a Mariposa', glb: 'bee', tint: 0x9a8ab0, hp: 70, atk: 7, def: 5, agi: 7, xp: 40, h: 2.4, ess: 'cinza', boss: true },
+      brotoca: { nome: 'Brotoca', build: pmBrotoca, glb: 'caterpillar', hp: 12, atk: 3, def: 2, agi: 6, xp: 4, h: 1.3, ess: 'folha' },
+      lobinho: { nome: 'Lobinho de Musgo', build: pmLobinho, glb: 'dog', hp: 22, atk: 5, def: 4, agi: 11, xp: 6, h: 1.5, ess: 'folha' },
+      cinzela: { nome: 'Cinzela', build: pmCinzela, glb: 'caterpillar', hp: 16, atk: 4, def: 3, agi: 8, xp: 5, h: 1.3, ess: 'cinza' },
+      caranguejo: { nome: 'Caranguejo Casca-Dura', build: pmCaranguejo, glb: 'crab', hp: 28, atk: 5, def: 7, agi: 5, xp: 8, h: 1.3, ess: 'agua' },
+      javali: { nome: 'Javali Espinho', build: pmJavali, glb: 'hog', hp: 32, atk: 8, def: 3, agi: 6, xp: 9, h: 1.5, ess: 'folha' },
+      macaco: { nome: 'Macaco Travesso', build: pmMacaco, glb: 'monkey', hp: 20, atk: 5, def: 3, agi: 14, xp: 8, h: 1.5, ess: 'agua' },
+      corvo: { nome: 'Corvo Cinza', build: pmCorvo, glb: 'parrot', hp: 18, atk: 6, def: 2, agi: 13, xp: 7, h: 1.4, ess: 'cinza' },
+      lobao: { nome: 'Lobão Cinza (Alfa)', build: pmLobao, glb: 'tiger', hp: 64, atk: 9, def: 6, agi: 10, xp: 28, h: 2.0, ess: 'cinza', miniboss: true, reward: 'amuleto' },
+      murcha: { nome: 'Murcha, a Mariposa', build: pmMurcha, glb: 'bee', hp: 70, atk: 7, def: 5, agi: 7, xp: 40, h: 2.8, ess: 'cinza', boss: true },
     };
     // Roda das Essências: a chave vence (×2) os valores; fraqueza inversa = ×0.5
     const ESS_STRONG = { sol: ['folha', 'cinza'], agua: ['sol', 'cinza'], folha: ['agua'], cinza: ['folha'] };
@@ -973,13 +973,10 @@
     }
     function startBossBattle() {
       iniciarFase(7);
-      getGLB('../bosque-vr/pets/animal-bee.glb').then(g => {
-        const d = ENEMY_DEF.murcha, a = spawnActor(g, 'idle', d.h);
+      { const d = ENEMY_DEF.murcha, a = spawnProc(d.build, d.h); // [3.5] a Murcha procedural (mariposa cinza das Fichas)
         camera.getWorldDirection(rcDir); rcDir.y = 0; rcDir.normalize();
         const ex = dolly.position.x + rcDir.x * 5, ez = dolly.position.z + rcDir.z * 5;
         a.wrap.position.set(ex, heightAt(ex, ez) + 1.5, ez);
-        const tint = mm => { const c = mm.clone(); if (c.color) c.color.setHex(d.tint); return c; };
-        a.wrap.traverse(o => { if (o.isMesh && o.material) o.material = Array.isArray(o.material) ? o.material.map(tint) : tint(o.material); });
         a.enemyKey = 'murcha';
         const e = { actor: a, def: d, hp: d.hp, hpMax: d.hp, atb: 0.2, alive: true, bar: makeBar(), boss: true };
         e.charH = d.h + 1.5; scene.add(e.bar); drawBar(e.bar, 1); e.baseY = heightAt(ex, ez) + 1.5; e.phase = 0;
@@ -990,7 +987,7 @@
         ring.rotation.x = -Math.PI / 2; ring.position.set(dolly.position.x, heightAt(dolly.position.x, dolly.position.z) + 0.12, dolly.position.z); scene.add(ring); battle.ring = ring;
         vrBattleVantage(); heroHud.visible = false; hideBattleStatus(); sfx('start'); setObjetivo('Vença a Murcha… mas talvez vencer seja CUIDAR.');
         flash('🦋 A Murcha aparece — de frio e sozinha, roendo a seiva do Vovô.');
-      }).catch(() => {});
+      }
     }
     const VERSOS_CANCAO = ['🍃 Primavera', '☀️ Verão', '💧 Chuvas', '🩶 Inverno'];
     function setAcalanto() {
@@ -1030,6 +1027,7 @@
 
     function spawnEnemy(key, x, z, cb) {
       const d = ENEMY_DEF[key];
+      if (d.build) { const a = spawnProc(d.build, d.h); a.wrap.position.set(x, heightAt(x, z), z); a.enemyKey = key; overworldEnemies.push(a); if (cb) cb(a); return; } // [3.5] inimigo procedural das Fichas
       getGLB(`../bosque-vr/pets/animal-${d.glb}.glb`).then(g => {
         const a = spawnActor(g, 'walk', d.h);
         a.wrap.position.set(x, heightAt(x, z), z);
@@ -1049,14 +1047,15 @@
       dolly.position.set(vx, heightAt(vx, vz) + 0.8, vz); dolly.rotation.y = battle.yaw;
     }
     const EXTRA_ENEMIES = ['brotoca', 'lobinho', 'cinzela', 'caranguejo', 'macaco', 'corvo'];
-    function addBattleEnemy(key, i, n) { // inimigo extra (GLB) numa vaga espalhada
+    function addBattleEnemy(key, i, n) { // inimigo extra numa vaga espalhada
       const d = ENEMY_DEF[key], p = battleEnemyPos(i, n), y = heightAt(p.x, p.z);
-      getGLB(`../bosque-vr/pets/animal-${d.glb}.glb`).then(g => { if (!battle) return;
-        const a = spawnActor(g, 'idle', d.h); a.wrap.position.set(p.x, y, p.z);
+      const place = a => { if (!battle) return; a.wrap.position.set(p.x, y, p.z); a.enemyKey = key;
+        const e = { actor: a, def: d, hp: d.hp, hpMax: d.hp, atb: Math.random() * 0.3, alive: true, bar: makeBar(), baseY: y, phase: Math.random() * 6.28 };
+        e.charH = d.h; scene.add(e.bar); drawBar(e.bar, 1); battle.enemies.push(e); _bsSig = null; };
+      if (d.build) { place(spawnProc(d.build, d.h)); return; } // [3.5] procedural
+      getGLB(`../bosque-vr/pets/animal-${d.glb}.glb`).then(g => { const a = spawnActor(g, 'idle', d.h);
         const tint = mm => { const c = mm.clone(); if (c.color) c.color.setHex(d.tint); return c; }; a.wrap.traverse(o => { if (o.isMesh && o.material) o.material = Array.isArray(o.material) ? o.material.map(tint) : tint(o.material); });
-        a.enemyKey = key; const e = { actor: a, def: d, hp: d.hp, hpMax: d.hp, atb: Math.random() * 0.3, alive: true, bar: makeBar(), baseY: y, phase: Math.random() * 6.28 };
-        e.charH = d.h; scene.add(e.bar); drawBar(e.bar, 1);
-        battle.enemies.push(e); _bsSig = null;
+        place(a);
       }).catch(() => {});
     }
     function startBattle(actor) {
@@ -1425,6 +1424,74 @@
       for (const sx of [-1, 1]) { const b = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 8), pmMat(0xE8B8C0, { transparent: true, opacity: 0.7 })); b.scale.set(1, 0.7, 0.4); b.position.set(sx * 0.4, 1.92, 0.52); g.add(b); }
       const halo = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 10), pmMat(0xFFD86A, { emissive: 0xFFD86A, emissiveIntensity: 0.9, transparent: true, opacity: 0.85 })); halo.position.y = 3.0; g.add(halo);
       const base = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.7, 16, 1, true), luz); base.position.y = 0.4; g.add(base);
+      return g; }
+    // ---------- [3.5] Inimigos procedurais (Lote 3 chefes + Lote 4 bestiário das Fichas) ----------
+    function pmPernas(g, col, n, y) { for (let i = 0; i < n; i++) for (const sx of [-1, 1]) { const p = new THREE.Mesh(RB(0.18, 0.16, 0.3, 0.07), col); p.position.set(sx * 0.4, y, 0.3 - i * 0.5); g.add(p); } }
+    function pmCaranguejo() { const g = new THREE.Group(); const az = pmMat(0x3FB6D6), azE = pmMat(0x2E8FB0), cr = pmMat(0xFBE7C8);
+      const corpo = new THREE.Mesh(RB(1.5, 0.95, 1.1, 0.4), az); corpo.position.y = 0.65; g.add(corpo);
+      const face = new THREE.Mesh(RB(0.9, 0.6, 0.35, 0.18), cr); face.position.set(0, 0.6, 0.55); g.add(face);
+      pmRosto(g, { y: 0.66, z: 0.74, sep: 0.22, r: 0.14, by: 0.52, bz: 0.7 });
+      for (const sx of [-1, 1]) { const st = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.5, 6), az); st.position.set(sx * 0.3, 1.25, 0.2); g.add(st); const ey = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 10), PM_ESC); ey.position.set(sx * 0.3, 1.5, 0.2); g.add(ey); const w = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), PM_BR); w.position.set(sx * 0.3, 1.55, 0.3); g.add(w); }
+      for (const sx of [-1, 1]) { const br = new THREE.Mesh(RB(0.3, 0.3, 0.5, 0.12), azE); br.position.set(sx * 0.95, 0.6, 0.2); g.add(br); const cl = new THREE.Mesh(RB(0.45, 0.5, 0.3, 0.13), azE); cl.position.set(sx * 1.25, 0.7, 0.5); g.add(cl); }
+      pmPernas(g, azE, 2, 0.12); return g; }
+    function pmLobinho(col) { col = col || 0x8a9a7a; const g = new THREE.Group(); const c = pmMat(col), cE = pmMat(0x5a6a4a), cr = pmMat(0xE9DCBE);
+      const corpo = new THREE.Mesh(RB(1.0, 1.0, 1.2, 0.34), c); corpo.position.y = 0.7; g.add(corpo);
+      const barr = new THREE.Mesh(RB(0.6, 0.7, 0.3, 0.15), cr); barr.position.set(0, 0.65, 0.5); g.add(barr);
+      const cab = new THREE.Mesh(RB(0.95, 0.85, 0.85, 0.3), c); cab.position.set(0, 1.5, 0.15); g.add(cab);
+      const foc = new THREE.Mesh(RB(0.45, 0.4, 0.4, 0.16), cr); foc.position.set(0, 1.4, 0.55); g.add(foc);
+      const nar = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), PM_ESC); nar.position.set(0, 1.48, 0.78); g.add(nar);
+      for (const sx of [-1, 1]) { const o = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.4, 4), c); o.position.set(sx * 0.32, 2.0, 0.1); g.add(o); }
+      pmRosto(g, { y: 1.55, z: 0.55, sep: 0.24, r: 0.14, bochechas: null, sorriso: false });
+      const cau = new THREE.Mesh(RB(0.25, 0.25, 0.6, 0.1), c); cau.position.set(0, 0.8, -0.7); cau.rotation.x = -0.6; g.add(cau);
+      pmPernas(g, cE, 2, 0.12); return g; }
+    function pmBrotoca() { const g = new THREE.Group(); const v = pmMat(0x7fcf4a), vE = pmMat(0x5aa030), vc = pmMat(0xA9D86A);
+      const corpo = new THREE.Mesh(RB(1.0, 1.0, 0.95, 0.35), v); corpo.position.y = 0.65; g.add(corpo);
+      const cab = new THREE.Mesh(RB(1.05, 0.95, 0.9, 0.34), vc); cab.position.y = 1.5; g.add(cab);
+      for (const sx of [-1, 1]) { const f = new THREE.Mesh(RB(0.5, 0.12, 0.3, 0.05), vE); f.position.set(sx * 0.2, 2.05, 0); f.rotation.set(0.4, 0, sx * -0.5); g.add(f); }
+      pmRosto(g, { y: 1.55, z: 0.5, sep: 0.2, r: 0.14, by: 1.42 });
+      pmPernas(g, vE, 1, 0.1); return g; }
+    function pmMacaco() { const g = new THREE.Group(); const az = pmMat(0x4fa0d0), azE = pmMat(0x3a7aa0), cr = pmMat(0xE9DCBE);
+      const corpo = new THREE.Mesh(RB(0.95, 1.05, 0.9, 0.32), az); corpo.position.y = 0.7; g.add(corpo);
+      const barr = new THREE.Mesh(RB(0.55, 0.6, 0.3, 0.14), cr); barr.position.set(0, 0.65, 0.5); g.add(barr);
+      const cab = new THREE.Mesh(RB(0.95, 0.9, 0.85, 0.32), az); cab.position.y = 1.55; g.add(cab);
+      const face = new THREE.Mesh(RB(0.6, 0.55, 0.3, 0.18), cr); face.position.set(0, 1.48, 0.5); g.add(face);
+      for (const sx of [-1, 1]) { const o = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), az); o.scale.set(1, 1, 0.5); o.position.set(sx * 0.5, 1.6, 0.1); g.add(o); }
+      pmRosto(g, { y: 1.52, z: 0.6, sep: 0.18, r: 0.13, by: 1.42, bz: 0.55 });
+      for (const sx of [-1, 1]) { const br = new THREE.Mesh(RB(0.2, 0.55, 0.2, 0.09), az); br.position.set(sx * 0.62, 0.7, 0.1); g.add(br); }
+      pmPernas(g, azE, 1, 0.1); return g; }
+    function pmCorvo() { const g = new THREE.Group(); const c = pmMat(0x6a6a72), cE = pmMat(0x4a4a52), bk = pmMat(0xE0A040);
+      const corpo = new THREE.Mesh(RB(0.9, 1.1, 0.85, 0.34), c); corpo.position.y = 0.8; g.add(corpo);
+      const cab = new THREE.Mesh(RB(0.8, 0.7, 0.7, 0.26), c); cab.position.y = 1.65; g.add(cab);
+      const bico = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.4, 4), bk); bico.rotation.x = Math.PI / 2; bico.position.set(0, 1.6, 0.55); g.add(bico);
+      for (const sx of [-1, 1]) { const e = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.025, 6, 10, Math.PI), PM_ESC); e.position.set(sx * 0.18, 1.78, 0.35); g.add(e); }
+      pmRosto(g, { y: 1.68, z: 0.4, sep: 0.18, r: 0.12, bochechas: null, sorriso: false });
+      for (const sx of [-1, 1]) { const w = new THREE.Mesh(RB(0.18, 0.7, 0.5, 0.1), cE); w.position.set(sx * 0.55, 0.85, -0.1); w.rotation.z = sx * 0.2; g.add(w); }
+      return g; }
+    function pmJavali() { const g = new THREE.Group(); const m = pmMat(0x8a6a4a), mE = pmMat(0x6a4a30), cr = pmMat(0xE9DCBE);
+      const corpo = new THREE.Mesh(RB(1.4, 1.0, 1.1, 0.36), m); corpo.position.y = 0.7; g.add(corpo);
+      const cab = new THREE.Mesh(RB(0.9, 0.85, 0.8, 0.3), m); cab.position.set(0, 1.0, 0.7); g.add(cab);
+      const foc = new THREE.Mesh(RB(0.45, 0.4, 0.35, 0.15), cr); foc.position.set(0, 0.92, 1.05); g.add(foc);
+      for (const sx of [-1, 1]) { const t = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.3, 5), PM_BR); t.position.set(sx * 0.18, 0.82, 1.15); t.rotation.x = -0.5; g.add(t); }
+      for (let i = 0; i < 4; i++) { const e = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.45, 4), mE); e.position.set((i % 2 ? 0.2 : -0.2), 1.35 + Math.floor(i / 2) * 0.1, 0.2 - Math.floor(i / 2) * 0.5); g.add(e); }
+      pmRosto(g, { y: 1.02, z: 0.78, sep: 0.2, r: 0.12, by: 0.92, bz: 0.72 });
+      pmPernas(g, mE, 2, 0.12); return g; }
+    function pmCinzela() { const g = new THREE.Group(); const c = pmMat(0x9a9aa2), cE = pmMat(0x7a7a82), cc = pmMat(0xB5B5BC);
+      const s2 = new THREE.Mesh(RB(0.9, 0.9, 0.9, 0.38), c); s2.position.set(0, 0.5, -1.0); g.add(s2);
+      const s1 = new THREE.Mesh(RB(1.05, 1.0, 1.0, 0.42), cc); s1.position.set(0, 0.55, -0.35); g.add(s1);
+      const cab = new THREE.Mesh(RB(1.2, 1.1, 1.05, 0.42), c); cab.position.set(0, 0.72, 0.45); g.add(cab);
+      pmRosto(g, { y: 0.8, z: 1.05, sep: 0.26, r: 0.17, by: 0.6, bz: 1.0, bochechas: null });
+      for (const sx of [-1, 1]) { const a = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.35, 6), cE); a.position.set(sx * 0.16, 1.35, 0.4); a.rotation.z = sx * 0.3; g.add(a); const t = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), cE); t.position.set(sx * 0.26, 1.52, 0.4); g.add(t); }
+      return g; }
+    function pmLobao() { const g = pmLobinho(0x85819A); g.scale.setScalar(1.3); // mini-chefe: lobão maior + amuleto dourado
+      const am = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.07, 8, 16), pmMat(0xF0A92E, { emissive: 0xF0A92E, emissiveIntensity: 0.3 })); am.position.set(0, 1.05, 0.45); am.rotation.x = 1.3; g.add(am);
+      const am2 = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 10), pmMat(0xF0A92E, { emissive: 0xF0A92E, emissiveIntensity: 0.4 })); am2.position.set(0, 0.85, 0.62); g.add(am2); return g; }
+    function pmMurcha() { const g = new THREE.Group(); const c = pmMat(0x7C7890), cc = pmMat(0xB7B3C4), ge = pmMat(0xD8D5E2), es = pmMat(0x5A5470);
+      const corpo = new THREE.Mesh(RB(0.95, 1.3, 0.85, 0.34), c); corpo.position.y = 1.7; g.add(corpo);
+      const cab = new THREE.Mesh(RB(0.85, 0.75, 0.7, 0.28), cc); cab.position.y = 2.5; g.add(cab);
+      for (const sx of [-1, 1]) for (const a of [[2.0, 0.9, -0.15, 0.35], [1.3, 0.7, -0.1, -0.25]]) { const w = new THREE.Mesh(RB(a[1] * 1.7, a[1] * 2.0, 0.12, 0.18), sx > 0 ? cc : ge); w.position.set(sx * (a[1] + 0.35), a[0], a[2]); w.rotation.set(a[3], sx * 0.5, sx * 0.2); g.add(w); }
+      for (const sx of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 12), es); e.scale.set(0.85, 1.0, 0.5); e.position.set(sx * 0.24, 2.5, 0.36); g.add(e); const l = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8), PM_BR); l.position.set(sx * 0.2, 2.56, 0.5); g.add(l); }
+      const m = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.03, 8, 12, Math.PI), es); m.position.set(0, 2.28, 0.4); g.add(m);
+      for (const sx of [-1, 1]) { const an = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.45, 6), ge); an.position.set(sx * 0.16, 3.0, 0); an.rotation.z = sx * 0.5; g.add(an); const t = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), cc); t.position.set(sx * 0.32, 3.2, 0); g.add(t); }
       return g; }
     // troca o clipe tocado de um ator (fade suave)
     function playClip(actor, name) {

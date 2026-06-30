@@ -551,18 +551,31 @@
     const camW = new THREE.Vector3();
 
     // -- billboards (barra de vida do inimigo) --
-    function makeBar() {
-      const cv = document.createElement('canvas'); cv.width = 160; cv.height = 26;
-      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.24), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthTest: false }));
-      mesh.renderOrder = 997; mesh.userData = { cv, ctx: cv.getContext('2d'), last: -1 };
+    function makeBar() { // [3.3] barrinha de vida pequena (verde) sobre a cabeça
+      const cv = document.createElement('canvas'); cv.width = 128; cv.height = 20;
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.14), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthTest: false }));
+      mesh.renderOrder = 1650; mesh.userData = { cv, ctx: cv.getContext('2d'), last: -1 };
       return mesh;
     }
-    function drawBar(bar, frac, label) {
-      const c = bar.userData.ctx; c.clearRect(0, 0, 160, 26);
-      c.fillStyle = 'rgba(0,0,0,0.55)'; rr(c, 0, 0, 160, 26, 8); c.fill();
-      c.fillStyle = frac > 0.3 ? '#5be07a' : '#e05b5b'; c.fillRect(3, 3, 154 * Math.max(0, frac), 20);
-      c.fillStyle = '#fff'; c.font = 'bold 14px Arial'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(label, 80, 14);
-      c.textAlign = 'left'; c.textBaseline = 'alphabetic'; bar.material.map.needsUpdate = true;
+    function drawBar(bar, frac) {
+      const c = bar.userData.ctx; c.clearRect(0, 0, 128, 20);
+      c.fillStyle = 'rgba(0,0,0,0.55)'; rr(c, 2, 3, 124, 14, 6); c.fill();
+      c.fillStyle = frac > 0.3 ? '#5be07a' : '#e05b5b'; rr(c, 4, 5, 120 * Math.max(0, Math.min(1, frac)), 10, 4); c.fill();
+      bar.material.map.needsUpdate = true;
+    }
+    function makeRing() { // [3.3] anel de AÇÃO: círculo cinza + arco amarelo no perímetro
+      const cv = document.createElement('canvas'); cv.width = 64; cv.height = 64;
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.46, 0.46), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthTest: false }));
+      mesh.renderOrder = 1651; mesh.userData = { cv, ctx: cv.getContext('2d'), last: -2 };
+      return mesh;
+    }
+    function drawRing(ring, frac, ready) {
+      const c = ring.userData.ctx; c.clearRect(0, 0, 64, 64); frac = Math.max(0, Math.min(1, frac));
+      c.beginPath(); c.arc(32, 32, 12, 0, 6.283); c.fillStyle = ready ? 'rgba(120,96,20,0.92)' : 'rgba(58,58,66,0.85)'; c.fill();
+      c.beginPath(); c.arc(32, 32, 12, 0, 6.283); c.strokeStyle = 'rgba(0,0,0,0.4)'; c.lineWidth = 2; c.stroke();
+      c.beginPath(); c.arc(32, 32, 22, -Math.PI / 2, -Math.PI / 2 + 6.283 * frac); c.strokeStyle = ready ? '#ffe24a' : '#ffd86b'; c.lineWidth = 8; c.lineCap = 'round'; c.stroke();
+      if (ready) { c.beginPath(); c.arc(32, 32, 6, 0, 6.283); c.fillStyle = '#fff6c0'; c.fill(); } // miolo brilha quando carregado
+      ring.material.map.needsUpdate = true;
     }
 
     // -- HUD do herói (painel preso à câmera; HP/MP/ATB/nível) --
@@ -713,6 +726,19 @@
       const cy = (1 - hit.uv.y) * 512, idx = Math.floor((cy - top) / rh); return idx >= 0 && idx < n ? idx : -1;
     }
     function aliveEnemy() { return battle && battle.enemies.find(e => e.alive); }
+    function aliveTarget() { // [3.3] o inimigo selecionado (battle.target); se morreu, pula pro próximo vivo
+      if (!battle) return null; let e = battle.enemies[battle.target];
+      if (!e || !e.alive) { const i = battle.enemies.findIndex(x => x.alive); battle.target = i < 0 ? 0 : i; e = battle.enemies[battle.target]; }
+      return e;
+    }
+    function pickBattleTarget(ndc) { // mira num inimigo pelo toque/clique → vira o alvo
+      if (!battle || !battle.enemies.length) return false;
+      raycaster.setFromCamera(ndc, camera);
+      let best = -1, bd = 1e9;
+      battle.enemies.forEach((e, i) => { if (!e.alive) return; const hit = raycaster.intersectObject(e.actor.wrap, true); if (hit.length && hit[0].distance < bd) { bd = hit[0].distance; best = i; } });
+      if (best >= 0) { battle.target = best; sfx('ready'); return true; }
+      return false;
+    }
     function resetHeroTurn() { if (!battle) return; battle.heroAtb = 0; battle.ready = false; } // a luta pode ter acabado no golpe final
     function refreshMenu() { if (!battle || !battle.menuOpen) return; if (battleDomUI()) renderBattleBar(); else drawBattleMenu(); }
     function battleSelect(i) {
@@ -720,7 +746,7 @@
       if (battle.faseBatalha === 'acalanto') { cantar(); refreshMenu(); return; } // canta sem fechar o menu (3 notas seguidas)
       if (!battle.sub) {
         const k = BAT_ACTIONS[i].k;
-        if (k === 'atacar') { closeBattleMenu(); heroAttack(aliveEnemy()); }
+        if (k === 'atacar') { closeBattleMenu(); heroAttack(aliveTarget()); }
         else if (k === 'defender') { closeBattleMenu(); hero.defending = true; flash('🛡 Você se protegeu!'); resetHeroTurn(); }
         else if (k === 'tecnica') { battle.sub = 'tecnica'; battle.hover = -1; refreshMenu(); }
         else if (k === 'item') { if (!Object.keys(hero.itens).some(x => hero.itens[x] > 0)) { flash('Você não tem itens.'); return; } battle.sub = 'item'; battle.hover = -1; refreshMenu(); }
@@ -728,7 +754,7 @@
         const it = battleMenuItems()[i]; if (!it) return;
         if (it.back) { battle.sub = null; battle.hover = -1; refreshMenu(); return; }
         if (it.dim) { flash('MP insuficiente!'); return; }
-        if (battle.sub === 'tecnica') { closeBattleMenu(); if (it.combo) runCombo(it.combo); else heroTecnica(it.key, aliveEnemy()); }
+        if (battle.sub === 'tecnica') { closeBattleMenu(); if (it.combo) runCombo(it.combo); else heroTecnica(it.key, aliveTarget()); }
         else { closeBattleMenu(); heroItem(it.key); }
       }
     }
@@ -843,8 +869,8 @@
         const ax = dolly.position.x + rvx * off - fx * back, az = dolly.position.z + rvz * off - fz * back, ay = heightAt(ax, az);
         fa.wrap.position.set(ax, ay, az); fa.wrap.rotation.y = encara;
         let hp = d.hp + hero.lvl * 2; if (game.flags.coro) hp = Math.round(hp * 1.25); // [2.0] coro dos Brotinhos reforça a party
-        const al = { actor: fa, kind: k, nome: d.nome, emoji: d.emoji, hp, hpMax: hp, def: d.def + hero.lvl, mag: d.mag + hero.lvl, agi: d.agi, role: d.role, ess: d.ess, atb: Math.random() * 0.3, alive: true, bar: makeBar(), baseY: ay, phase: Math.random() * 6.28 };
-        al.bar.position.set(0, pb.h + 0.5, 0); fa.wrap.add(al.bar); drawBar(al.bar, 1, d.nome + ' ' + hp);
+        const al = { actor: fa, kind: k, nome: d.nome, emoji: d.emoji, hp, hpMax: hp, def: d.def + hero.lvl, mag: d.mag + hero.lvl, agi: d.agi, role: d.role, ess: d.ess, atb: Math.random() * 0.3, alive: true, bar: makeBar(), ring: makeRing(), charH: pb.h, baseY: ay, phase: Math.random() * 6.28 };
+        scene.add(al.bar); scene.add(al.ring); drawBar(al.bar, 1); drawRing(al.ring, 0, false); // [3.3] barras no mundo (tamanho fixo, sobre a cabeça)
         battle.allies.push(al);
       });
       _bsSig = null; // força rebuild do status DOM
@@ -855,7 +881,10 @@
       const fa = spawnProc(pmBroto, PARTY_BUILD.broto.h); const hy = heightAt(dolly.position.x, dolly.position.z);
       fa.wrap.position.set(dolly.position.x, hy, dolly.position.z);
       fa.wrap.rotation.y = Math.atan2(battle.fx, battle.fz);
-      fa.baseY = hy; fa.phase = 0; heroBattleActor = fa;
+      fa.baseY = hy; fa.phase = 0;
+      fa.bar = makeBar(); scene.add(fa.bar); drawBar(fa.bar, 1); fa.charH = PARTY_BUILD.broto.h;
+      fa.ring = makeRing(); scene.add(fa.ring); drawRing(fa.ring, 0, false);
+      heroBattleActor = fa;
     }
     function despawnHeroBattle() { if (heroBattleActor) { scene.remove(heroBattleActor.wrap); heroBattleActor = null; } }
     function allyAttackEnemy(al) {
@@ -922,8 +951,9 @@
     function endBattle() {
       inBattle = false; document.body.classList.remove('inbattle'); closeBattleMenu(); updateMusicTrack();
       if (battle && battle.ring) scene.remove(battle.ring);
-      if (battle) for (const e of battle.enemies) if (e.alive && e.bar) e.actor.wrap.remove(e.bar);
-      if (battle && battle.allies) for (const al of battle.allies) { if (al.actor) { scene.remove(al.actor.wrap); const mi = mixers.indexOf(al.actor.mixer); if (mi >= 0) mixers.splice(mi, 1); } }
+      if (battle) for (const e of battle.enemies) { if (e.bar) scene.remove(e.bar); } // [3.3] tira as barras flutuantes
+      if (battle && battle.allies) for (const al of battle.allies) { if (al.bar) scene.remove(al.bar); if (al.ring) scene.remove(al.ring); if (al.actor) { scene.remove(al.actor.wrap); const mi = mixers.indexOf(al.actor.mixer); if (mi >= 0) mixers.splice(mi, 1); } }
+      if (heroBattleActor) { if (heroBattleActor.bar) scene.remove(heroBattleActor.bar); if (heroBattleActor.ring) scene.remove(heroBattleActor.ring); }
       despawnHeroBattle(); // [3.0] tira o Broto da formação
       if (!renderer.xr.isPresenting) { camera.position.set(0, 1.6, 0); camera.rotation.set(0, 0, 0); } // restaura a 1ª pessoa
       battle = null; heroHud.visible = false; hideBattleStatus();
@@ -951,13 +981,13 @@
         a.wrap.traverse(o => { if (o.isMesh && o.material) o.material = Array.isArray(o.material) ? o.material.map(tint) : tint(o.material); });
         a.enemyKey = 'murcha';
         const e = { actor: a, def: d, hp: d.hp, hpMax: d.hp, atb: 0.2, alive: true, bar: makeBar(), boss: true };
-        e.bar.position.set(0, d.h + 0.7, 0); a.wrap.add(e.bar); drawBar(e.bar, 1, d.nome + ' ' + d.hp);
+        e.charH = d.h + 1.5; scene.add(e.bar); drawBar(e.bar, 1); e.baseY = heightAt(ex, ez) + 1.5; e.phase = 0;
         inBattle = true; document.body.classList.add('inbattle'); updateMusicTrack();
         battle = { enemies: [e], allies: [], heroAtb: 0, ready: false, menuOpen: false, hover: -1, ring: null, boss: e, faseBatalha: 'luta', cantar: 0, fx: rcDir.x, fz: rcDir.z, yaw: Math.atan2(rcDir.x, rcDir.z) };
         spawnPartyAllies(); spawnHeroBattle(); // o grupo recrutado + o Broto visível na formação
         const ring = new THREE.Mesh(new THREE.RingGeometry(5.0, 5.8, 48), new THREE.MeshBasicMaterial({ color: 0xb09ad0, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false }));
         ring.rotation.x = -Math.PI / 2; ring.position.set(dolly.position.x, heightAt(dolly.position.x, dolly.position.z) + 0.12, dolly.position.z); scene.add(ring); battle.ring = ring;
-        heroHud.visible = !battleDomUI(); updateHeroHud(); sfx('start'); setObjetivo('Vença a Murcha… mas talvez vencer seja CUIDAR.');
+        heroHud.visible = !battleDomUI(); hideBattleStatus(); updateHeroHud(); sfx('start'); setObjetivo('Vença a Murcha… mas talvez vencer seja CUIDAR.');
         flash('🦋 A Murcha aparece — de frio e sozinha, roendo a seiva do Vovô.');
       }).catch(() => {});
     }
@@ -1019,7 +1049,7 @@
         const a = spawnActor(g, 'idle', d.h); a.wrap.position.set(p.x, y, p.z);
         const tint = mm => { const c = mm.clone(); if (c.color) c.color.setHex(d.tint); return c; }; a.wrap.traverse(o => { if (o.isMesh && o.material) o.material = Array.isArray(o.material) ? o.material.map(tint) : tint(o.material); });
         a.enemyKey = key; const e = { actor: a, def: d, hp: d.hp, hpMax: d.hp, atb: Math.random() * 0.3, alive: true, bar: makeBar(), baseY: y, phase: Math.random() * 6.28 };
-        e.bar.position.set(0, d.h + 0.7, 0); a.wrap.add(e.bar); drawBar(e.bar, 1, d.nome);
+        e.charH = d.h; scene.add(e.bar); drawBar(e.bar, 1);
         battle.enemies.push(e); _bsSig = null;
       }).catch(() => {});
     }
@@ -1027,7 +1057,7 @@
       inBattle = true; document.body.classList.add('inbattle'); updateMusicTrack();
       camera.getWorldDirection(rcDir); rcDir.y = 0; rcDir.normalize();
       const d = ENEMY_DEF[actor.enemyKey], e = { actor, def: d, hp: d.hp, hpMax: d.hp, atb: Math.random() * 0.3, alive: true, bar: makeBar(), phase: Math.random() * 6.28 };
-      e.bar.position.set(0, d.h + 0.7, 0); actor.wrap.add(e.bar);
+      e.charH = d.h; scene.add(e.bar);
       battle = { enemies: [e], allies: [], heroAtb: 0, ready: false, menuOpen: false, hover: -1, ring: null, fx: rcDir.x, fz: rcDir.z, yaw: Math.atan2(rcDir.x, rcDir.z), target: 0, clock: 0 };
       const n = (d.boss || d.miniboss) ? 1 : 2 + (Math.random() * 4 | 0); // [3.3] 2 a 5 inimigos (chefe/mini-chefe ficam sozinhos)
       const p0 = battleEnemyPos(0, n); e.actor.wrap.position.set(p0.x, heightAt(p0.x, p0.z), p0.z); e.baseY = heightAt(p0.x, p0.z);
@@ -1035,7 +1065,7 @@
       spawnPartyAllies(); spawnHeroBattle(); // o grupo recrutado + o Broto visível na formação
       const ring = new THREE.Mesh(new THREE.RingGeometry(4.6, 5.3, 48), new THREE.MeshBasicMaterial({ color: 0xffd86b, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false }));
       ring.rotation.x = -Math.PI / 2; ring.position.set(dolly.position.x, heightAt(dolly.position.x, dolly.position.z) + 0.12, dolly.position.z); scene.add(ring); battle.ring = ring;
-      heroHud.visible = !battleDomUI(); updateHeroHud(); sfx('start'); flash('⚔ ' + d.nome + ' apareceu! Encha a barra de AÇÃO e aperte pra agir.');
+      heroHud.visible = !battleDomUI(); hideBattleStatus(); updateHeroHud(); sfx('start'); flash('⚔ ' + d.nome + ' apareceu! Encha a barra de AÇÃO e aperte pra agir.');
     }
     function checkAggro() {
       if (inBattle || activeNPC || narration) return; // ou está em diálogo, ou em batalha — nunca os dois
@@ -1066,13 +1096,15 @@
           for (const al of b.allies) { if (!al.alive) continue; al.atb += dt * (0.16 + al.agi / 200); if (al.atb >= 1) { al.atb = 0; allyAct(al); } }
         }
       }
-      camera.getWorldPosition(camW); const mob = battleDomUI(); // PC/celular usam o status HTML; só VR usa as barrinhas 3D
-      for (const e of b.enemies) { if (!e.alive) continue; e.actor.wrap.lookAt(dolly.position.x, e.actor.wrap.position.y, dolly.position.z); e.bar.visible = !mob; if (!mob) { if (e.bar.userData.last !== e.hp) { e.bar.userData.last = e.hp; drawBar(e.bar, e.hp / e.hpMax, e.def.nome + ' ' + Math.max(0, e.hp)); } e.bar.lookAt(camW); } }
-      for (const al of b.allies) { if (!al.alive) continue; const en = b.enemies.find(x => x.alive); if (en) al.actor.wrap.lookAt(en.actor.wrap.position.x, al.actor.wrap.position.y, en.actor.wrap.position.z); al.bar.visible = !mob; if (!mob) { if (al.bar.userData.last !== al.hp) { al.bar.userData.last = al.hp; drawBar(al.bar, al.hp / al.hpMax, al.nome + ' ' + Math.max(0, al.hp)); } al.bar.lookAt(camW); } }
-      // celular: quando o herói está pronto, abre a barra de ações sozinha (sem precisar mirar)
-      if (b.ready && !b.menuOpen && !narration && (battleDomUI() || renderer.xr.isPresenting)) openBattleMenu(); // PC/celular/VR: abre o menu sozinho ao ficar pronto
-      if (b.menuOpen && !battleDomUI()) { const h = battlePick(); if (h >= 0 && h !== b.hover) { b.hover = h; drawBattleMenu(); } } // VR: a mira 3D troca a seleção ao acertar um botão
-      if (mob) tickBattleStatus(); else updateHeroHud();
+      camera.getWorldPosition(camW); // [3.3] barrinhas de vida + anéis de AÇÃO flutuando sobre as cabeças (sem janela de status)
+      const showBar = (bar, w, charH, frac, big) => { const f = Math.round(frac * 100); if (bar.userData.last !== f) { bar.userData.last = f; drawBar(bar, frac); } bar.position.set(w.position.x, w.position.y + charH + 0.45, w.position.z); bar.lookAt(camW); bar.scale.setScalar(big ? 1.25 : 1); bar.visible = true; };
+      const showRing = (ring, w, charH, frac, ready) => { if (!ring) return; const key = Math.round(frac * 40) + (ready ? 1000 : 0); if (ring.userData.last !== key) { ring.userData.last = key; drawRing(ring, frac, ready); } ring.position.set(w.position.x, w.position.y + charH + 1.0, w.position.z); ring.lookAt(camW); ring.visible = true; };
+      for (const e of b.enemies) { if (!e.alive) continue; e.actor.wrap.lookAt(dolly.position.x, e.actor.wrap.position.y, dolly.position.z); showBar(e.bar, e.actor.wrap, e.charH, e.hp / e.hpMax, e === b.enemies[b.target]); }
+      for (const al of b.allies) { if (!al.alive) continue; const en = aliveEnemy(); if (en) al.actor.wrap.lookAt(en.actor.wrap.position.x, al.actor.wrap.position.y, en.actor.wrap.position.z); showBar(al.bar, al.actor.wrap, al.charH, al.hp / al.hpMax); showRing(al.ring, al.actor.wrap, al.charH, al.atb, al.atb >= 0.99); }
+      if (heroBattleActor && heroBattleActor.bar) { showBar(heroBattleActor.bar, heroBattleActor.wrap, heroBattleActor.charH, hero.hp / hero.hpMax); showRing(heroBattleActor.ring, heroBattleActor.wrap, heroBattleActor.charH, b.heroAtb, b.ready); }
+      if (b.ready && !b.menuOpen && !narration && (battleDomUI() || renderer.xr.isPresenting)) openBattleMenu(); // abre a barra de ações sozinha ao ficar pronto
+      if (b.menuOpen && !battleDomUI()) { const h = battlePick(); if (h >= 0 && h !== b.hover) { b.hover = h; drawBattleMenu(); } } // VR: mira 3D
+      if (renderer.xr.isPresenting) updateHeroHud();
     }
     function updateDying(dt) {
       camera.getWorldPosition(camW);
@@ -1216,7 +1248,7 @@
       const mixer = new THREE.AnimationMixer(model); mixers.push(mixer);
       const clip = bestClip(gltf, clipName); let action = null;
       if (clip) { action = mixer.clipAction(clip); action.play(); }
-      return { wrap, model, mixer, gltf, action };
+      return { wrap, model, mixer, gltf, action, modelH: h };
     }
     // ---------- [3.0] Personagens procedurais da turma (low-poly fofo, a partir das Fichas de Personagens) ----------
     function pmMat(c, o) { return new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.82, metalness: 0 }, o || {})); }
@@ -1300,7 +1332,7 @@
       const bb = new THREE.Box3().setFromObject(model), h = (bb.max.y - bb.min.y) || 1, sc = targetH / h;
       model.position.y = -bb.min.y;
       const wrap = new THREE.Group(); wrap.add(model); wrap.scale.setScalar(sc); scene.add(wrap);
-      return { wrap, model, mixer: null, gltf: null, proc: true };
+      return { wrap, model, mixer: null, gltf: null, proc: true, modelH: h };
     }
     // ---------- [3.1] NPCs da Vila procedurais (das Fichas de Personagens, Lote 2) ----------
     function pmBracos(g, col, y, sep) { for (const sx of [-1, 1]) { const br = new THREE.Mesh(RB(0.3, 0.5, 0.3, 0.14), col); br.position.set(sx * sep, y, 0.12); br.rotation.z = sx * 0.3; g.add(br); } }
@@ -2548,7 +2580,7 @@
     addEventListener('keyup', e => { keys[e.code] = false; });
     let yaw = dolly.rotation.y, pitch = 0, locked = false;
     const cv = renderer.domElement;
-    cv.addEventListener('click', () => { if (!renderer.xr.isPresenting && cv.requestPointerLock) cv.requestPointerLock(); });
+    cv.addEventListener('click', e => { if (inBattle && battle && !battle.menuOpen && pickBattleTarget(ndcFrom(e.clientX, e.clientY))) return; if (!renderer.xr.isPresenting && cv.requestPointerLock) cv.requestPointerLock(); }); // [3.3] clique num inimigo = mira nele
     document.addEventListener('pointerlockchange', () => { locked = (document.pointerLockElement === cv); });
     addEventListener('mousemove', e => { if (!locked) return; yaw -= e.movementX * 0.0022; pitch -= e.movementY * 0.0022; pitch = Math.max(-1.3, Math.min(1.3, pitch)); });
 
@@ -2572,6 +2604,7 @@
         pointerNDC = ndcFrom(t.clientX, t.clientY);
         if (narration || activeNPC) { interact(); continue; }       // toque avança o diálogo
         if (menuOpenAny()) { tapSelect(); continue; }                // toque escolhe direto no menu 3D
+        if (inBattle && battle && !battle.menuOpen && pickBattleTarget(pointerNDC)) continue; // [3.3] toque num inimigo = mira nele
         if (look.id === null) { look.id = t.identifier; look.x = t.clientX; look.y = t.clientY; } // senão, olhar
       }
     }, { passive: false });

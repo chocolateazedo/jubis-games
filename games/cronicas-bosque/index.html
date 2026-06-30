@@ -793,8 +793,9 @@
       recruited.forEach((k, i) => {
         const d = ALLY_DEF[k], pb = PARTY_BUILD[k] || PARTY_BUILD.fagulha;
         const fa = spawnProc(pb.fn, pb.h);
-        const off = ((i % 2 === 0 ? 1 : -1) * (Math.floor(i / 2) + 1)) * 1.7; // flanqueia o herói (que fica no centro)
-        const ax = dolly.position.x + rvx * off - fx * 0.3, az = dolly.position.z + rvz * off - fz * 0.3;
+        const off = ((i % 2 === 0 ? 1 : -1) * (Math.floor(i / 2) + 1)) * 0.95; // flanqueia o herói (que fica no centro), em cluster
+        const back = 0.4 + Math.floor(i / 2) * 0.55; // os de fora recuam um pouco → grupo compacto
+        const ax = dolly.position.x + rvx * off - fx * back, az = dolly.position.z + rvz * off - fz * back;
         fa.wrap.position.set(ax, heightAt(ax, az), az); fa.wrap.rotation.y = encara;
         let hp = d.hp + hero.lvl * 2; if (game.flags.coro) hp = Math.round(hp * 1.25); // [2.0] coro dos Brotinhos reforça a party
         const al = { actor: fa, kind: k, nome: d.nome, emoji: d.emoji, hp, hpMax: hp, def: d.def + hero.lvl, mag: d.mag + hero.lvl, agi: d.agi, role: d.role, ess: d.ess, atb: Math.random() * 0.3, alive: true, bar: makeBar() };
@@ -895,7 +896,7 @@
       getGLB('../bosque-vr/pets/animal-bee.glb').then(g => {
         const d = ENEMY_DEF.murcha, a = spawnActor(g, 'idle', d.h);
         camera.getWorldDirection(rcDir); rcDir.y = 0; rcDir.normalize();
-        const ex = dolly.position.x + rcDir.x * 6, ez = dolly.position.z + rcDir.z * 6;
+        const ex = dolly.position.x + rcDir.x * 5, ez = dolly.position.z + rcDir.z * 5;
         a.wrap.position.set(ex, heightAt(ex, ez) + 1.5, ez);
         const tint = mm => { const c = mm.clone(); if (c.color) c.color.setHex(d.tint); return c; };
         a.wrap.traverse(o => { if (o.isMesh && o.material) o.material = Array.isArray(o.material) ? o.material.map(tint) : tint(o.material); });
@@ -960,7 +961,7 @@
     function startBattle(actor) {
       inBattle = true; document.body.classList.add('inbattle'); updateMusicTrack();
       camera.getWorldDirection(rcDir); rcDir.y = 0; rcDir.normalize();
-      const ex = dolly.position.x + rcDir.x * 5, ez = dolly.position.z + rcDir.z * 5;
+      const ex = dolly.position.x + rcDir.x * 4.4, ez = dolly.position.z + rcDir.z * 4.4;
       actor.wrap.position.set(ex, heightAt(ex, ez), ez);
       const d = ENEMY_DEF[actor.enemyKey], e = { actor, def: d, hp: d.hp, hpMax: d.hp, atb: Math.random() * 0.3, alive: true, bar: makeBar() };
       e.bar.position.set(0, d.h + 0.7, 0); actor.wrap.add(e.bar);
@@ -2021,6 +2022,7 @@
       questArrow.renderOrder = 998; questArrow.visible = false; scene.add(questArrow);
     }
     const qaPos = new THREE.Vector3(), qaDir = new THREE.Vector3();
+    const _battleLookAt = new THREE.Vector3(); // [3.0] alvo da câmera diagonal de batalha
     function updateQuestArrow(t) {
       let tgt = (inBattle || activeNPC || narration || eraMenuOpen) ? null : questTarget();
       if (tgt && tgt.era && tgt.era !== currentEra) tgt = { x: PORTAL.x, z: PORTAL.z }; // alvo noutra era → vá ao Vovô pra viajar
@@ -2622,7 +2624,12 @@
         mz = (keys['KeyS'] ? 1 : 0) - (keys['KeyW'] ? 1 : 0) + joy.y;
       }
       if (inBattle) { mx = 0; mz = 0; wantJump = false; } // na batalha o jogador fica parado
-      if (inBattle && battle && !renderer.xr.isPresenting) { dolly.rotation.y = battle.yaw; camera.position.set(0, 2.5, 3.9); camera.rotation.set(-0.34, 0, 0); } // [3.0] câmera de batalha em 3ª pessoa (atrás da turma)
+      if (inBattle && battle && !renderer.xr.isPresenting) { // [3.0] câmera de batalha DIAGONAL: atrás + de lado + acima, olhando pro centro da arena (mostra a turma E os inimigos)
+        dolly.rotation.y = battle.yaw;                 // dolly -Z aponta pro inimigo
+        camera.position.set(-3.4, 2.9, 5.0);           // diagonal baixa: à esquerda + atrás (turma vai pra esquerda, longe da ficha à direita)
+        _battleLookAt.set(dolly.position.x + battle.fx * 3.4, dolly.position.y + 1.0, dolly.position.z + battle.fz * 3.4);
+        camera.updateWorldMatrix(true, false); camera.lookAt(_battleLookAt);
+      }
       const len = Math.hypot(mx, mz);
       if (len > 0.01) {
         if (len > 1) { mx /= len; mz /= len; }

@@ -1341,6 +1341,29 @@
       pmRosto(g, { y: 1.64, z: 0.46, sep: 0.17, r: 0.12, by: 1.54 });
       pmBracos(g, tuber, 0.85, 0.62); pmPes(g);
       return g; }
+    function pmBrotinho(col) { const g = new THREE.Group();
+      const corpo = new THREE.Mesh(new THREE.SphereGeometry(0.5, 18, 14), pmMat(0x9A5028)); corpo.scale.set(1, 0.9, 1); corpo.position.y = 0.5; g.add(corpo);
+      const cab = new THREE.Mesh(new THREE.SphereGeometry(0.46, 20, 14), pmMat(col)); cab.position.y = 1.0; g.add(cab);
+      for (const sx of [-1, 1]) { const f = new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 8), pmMat(0x7FB83E)); f.scale.set(0.5, 0.18, 1); f.position.set(sx * 0.16, 1.46, 0); f.rotation.set(0.45, 0, sx * -0.5); g.add(f); }
+      const bud = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8), pmMat(0xF4B83E)); bud.position.y = 1.45; g.add(bud);
+      pmRosto(g, { y: 1.04, z: 0.4, sep: 0.16, r: 0.11, by: 0.94 });
+      return g; }
+    function pmBrotinhos() { const g = new THREE.Group(); const cols = [0x5FA02E, 0xED8A24, 0x3FB4C9]; // trio de mini-brotos (turma de creche)
+      cols.forEach((c, i) => { const b = pmBrotinho(c); b.scale.setScalar(0.8); b.position.set((i - 1) * 0.78, 0, (i % 2) * 0.35); b.rotation.y = (i - 1) * 0.35; g.add(b); });
+      return g; }
+    function pmCantora() { const g = new THREE.Group(); // A Última Cantora: broto-anciã etérea, translúcida (cena secreta)
+      const luz = pmMat(0xF2E3A8, { emissive: 0xFFE9A0, emissiveIntensity: 0.55, transparent: true, opacity: 0.72 });
+      const leite = pmMat(0xFFFDF2, { emissive: 0xFFF6D8, emissiveIntensity: 0.3, transparent: true, opacity: 0.66 });
+      const folha = pmMat(0x9CC86E, { emissive: 0x9CC86E, emissiveIntensity: 0.3, transparent: true, opacity: 0.72 }), tom = pmMat(0x8a7a4a);
+      const corpo = new THREE.Mesh(new THREE.SphereGeometry(0.72, 22, 16), luz); corpo.scale.set(1, 1.08, 1); corpo.position.y = 0.98; g.add(corpo);
+      const cab = new THREE.Mesh(new THREE.SphereGeometry(0.64, 24, 18), leite); cab.position.y = 1.9; g.add(cab);
+      for (const sx of [-1, 1]) { const f = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 8), folha); f.scale.set(0.5, 0.18, 1); f.position.set(sx * 0.32, 2.55, 0); f.rotation.set(0.5, 0, sx * -0.6); g.add(f); }
+      for (const sx of [-1, 1]) { const e = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.025, 8, 12, Math.PI), tom); e.position.set(sx * 0.2, 1.94, 0.58); g.add(e); }
+      const m = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.025, 8, 12, Math.PI), tom); m.rotation.z = Math.PI; m.position.set(0, 1.74, 0.6); g.add(m);
+      for (const sx of [-1, 1]) { const b = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 8), pmMat(0xE8B8C0, { transparent: true, opacity: 0.7 })); b.scale.set(1, 0.7, 0.4); b.position.set(sx * 0.36, 1.8, 0.5); g.add(b); }
+      const halo = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 10), pmMat(0xFFD86A, { emissive: 0xFFD86A, emissiveIntensity: 0.9, transparent: true, opacity: 0.85 })); halo.position.y = 2.85; g.add(halo);
+      const base = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.7, 16, 1, true), luz); base.position.y = 0.4; g.add(base);
+      return g; }
     // troca o clipe tocado de um ator (fade suave)
     function playClip(actor, name) {
       if (!actor || !actor.mixer || !actor.gltf) return; // atores procedurais não têm animação de esqueleto
@@ -1478,7 +1501,7 @@
           if (!sq) { game.sidequests.tonico = 'ativa'; renderJournal(); saveGame('auto'); flash('🏮 Missão: reacenda os 4 lampiões ao redor da Vila.'); }
           else if (sq === 'ativa' && tonicoPronto()) { game.sidequests.tonico = 'feita'; sqReward(2, 1, '🏮 Tonico: +2 Frutos de Luz e 1 Mel!'); renderJournal(); }
         } },
-      { char: 'c', nome: 'Os Brotinhos', dx: VILA.x - 2, dz: VILA.z + 9,
+      { char: 'c', build: pmBrotinhos, nome: 'Os Brotinhos', dx: VILA.x - 2, dz: VILA.z + 9,
         falasFn: () => {
           if (game.sidequests.brotinhos === 'feita') return ['De novo, de novo! A sua canção é a melhor! 🎶'];
           if (!game.folhas.length) return ['Ô viajante! Você sabe alguma música das estações?', 'Volta quando aprender um verso da Canção, vai!'];
@@ -2093,6 +2116,16 @@
       brisaBorboleta.position.y = heightAt(brisaBorboleta.position.x, brisaBorboleta.position.z) + 2.0 + Math.sin(t * 0.003) * 0.4;
       brisaBorboleta.rotation.y = -t * 0.0009 + Math.PI / 2;
       for (let i = 1; i <= 2; i++) brisaBorboleta.children[i].rotation.z = Math.sin(t * 0.02) * 0.7 * (i === 1 ? 1 : -1);
+    }
+    // [3.1] A Última Cantora: aparição etérea no Renascer, só pra quem desbloqueou a cena secreta (todos os Frutos)
+    let cantoraAparicao = null;
+    { const a = spawnProc(pmCantora, 2.0); cantoraAparicao = a.wrap; const cx = PORTAL.x - 1, cz = PORTAL.z + 6; cantoraAparicao.position.set(cx, heightAt(cx, cz), cz); cantoraAparicao.rotation.y = Math.atan2(-(cx), -(cz)); cantoraAparicao.visible = false; }
+    function updateCantora(t) {
+      if (!cantoraAparicao) return;
+      const show = currentEra === 'renascer' && game.flags.bossDone && fimDeColecao();
+      cantoraAparicao.visible = show; if (!show) return;
+      const cx = PORTAL.x - 1, cz = PORTAL.z + 6;
+      cantoraAparicao.position.y = heightAt(cx, cz) + 0.45 + Math.sin(t * 0.0016) * 0.18; // flutua — mal toca o chão
     }
     // ---------- Seta-guia da missão: aponta na visão pra onde ir (estilo clássico do gênero) ----------
     const QUEST = { covinha: { x: 9, z: 50 }, cogu: { x: 6, z: 56 }, samambaia: { x: VILA.x + 4, z: VILA.z - 8 } };
@@ -2830,7 +2863,7 @@
       if (brotoNovo) { brotoNovo.visible = currentEra === 'bosque' && game.flags.sementePlantada;
         if (brotoNovo.visible && brotoGrow < 1) { brotoGrow = Math.min(1, brotoGrow + dt * 0.5); const e = 1 - Math.pow(1 - brotoGrow, 3); brotoNovo.scale.setScalar(0.06 + 0.94 * e); } }
       updateCollectibles(dt, t); // frutos de luz giram, boiam e são coletados ao chegar perto
-      updateTeia(t); updateTeia2(t); updateTeia3(t); updateTeia4(t); updateTeia5(t); updateSidequests(); updateBrisa(t); updateQuestArrow(t); updateConstructo(t); // [2.0] Teia + Constructo (era Raiz) + sidequests + Brisa (Renascer) + seta-guia
+      updateTeia(t); updateTeia2(t); updateTeia3(t); updateTeia4(t); updateTeia5(t); updateSidequests(); updateBrisa(t); updateCantora(t); updateQuestArrow(t); updateConstructo(t); // [2.0] Teia + Constructo + sidequests + Brisa/Cantora (Renascer) + seta-guia
       if (shopOpen && !nearShop()) closeShop(); // saiu de perto da banca → fecha a loja
       if (!game.flags.vilaVista && currentEra === 'bosque' && Math.hypot(dolly.position.x - VILA.x, dolly.position.z - VILA.z) < 24) { game.flags.vilaVista = true; flash('🏘️ Você chegou à Vila do Carvalho!'); sfx('ready'); }
       // partículas mágicas: derivam, caem/sobem conforme a era e seguem o jogador

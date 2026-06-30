@@ -1278,6 +1278,69 @@
       const wrap = new THREE.Group(); wrap.add(model); wrap.scale.setScalar(sc); scene.add(wrap);
       return { wrap, model, mixer: null, gltf: null, proc: true };
     }
+    // ---------- [3.1] NPCs da Vila procedurais (das Fichas de Personagens, Lote 2) ----------
+    function pmBracos(g, col, y, sep) { for (const sx of [-1, 1]) { const br = new THREE.Mesh(new THREE.CapsuleGeometry(0.12, 0.26, 4, 8), col); br.position.set(sx * sep, y, 0.12); br.rotation.z = sx * 0.35; g.add(br); } }
+    function pmPes(g) { for (const sx of [-1, 1]) { const p = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), pmMat(0x6a4a30)); p.scale.set(1, 0.6, 1.3); p.position.set(sx * 0.24, 0.08, 0.08); g.add(p); } }
+    function pmCogu() { const g = new THREE.Group();
+      const creme = pmMat(0xE6CFA4), capR = pmMat(0xE8794A), pint = pmMat(0xF6E1BE), beng = pmMat(0x9A6E3E);
+      const corpo = new THREE.Mesh(new THREE.SphereGeometry(0.82, 22, 16), creme); corpo.scale.set(1, 0.96, 1); corpo.position.y = 0.9; g.add(corpo);
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(1.05, 24, 14, 0, 6.283, 0, Math.PI / 2), capR); cap.scale.set(1.15, 0.95, 1.15); cap.position.y = 1.55; g.add(cap);
+      const borda = new THREE.Mesh(new THREE.TorusGeometry(1.12, 0.12, 8, 22), capR); borda.rotation.x = Math.PI / 2; borda.position.y = 1.55; g.add(borda);
+      for (const s of [[0, 0.1, 0.22], [0.55, 0.35, 0.15], [-0.55, 0.25, 0.16], [0.25, -0.55, 0.13], [-0.4, -0.45, 0.13]]) { const sp = new THREE.Mesh(new THREE.SphereGeometry(s[2], 10, 8), pint); sp.scale.set(1, 0.35, 1); sp.position.set(s[0], 1.96, s[1]); g.add(sp); }
+      pmRosto(g, { y: 1.0, z: 0.8, sep: 0.26, r: 0.16, by: 0.82, bz: 0.74 });
+      for (const sx of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 6), PM_BR); e.scale.set(1.5, 0.5, 0.5); e.position.set(sx * 0.26, 1.22, 0.74); g.add(e); }
+      pmBracos(g, creme, 0.86, 0.74); pmPes(g);
+      const cane = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.5, 8), beng); cane.position.set(0.98, 0.75, 0.2); cane.rotation.z = 0.08; g.add(cane);
+      return g; }
+    function pmSamambaia() { const g = new THREE.Group();
+      const verde = pmMat(0x6A9048), fronde = pmMat(0x9BCB60), pele = pmMat(0xF0CFA2), xale = pmMat(0xE9DCBE), oc = pmMat(0x6A5436);
+      const corpo = new THREE.Mesh(new THREE.SphereGeometry(0.8, 22, 16), verde); corpo.scale.set(1, 0.95, 1); corpo.position.y = 0.82; g.add(corpo);
+      const x = new THREE.Mesh(new THREE.SphereGeometry(0.52, 18, 14), xale); x.scale.set(1, 0.95, 0.45); x.position.set(0, 0.66, 0.55); g.add(x);
+      const cab = new THREE.Mesh(new THREE.SphereGeometry(0.62, 22, 16), pele); cab.position.y = 1.62; g.add(cab);
+      for (let i = 0; i < 7; i++) { const a = (i / 6 - 0.5) * 2.0; const f = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.85, 5), i % 2 ? fronde : verde); f.position.set(Math.sin(a) * 0.5, 2.15, -0.12 + Math.cos(a) * 0.05); f.rotation.z = -a * 0.8; g.add(f); }
+      pmRosto(g, { y: 1.62, z: 0.56, sep: 0.22, r: 0.14, bochechas: null });
+      for (const sx of [-1, 1]) { const o = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.035, 8, 16), oc); o.position.set(sx * 0.22, 1.62, 0.58); g.add(o); }
+      pmBracos(g, verde, 0.82, 0.66); pmPes(g);
+      return g; }
+    function pmBromelia() { const g = new THREE.Group();
+      const pele = pmMat(0xEFC79C), rv = pmMat(0xE0577C), rc = pmMat(0xF6889E), am = pmMat(0xFFC24A), folha = pmMat(0x5E9A30);
+      const sf = new THREE.Mesh(new THREE.ConeGeometry(0.86, 0.55, 14), folha); sf.position.y = 0.42; g.add(sf);
+      const corpo = new THREE.Mesh(new THREE.SphereGeometry(0.74, 22, 16), pele); corpo.scale.set(1, 0.92, 1); corpo.position.y = 0.82; g.add(corpo);
+      pmRosto(g, { y: 0.92, z: 0.72, sep: 0.22, r: 0.15, by: 0.78 });
+      for (const L of [[0.5, 1.46, rv, 9, 0.9], [0.32, 1.56, rc, 7, 0.6]]) { for (let i = 0; i < L[3]; i++) { const a = i / L[3] * 6.283; const p = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.5, 5), L[2]); p.position.set(Math.cos(a) * L[0], L[1], Math.sin(a) * L[0]); p.lookAt(Math.cos(a) * L[0] * 4, L[1] + L[4] * 2.2, Math.sin(a) * L[0] * 4); g.add(p); } }
+      const flor = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 10), am); flor.position.y = 1.74; g.add(flor);
+      pmBracos(g, pele, 0.8, 0.66); pmPes(g);
+      return g; }
+    function pmTonico() { const g = new THREE.Group();
+      const terr = pmMat(0x8A5A38), pele = pmMat(0xEFC79C), cab = pmMat(0x5A3A22), dour = pmMat(0xF4B83E, { emissive: 0xF4B83E, emissiveIntensity: 0.45 });
+      const corpo = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.64, 1.05, 14), terr); corpo.position.y = 0.68; g.add(corpo);
+      const cabeca = new THREE.Mesh(new THREE.SphereGeometry(0.52, 22, 16), pele); cabeca.position.y = 1.5; g.add(cabeca);
+      const hair = new THREE.Mesh(new THREE.SphereGeometry(0.55, 18, 14, 0, 6.283, 0, Math.PI * 0.62), cab); hair.position.y = 1.56; g.add(hair);
+      pmRosto(g, { y: 1.5, z: 0.48, sep: 0.18, r: 0.12, by: 1.4 });
+      pmBracos(g, pele, 0.72, 0.56); pmPes(g);
+      const vara = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 2.0, 8), pmMat(0x6a4a2e)); vara.position.set(0.72, 1.05, 0.12); g.add(vara);
+      const lamp = new THREE.Mesh(new THREE.IcosahedronGeometry(0.18, 0), dour); lamp.position.set(0.72, 2.05, 0.12); g.add(lamp);
+      const cage = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.03, 6, 12), pmMat(0xC9962E)); cage.position.set(0.72, 2.05, 0.12); cage.rotation.x = Math.PI / 2; g.add(cage);
+      return g; }
+    function pmCipo() { const g = new THREE.Group();
+      const verde = pmMat(0x6E7E38), liana = pmMat(0x7CA052), pele = pmMat(0xEFC79C), cab = pmMat(0x46521F);
+      const corpo = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.64, 1.1, 14), verde); corpo.position.y = 0.7; g.add(corpo);
+      const cabeca = new THREE.Mesh(new THREE.SphereGeometry(0.54, 22, 16), pele); cabeca.position.y = 1.5; g.add(cabeca);
+      const hair = new THREE.Mesh(new THREE.SphereGeometry(0.57, 18, 14, 0, 6.283, 0, Math.PI * 0.55), cab); hair.position.y = 1.56; g.add(hair);
+      pmRosto(g, { y: 1.5, z: 0.5, sep: 0.19, r: 0.12, by: 1.4 });
+      for (let i = 0; i < 2; i++) { const v = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.05, 6, 16), liana); v.position.y = 0.55 + i * 0.4; v.rotation.set(1.35, i * 0.6, 0); g.add(v); }
+      pmBracos(g, pele, 0.74, 0.58); pmPes(g);
+      return g; }
+    function pmCara() { const g = new THREE.Group();
+      const tuber = pmMat(0xB5793E), tuberE = pmMat(0x7E5026), pele = pmMat(0xEFC79C), avental = pmMat(0xE9DCBE), cab = pmMat(0x4A3520);
+      const corpo = new THREE.Mesh(new THREE.SphereGeometry(0.74, 20, 16), tuber); corpo.scale.set(1, 1.12, 0.92); corpo.position.y = 0.85; g.add(corpo);
+      const av = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 12), avental); av.scale.set(0.95, 1, 0.45); av.position.set(0, 0.7, 0.5); g.add(av);
+      for (const p of [[0.35, 1.15, 0.5], [-0.38, 0.85, 0.55], [0.15, 0.5, 0.6]]) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), tuberE); m.position.set(p[0], p[1], p[2]); g.add(m); }
+      const cabeca = new THREE.Mesh(new THREE.SphereGeometry(0.5, 22, 16), pele); cabeca.position.y = 1.66; g.add(cabeca);
+      const hair = new THREE.Mesh(new THREE.SphereGeometry(0.53, 16, 12, 0, 6.283, 0, Math.PI * 0.5), cab); hair.position.y = 1.72; g.add(hair);
+      pmRosto(g, { y: 1.64, z: 0.46, sep: 0.17, r: 0.12, by: 1.54 });
+      pmBracos(g, tuber, 0.85, 0.62); pmPes(g);
+      return g; }
     // troca o clipe tocado de um ator (fade suave)
     function playClip(actor, name) {
       if (!actor || !actor.mixer || !actor.gltf) return; // atores procedurais não têm animação de esqueleto
@@ -1388,9 +1451,10 @@
       { const villa = mergeByMaterial(VG); scene.add(villa); registerEraTint(villa); } // a Vila muda de cor por era
       const vlight = new THREE.PointLight(0xffe0a0, 0.85, 44, 2); vlight.position.set(VILA.x, heightAt(VILA.x, VILA.z) + 5, VILA.z); scene.add(vlight);
     }
+    const npcs = []; // [3.1] declarado antes da Vila porque os NPCs procedurais entram de forma síncrona
     // moradores da vila (só no presente)
     [
-      { char: 'b', nome: 'Dona Bromélia', dx: VILA.x + 6, dz: VILA.z + 7,
+      { char: 'b', build: pmBromelia, nome: 'Dona Bromélia', dx: VILA.x + 6, dz: VILA.z + 7,
         falasFn: () => {
           const sq = game.sidequests.bromelia;
           if (sq === 'feita') return ['Minhas mudinhas estão lindas, graças a você! 💚'];
@@ -1402,7 +1466,7 @@
           if (!sq) { game.sidequests.bromelia = 'ativa'; renderJournal(); saveGame('auto'); flash('🌷 Missão: replante as 3 mudinhas da Bromélia (jardim da Vila).'); }
           else if (sq === 'ativa' && bromeliaPronta()) { game.sidequests.bromelia = 'feita'; sqReward(2, 1, '🌷 Dona Bromélia: +2 Frutos de Luz e 1 Mel!'); renderJournal(); }
         } },
-      { char: 'd', nome: 'Tonico', dx: VILA.x - 7, dz: VILA.z + 5,
+      { char: 'd', build: pmTonico, nome: 'Tonico', dx: VILA.x - 7, dz: VILA.z + 5,
         falasFn: () => {
           const sq = game.sidequests.tonico;
           if (sq === 'feita') return ['Olha a Vila toda iluminada! Ninguém tem mais medo do escuro. 🏮', 'Quando crescer eu vou ser piloto, igual você!'];
@@ -1421,20 +1485,20 @@
           return ['Canta pra gente os versos que você já sabe! 🎶', '(Você canta: ' + game.folhas.map(f => FOLHA_NOME[f] || f).join(', ') + ')', 'Que lindooo! A gente vai fazer um CORO pra te ajudar quando você cantar pra Murcha! 💚'];
         },
         onEnd: () => { if (game.sidequests.brotinhos !== 'feita' && game.folhas.length) { game.sidequests.brotinhos = 'feita'; game.flags.coro = true; renderJournal(); saveGame('auto'); flash('🎶 Os Brotinhos vão fazer um coro por você — a party fica mais forte na batalha final!'); } } },
-      { char: 'e', nome: 'Vovó Samambaia', dx: VILA.x + 4, dz: VILA.z - 8,
+      { char: 'e', build: pmSamambaia, nome: 'Vovó Samambaia', dx: VILA.x + 4, dz: VILA.z - 8,
         falasFn: () => (game.flags.cogu && !game.flags.vila)
           ? ['Então o cinza voltou a subir… eu já temia, criança.', 'O Vovô Carvalho é a árvore-mãe de tudo. As raízes dele tocam o ONTEM e o AMANHÃ ao mesmo tempo.', 'Esse cinza não nasce aqui: ele VAZA de um futuro murcho. Pra fechar a fenda, você vai ter que atravessar o tempo pela raiz do Vovô.', 'Antigamente, a gente fazia as estações virarem CANTANDO — a Canção das Quatro Folhas: uma pra Primavera 🍃, uma pro Verão ☀️, uma pras Chuvas 💧 e uma pro Inverno 🩶. Mas uma cantora ficou sozinha e engoliu o último verso. Desde então o frio não passa.', 'Reaprenda os versos viajando no tempo, broto — comece procurando a Folha da Primavera lá no passado. Mas cuidado: mexer no ontem mexe no agora. E leve a Lanterna — sem luz, ninguém pisa no Ermo.']
           : ['No meu tempo a gente subia no Vovô pra colher estrela…', 'Junta os Frutos de Luz, criança. Eles guardam o brilho do amanhã.'],
         onEnd: () => { if (game.flags.cogu && !game.flags.vila) { game.flags.vila = true; sfx('fanfare'); setObjetivo('Volte ao bosque e toque o Vovô Carvalho 🌳'); } } },
-      { char: 'g', nome: 'Mestre Cipó', dx: VILA.x - 5, dz: VILA.z - 6, falasFn: () => game.lacos.cipo ? ['Olha minha ponte de cipó cruzando o lago até a ilhota! Nunca pensei que ia conseguir. 🌉', 'Foi você que me deu coragem lá atrás, quando eu era um broto. Obrigado mesmo!'] : ['Cuida do bosque que ele cuida de você.', 'Sabe… eu sempre quis tecer uma ponte até aquela ilhota do lago, mas nunca tive coragem. Quem me dera alguém tivesse me incentivado quando eu era novo, lá no passado.'] },
-    ].forEach(d => getGLB(`../bosque-vr/npcs/character-${d.char}.glb`).then(g => {
-      const a = spawnActor(g, 'idle', 1.5); a.wrap.position.set(d.dx, heightAt(d.dx, d.dz), d.dz); a.wrap.rotation.y = Math.atan2(VILA.x - d.dx, VILA.z - d.dz);
-      a.wrap.userData = { nome: d.nome, falas: d.falas, falasFn: d.falasFn, onEnd: d.onEnd }; a.story = { era: 'bosque' }; obstacles.push({ x: d.dx, z: d.dz, r: 0.5 }); npcs.push(a);
-    }).catch(() => {}));
-    getGLB('../bosque-vr/npcs/character-f.glb').then(g => { // lojista
-      const a = spawnActor(g, 'idle', 1.5); a.wrap.position.set(SHOP.x, heightAt(SHOP.x, SHOP.z) , SHOP.z + 0.9); a.wrap.rotation.y = Math.atan2(VILA.x - SHOP.x, VILA.z - SHOP.z);
-      a.wrap.userData = { nome: 'Lojista Cará', shop: true }; a.story = { era: 'bosque' }; npcs.push(a);
-    }).catch(() => {});
+      { char: 'g', build: pmCipo, nome: 'Mestre Cipó', dx: VILA.x - 5, dz: VILA.z - 6, falasFn: () => game.lacos.cipo ? ['Olha minha ponte de cipó cruzando o lago até a ilhota! Nunca pensei que ia conseguir. 🌉', 'Foi você que me deu coragem lá atrás, quando eu era um broto. Obrigado mesmo!'] : ['Cuida do bosque que ele cuida de você.', 'Sabe… eu sempre quis tecer uma ponte até aquela ilhota do lago, mas nunca tive coragem. Quem me dera alguém tivesse me incentivado quando eu era novo, lá no passado.'] },
+    ].forEach(d => {
+      const place = a => { a.wrap.position.set(d.dx, heightAt(d.dx, d.dz), d.dz); a.wrap.rotation.y = Math.atan2(VILA.x - d.dx, VILA.z - d.dz);
+        a.wrap.userData = { nome: d.nome, falas: d.falas, falasFn: d.falasFn, onEnd: d.onEnd }; a.story = { era: 'bosque' }; obstacles.push({ x: d.dx, z: d.dz, r: 0.5 }); npcs.push(a); };
+      if (d.build) place(spawnProc(d.build, 1.75)); // [3.1] NPC procedural das Fichas
+      else getGLB(`../bosque-vr/npcs/character-${d.char}.glb`).then(g => place(spawnActor(g, 'idle', 1.5))).catch(() => {});
+    });
+    { const a = spawnProc(pmCara, 1.75); a.wrap.position.set(SHOP.x, heightAt(SHOP.x, SHOP.z), SHOP.z + 0.9); a.wrap.rotation.y = Math.atan2(VILA.x - SHOP.x, VILA.z - SHOP.z); // [3.1] Lojista Cará procedural
+      a.wrap.userData = { nome: 'Lojista Cará', shop: true }; a.story = { era: 'bosque' }; npcs.push(a); }
     // ---- LOJA: troca Frutos de Luz por itens (DOM no celular/PC; presente simples no VR) ----
     const SHOP_ITEMS = [
       { nome: '🍯 Mel-do-Bosque (cura 15)', cost: 2, give: () => { hero.itens.mel = (hero.itens.mel || 0) + 1; } },
@@ -1586,20 +1650,18 @@
     }
     // NPCs da trama: diálogo condicional (falasFn) + ação ao terminar (onEnd); visíveis só na sua era
     const STORY_NPCS = [
-      { id: 'cogu', nome: 'Seu Cogu', char: 'a', x: 6, z: 56, era: 'bosque',
+      { id: 'cogu', build: pmCogu, nome: 'Seu Cogu', char: 'a', x: 6, z: 56, era: 'bosque',
         falasFn: () => game.fase <= 1
           ? ['Psiu… chega aqui, broto. Tá vendo esse cinza no chão? Não é poeira — é o futuro vazando pra cá.', 'Isso é coisa antiga, de raiz funda. Quem entende é a gente mais velha da 🏘️ Vila do Carvalho, lá pro lado do poente.', 'Vai lá e fala com a Vovó Samambaia — ela viu o bosque nascer. É longe: vai de carro ou de avião!', 'Ah, e se um bichinho ficar bravo e te atacar, enche a barra de AÇÃO e revida, tá?']
           : ['Cuidado com o que você mexe lá atrás… toda folha que cai aqui caiu primeiro em outro lugar.'],
         onEnd: () => { if (game.fase === 1) { game.flags.cogu = true; setObjetivo('Vá à 🏘️ Vila do Carvalho (a noroeste) e fale com a Vovó Samambaia'); } } },
     ];
-    const npcs = [];
     STORY_NPCS.forEach(d => {
-      getGLB(`../bosque-vr/npcs/character-${d.char}.glb`).then(gltf => {
-        const a = spawnActor(gltf, 'idle', 1.5);
-        a.wrap.position.set(d.x, heightAt(d.x, d.z), d.z); a.wrap.rotation.y = Math.PI;
+      const place = a => { a.wrap.position.set(d.x, heightAt(d.x, d.z), d.z); a.wrap.rotation.y = Math.PI;
         a.wrap.userData = { nome: d.nome, falasFn: d.falasFn, onEnd: d.onEnd };
-        a.story = d; obstacles.push({ x: d.x, z: d.z, r: 0.5 }); npcs.push(a);
-      }).catch(() => {});
+        a.story = d; obstacles.push({ x: d.x, z: d.z, r: 0.5 }); npcs.push(a); };
+      if (d.build) place(spawnProc(d.build, 1.75)); // [3.1] Seu Cogu procedural
+      else getGLB(`../bosque-vr/npcs/character-${d.char}.glb`).then(gltf => place(spawnActor(gltf, 'idle', 1.5))).catch(() => {});
     });
 
     // balão de diálogo 3D (canvas → textura): aparece sobre o NPC, funciona em VR/PC/celular
@@ -1993,9 +2055,9 @@
     }
     // ---------- Era Renascer (futuro curado): epílogo visitável — Vovó Samambaia (cena secreta) + a Brisa ----------
     function fimDeColecao() { return game.coletados >= (typeof COLLECT_N !== 'undefined' ? COLLECT_N : 16); }
-    getGLB('../bosque-vr/npcs/character-e.glb').then(g => { // Vovó Samambaia no Renascer: o segredo da Última Cantora (SQ6)
+    { // [3.1] Vovó Samambaia no Renascer (procedural): o segredo da Última Cantora (SQ6)
       const rx = PORTAL.x + 4, rz = PORTAL.z + 5;
-      const a = spawnActor(g, 'idle', 1.5); a.wrap.position.set(rx, heightAt(rx, rz), rz); a.wrap.rotation.y = Math.atan2(-rx, -rz);
+      const a = spawnProc(pmSamambaia, 1.75); a.wrap.position.set(rx, heightAt(rx, rz), rz); a.wrap.rotation.y = Math.atan2(-rx, -rz);
       a.wrap.userData = {
         nome: 'Vovó Samambaia',
         falasFn: () => {
@@ -2013,7 +2075,7 @@
         }
       };
       a.story = { era: 'renascer' }; npcs.push(a);
-    }).catch(() => {});
+    }
     let brisaBorboleta = null;
     function criarBrisa() { // a Brisa: a Murcha redimida, borboleta de luz que voa no futuro curado
       brisaBorboleta = new THREE.Group();

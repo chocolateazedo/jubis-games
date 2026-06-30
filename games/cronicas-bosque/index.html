@@ -877,7 +877,7 @@
     }
     let heroBattleActor = null;
     function spawnHeroBattle() { // [3.0] o Broto visível na formação (só fora do VR — no VR você é 1ª pessoa)
-      if (renderer.xr.isPresenting || !battle) return;
+      if (!battle) return; // [3.4] no VR também aparece o Broto (a batalha é em 3ª pessoa)
       const fa = spawnProc(pmBroto, PARTY_BUILD.broto.h); const hy = heightAt(dolly.position.x, dolly.position.z);
       fa.wrap.position.set(dolly.position.x, hy, dolly.position.z);
       fa.wrap.rotation.y = Math.atan2(battle.fx, battle.fz);
@@ -956,6 +956,7 @@
       if (heroBattleActor) { if (heroBattleActor.bar) scene.remove(heroBattleActor.bar); if (heroBattleActor.ring) scene.remove(heroBattleActor.ring); }
       despawnHeroBattle(); // [3.0] tira o Broto da formação
       if (!renderer.xr.isPresenting) { camera.position.set(0, 1.6, 0); camera.rotation.set(0, 0, 0); } // restaura a 1ª pessoa
+      else if (battle && battle.arena) { dolly.position.set(battle.arena.x, heightAt(battle.arena.x, battle.arena.z), battle.arena.z); } // [3.4] VR: volta o jogador pro lugar
       battle = null; heroHud.visible = false; hideBattleStatus();
     }
 
@@ -983,11 +984,11 @@
         const e = { actor: a, def: d, hp: d.hp, hpMax: d.hp, atb: 0.2, alive: true, bar: makeBar(), boss: true };
         e.charH = d.h + 1.5; scene.add(e.bar); drawBar(e.bar, 1); e.baseY = heightAt(ex, ez) + 1.5; e.phase = 0;
         inBattle = true; document.body.classList.add('inbattle'); updateMusicTrack();
-        battle = { enemies: [e], allies: [], heroAtb: 0, ready: false, menuOpen: false, hover: -1, ring: null, boss: e, faseBatalha: 'luta', cantar: 0, fx: rcDir.x, fz: rcDir.z, yaw: Math.atan2(rcDir.x, rcDir.z) };
+        battle = { enemies: [e], allies: [], heroAtb: 0, ready: false, menuOpen: false, hover: -1, ring: null, boss: e, faseBatalha: 'luta', cantar: 0, fx: rcDir.x, fz: rcDir.z, yaw: Math.atan2(rcDir.x, rcDir.z), target: 0, clock: 0, arena: { x: dolly.position.x, z: dolly.position.z } };
         spawnPartyAllies(); spawnHeroBattle(); // o grupo recrutado + o Broto visível na formação
         const ring = new THREE.Mesh(new THREE.RingGeometry(5.0, 5.8, 48), new THREE.MeshBasicMaterial({ color: 0xb09ad0, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false }));
         ring.rotation.x = -Math.PI / 2; ring.position.set(dolly.position.x, heightAt(dolly.position.x, dolly.position.z) + 0.12, dolly.position.z); scene.add(ring); battle.ring = ring;
-        heroHud.visible = !battleDomUI(); hideBattleStatus(); updateHeroHud(); sfx('start'); setObjetivo('Vença a Murcha… mas talvez vencer seja CUIDAR.');
+        vrBattleVantage(); heroHud.visible = false; hideBattleStatus(); sfx('start'); setObjetivo('Vença a Murcha… mas talvez vencer seja CUIDAR.');
         flash('🦋 A Murcha aparece — de frio e sozinha, roendo a seiva do Vovô.');
       }).catch(() => {});
     }
@@ -1040,7 +1041,12 @@
     // [3.3] posição espalhada (sem fila) no lado dos inimigos (à frente da turma)
     function battleEnemyPos(i, n) {
       const perpX = -battle.fz, perpZ = battle.fx, spread = (i - (n - 1) / 2) * 1.8, depth = (i % 2 === 0 ? 0 : 1.3) + (i > 2 ? 0.7 : 0);
-      return { x: dolly.position.x + battle.fx * (4.0 + depth) + perpX * spread, z: dolly.position.z + battle.fz * (4.0 + depth) + perpZ * spread };
+      return { x: battle.arena.x + battle.fx * (4.0 + depth) + perpX * spread, z: battle.arena.z + battle.fz * (4.0 + depth) + perpZ * spread };
+    }
+    function vrBattleVantage() { // [3.4] no VR, posiciona o jogador como observador (3ª pessoa, como no celular) em vez de 1ª pessoa
+      if (!renderer.xr.isPresenting || !battle) return;
+      const fx = battle.fx, fz = battle.fz, vx = battle.arena.x - fx * 5.0 + (-fz) * 2.2, vz = battle.arena.z - fz * 5.0 + fx * 2.2;
+      dolly.position.set(vx, heightAt(vx, vz) + 0.8, vz); dolly.rotation.y = battle.yaw;
     }
     const EXTRA_ENEMIES = ['brotoca', 'lobinho', 'cinzela', 'caranguejo', 'macaco', 'corvo'];
     function addBattleEnemy(key, i, n) { // inimigo extra (GLB) numa vaga espalhada
@@ -1058,14 +1064,14 @@
       camera.getWorldDirection(rcDir); rcDir.y = 0; rcDir.normalize();
       const d = ENEMY_DEF[actor.enemyKey], e = { actor, def: d, hp: d.hp, hpMax: d.hp, atb: Math.random() * 0.3, alive: true, bar: makeBar(), phase: Math.random() * 6.28 };
       e.charH = d.h; scene.add(e.bar);
-      battle = { enemies: [e], allies: [], heroAtb: 0, ready: false, menuOpen: false, hover: -1, ring: null, fx: rcDir.x, fz: rcDir.z, yaw: Math.atan2(rcDir.x, rcDir.z), target: 0, clock: 0 };
+      battle = { enemies: [e], allies: [], heroAtb: 0, ready: false, menuOpen: false, hover: -1, ring: null, fx: rcDir.x, fz: rcDir.z, yaw: Math.atan2(rcDir.x, rcDir.z), target: 0, clock: 0, arena: { x: dolly.position.x, z: dolly.position.z } };
       const n = (d.boss || d.miniboss) ? 1 : 1 + (Math.random() * 3 | 0); // [3.3] 1 a 3 inimigos (chefe/mini-chefe ficam sozinhos)
       const p0 = battleEnemyPos(0, n); e.actor.wrap.position.set(p0.x, heightAt(p0.x, p0.z), p0.z); e.baseY = heightAt(p0.x, p0.z);
       for (let i = 1; i < n; i++) addBattleEnemy(EXTRA_ENEMIES[Math.random() * EXTRA_ENEMIES.length | 0], i, n);
       spawnPartyAllies(); spawnHeroBattle(); // o grupo recrutado + o Broto visível na formação
       const ring = new THREE.Mesh(new THREE.RingGeometry(4.6, 5.3, 48), new THREE.MeshBasicMaterial({ color: 0xffd86b, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false }));
       ring.rotation.x = -Math.PI / 2; ring.position.set(dolly.position.x, heightAt(dolly.position.x, dolly.position.z) + 0.12, dolly.position.z); scene.add(ring); battle.ring = ring;
-      heroHud.visible = !battleDomUI(); hideBattleStatus(); updateHeroHud(); sfx('start'); flash('⚔ ' + d.nome + ' apareceu! Encha a barra de AÇÃO e aperte pra agir.');
+      vrBattleVantage(); heroHud.visible = false; hideBattleStatus(); sfx('start'); flash('⚔ ' + d.nome + ' apareceu! Encha a barra de AÇÃO e aperte pra agir.');
     }
     function checkAggro() {
       if (inBattle || activeNPC || narration) return; // ou está em diálogo, ou em batalha — nunca os dois

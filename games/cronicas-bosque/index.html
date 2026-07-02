@@ -2292,7 +2292,7 @@
     function nearMudinha() { if (game.sidequests.bromelia !== 'ativa' || currentEra !== 'bosque') return null; for (const g of sqMarkers.mudinha) if (!g.userData.planted && Math.hypot(dolly.position.x - g.userData.x, dolly.position.z - g.userData.z) < 2.6) return g; return null; }
     function plantarMudinha(g) { g.userData.planted = true; g.visible = false; game.sidequests.bromeliaP = mudinhasPlantadas(); sfx('ready'); saveGame('auto'); if (bromeliaPronta()) flash(tr('flash.all_replanted')); else flash(tr('flash.sapling_replanted', { n: mudinhasPlantadas(), total: sqMarkers.mudinha.length })); }
     function nearLampiaoSQ() { if (game.sidequests.tonico !== 'ativa' || currentEra !== 'bosque') return null; for (const g of sqMarkers.lampiao) if (!g.userData.lit && Math.hypot(dolly.position.x - g.userData.x, dolly.position.z - g.userData.z) < 2.8) return g; return null; }
-    function acenderLampiaoSQ(g) { acenderLampMesh(g); game.sidequests.tonicoP = lampioesAcesos(); sfx('ready'); saveGame('auto'); if (tonicoPronto()) flash(tr('flash.all_lamps_lit', { tonico: tr('name.tonico') })); else flash(tr('flash.lamp_lit', { n: lampioesAcesos(), total: sqMarkers.lampiao.length })); }
+    function acenderLampiaoSQ(g) { acenderLampMesh(g); game.sidequests.tonicoP = lampioesAcesos(); sfx('ready'); saveGame('auto'); if (tonicoPronto()) flash(tr('flash.all_lamps_lit')); else flash(tr('flash.lamp_lit', { n: lampioesAcesos(), total: sqMarkers.lampiao.length })); }
     function updateSidequests() {
       const bosque = currentEra === 'bosque';
       for (const g of sqMarkers.mudinha) g.visible = bosque && game.sidequests.bromelia === 'ativa' && !g.userData.planted;

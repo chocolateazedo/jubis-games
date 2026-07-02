@@ -158,30 +158,30 @@
   </style>
 </head>
 <body>
-  <a class="back" href="../../">← Voltar</a>
+  <a class="back" href="../../" data-i18n="ui.back_home">← Voltar</a>
   <div class="touch">
     <div id="joy"><div id="stick"></div></div>
     <div id="mbtns">
-      <button class="mbtn" id="btnAcao">Ação</button>
+      <button class="mbtn" id="btnAcao" data-i18n="ui.action_btn">Ação</button>
       <button class="mbtn small" id="btnPular">⤒</button>
       <button class="mbtn small" id="btnCorrer">🏃</button>
     </div>
     <button class="mbtn" id="fsBtn">⛶</button>
   </div>
-  <p id="hint">Arraste/mouse para olhar · WASD ou direcional para andar</p>
+  <p id="hint" data-i18n="hint.generic">Arraste/mouse para olhar · WASD ou direcional para andar</p>
 
   <div id="questBar"></div>
   <div id="collectHud">✨ <b id="collectN">0</b>/<span id="collectT">0</span></div>
   <div id="harmonia"><span class="hlbl">🕊️ Harmonia do Tempo</span><div class="htrack"><div id="harmoniaFill"></div></div></div>
   <button id="journalBtn">📜</button>
-  <div id="journal"><div class="jhead">📜 Diário de Missões</div><div class="jbody"></div><button class="jclose" id="journalClose">Fechar</button></div>
-  <div id="talkHint">💬 Conversar</div>
+  <div id="journal"><div class="jhead" data-i18n="journal.title">📜 Diário de Missões</div><div class="jbody"></div><button class="jclose" id="journalClose" data-i18n="ui.close">Fechar</button></div>
+  <div id="talkHint" data-i18n="hint.talk">💬 Conversar</div>
   <div id="battleBar"></div>
   <!-- painéis HTML nítidos do Modo Celular (o 3D embaça na resolução reduzida) -->
-  <div id="dialogBox"><div class="dname"></div><div class="dtext"></div><div class="dcont">▶ toque para continuar</div></div>
-  <div id="eraMenu"><div class="emtitle">Pra qual tempo, broto?</div><div class="embtns"></div></div>
+  <div id="dialogBox"><div class="dname"></div><div class="dtext"></div><div class="dcont" data-i18n="dialog.tap_continue">▶ toque para continuar</div></div>
+  <div id="eraMenu"><div class="emtitle" data-i18n="era.menu.title">Pra qual tempo, broto?</div><div class="embtns"></div></div>
   <div id="battleStatus"></div>
-  <div id="shop"><div class="shead">🛒 Loja da Vila — ✨ <b id="shopCoins">0</b> Frutos de Luz</div><div class="sitems"></div><button class="sclose" id="shopClose">Fechar</button></div>
+  <div id="shop"><div class="shead" data-i18n="shop.title">🛒 Loja da Vila — ✨ <b id="shopCoins">0</b> Frutos de Luz</div><div class="sitems"></div><button class="sclose" id="shopClose" data-i18n="ui.close">Fechar</button></div>
   <div id="hurt"></div>
   <div id="toast"></div>
 
@@ -537,7 +537,7 @@
       c.fillStyle = 'rgba(8,22,16,0.93)'; rr(c, 4, 44, W - 8, H - 48, 22); c.fill();
       c.strokeStyle = 'rgba(160,230,180,0.6)'; c.lineWidth = 5; c.stroke();
       c.textAlign = 'center'; c.textBaseline = 'middle';
-      c.fillStyle = '#bdf5c8'; c.font = 'bold 30px Arial'; c.fillText('Pra qual tempo, broto?', W / 2, 24);
+      c.fillStyle = '#bdf5c8'; c.font = 'bold 30px Arial'; c.fillText(tr('era.menu.title'), W / 2, 24);
       const fit = (text, start, min, pad) => { let f = start; c.font = f + 'px Arial'; while (c.measureText(text).width > cw - pad && f > min) { f -= 2; c.font = f + 'px Arial'; } return f; }; // encolhe pra caber na célula
       for (let i = 0; i < n; i++) {
         const x = i * cw, k = list[i], info = ERA_INFO[k];
@@ -645,11 +645,11 @@
       c.fillStyle = 'rgba(8,22,16,0.85)'; rr(c, 0, 0, W, 150, 18); c.fill();
       c.strokeStyle = 'rgba(160,230,180,0.5)'; c.lineWidth = 3; c.stroke();
       c.fillStyle = '#eaffee'; c.font = 'bold 26px Arial'; c.textAlign = 'left'; c.textBaseline = 'middle';
-      c.fillText('Você  ·  Nv ' + hero.lvl, 20, 26);
+      c.fillText(tr('hud.you_level', { n: hero.lvl }), 20, 26);
       const bar = (y, frac, col, txt) => { c.fillStyle = 'rgba(0,0,0,.5)'; rr(c, 150, y - 13, 340, 26, 8); c.fill(); c.fillStyle = col; c.fillRect(153, y - 10, 334 * Math.max(0, Math.min(1, frac)), 20); c.fillStyle = '#fff'; c.font = 'bold 17px Arial'; c.fillText(txt, 162, y + 1); };
       c.fillStyle = '#bdf5c8'; c.font = 'bold 20px Arial'; c.fillText('HP', 20, 56); bar(56, hero.hp / hero.hpMax, '#5be07a', hero.hp + '/' + hero.hpMax);
       c.fillStyle = '#bdf5c8'; c.fillText('MP', 20, 92); bar(92, hero.mp / hero.mpMax, '#5aa0ff', hero.mp + '/' + hero.mpMax);
-      c.fillStyle = '#bdf5c8'; c.fillText('AÇÃO', 20, 128); bar(128, battle ? battle.heroAtb : 0, battle && battle.ready ? '#ffd86b' : '#c98a4a', battle && battle.ready ? 'PRONTO!' : '');
+      c.fillStyle = '#bdf5c8'; c.fillText(tr('hud.action'), 20, 128); bar(128, battle ? battle.heroAtb : 0, battle && battle.ready ? '#ffd86b' : '#c98a4a', battle && battle.ready ? tr('hud.ready') : '');
       c.textAlign = 'left'; hudTex.needsUpdate = true;
     }
     // -- status de batalha em HTML (Modo Celular): HP/MP/AÇÃO do herói + HP dos inimigos, sempre nítidos --
@@ -669,7 +669,7 @@
       for (const e of b.enemies) if (e.alive) { const en = e; bsAddRow(root, en.def.nome, '#e07a7a', () => [en.hp / en.hpMax, Math.max(0, en.hp) + '']); }
       bsAddRow(root, '❤ HP', '#5be07a', () => [hero.hp / hero.hpMax, hero.hp + '/' + hero.hpMax]);
       bsAddRow(root, '💧 MP', '#5aa0ff', () => [hero.mp / hero.mpMax, hero.mp + '/' + hero.mpMax]);
-      bsAddRow(root, '⚡ AÇÃO', '#ffd86b', () => [battle ? battle.heroAtb : 0, battle && battle.ready ? 'PRONTO!' : '']);
+      bsAddRow(root, '⚡ ' + tr('hud.action'), '#ffd86b', () => [battle ? battle.heroAtb : 0, battle && battle.ready ? tr('hud.ready') : '']);
       for (const al of (b.allies || [])) if (al.alive) { const a = al; bsAddRow(root, (a.emoji || '') + ' ' + a.nome, '#9be07a', () => [a.hp / a.hpMax, Math.max(0, a.hp) + '']); }
       root.style.display = 'flex';
     }
@@ -803,24 +803,24 @@
       if (!battle.sub) {
         const k = BAT_ACTIONS[i].k;
         if (k === 'atacar') { closeBattleMenu(); heroAttack(aliveTarget()); }
-        else if (k === 'defender') { closeBattleMenu(); hero.defending = true; flash('🛡 Você se protegeu!'); resetHeroTurn(); }
+        else if (k === 'defender') { closeBattleMenu(); hero.defending = true; flash(tr('flash.defended')); resetHeroTurn(); }
         else if (k === 'tecnica') { battle.sub = 'tecnica'; battle.hover = -1; refreshMenu(); }
-        else if (k === 'item') { if (!Object.keys(hero.itens).some(x => hero.itens[x] > 0)) { flash('Você não tem itens.'); return; } battle.sub = 'item'; battle.hover = -1; refreshMenu(); }
+        else if (k === 'item') { if (!Object.keys(hero.itens).some(x => hero.itens[x] > 0)) { flash(tr('flash.no_items')); return; } battle.sub = 'item'; battle.hover = -1; refreshMenu(); }
       } else {
         const it = battleMenuItems()[i]; if (!it) return;
         if (it.back) { battle.sub = null; battle.hover = -1; refreshMenu(); return; }
-        if (it.dim) { flash('MP insuficiente!'); return; }
+        if (it.dim) { flash(tr('flash.no_mp')); return; }
         if (battle.sub === 'tecnica') { closeBattleMenu(); if (it.combo) runCombo(it.combo); else heroTecnica(it.key, aliveTarget()); }
         else { closeBattleMenu(); heroItem(it.key); }
       }
     }
     function battleInteract() { if (battle.menuOpen) battleSelect(battle.hover); else if (battle.ready) openBattleMenu(); }
     function heroTecnica(key, target) {
-      const tc = TECNICAS[key]; if (hero.mp < tc.mp) { flash('MP insuficiente!'); return; }
+      const tc = TECNICAS[key]; if (hero.mp < tc.mp) { flash(tr('flash.no_mp')); return; }
       hero.mp -= tc.mp;
-      if (tc.tipo === 'cura') { const h = Math.round(tc.poder + hero.mag); hero.hp = Math.min(hero.hpMax, hero.hp + h); sfx('cura'); spawnHitFx(heroFxPos(), 'heal'); spawnDmg(heroFxPos().clone().add(new THREE.Vector3(0, -0.4, 0)), '+' + h, 0x5be07a); flash(tc.nome + '! +' + h + ' HP'); }
+      if (tc.tipo === 'cura') { const h = Math.round(tc.poder + hero.mag); hero.hp = Math.min(hero.hpMax, hero.hp + h); sfx('cura'); spawnHitFx(heroFxPos(), 'heal'); spawnDmg(heroFxPos().clone().add(new THREE.Vector3(0, -0.4, 0)), '+' + h, 0x5be07a); flash(tr('flash.effect_used', { nome: tc.nome, efeito: '+' + h + ' HP' })); }
       else if (tc.tipo === 'area') {
-        sfx('magia'); flash(tc.nome + '! Atingiu todos!');
+        sfx('magia'); flash(tr('flash.hit_all', { nome: tc.nome }));
         for (const en of battle.enemies.filter(x => x.alive)) {
           const mult = essMult(tc.ess, en.def.ess), dmg = Math.max(1, Math.round((tc.poder + hero.mag - en.def.def / 2) * (0.85 + Math.random() * 0.3) * mult));
           en.hp -= dmg; spawnHitFx(en.actor.wrap.position, tc.ess || 'sol'); spawnDmg(en.actor.wrap.position, dmg, mult >= 2 ? 0xffe24a : 0xffffff); playClip(en.actor, 'eat');
@@ -830,15 +830,15 @@
       else if (target) {
         const mult = essMult(tc.ess, target.def.ess), dmg = Math.max(1, Math.round((tc.poder + hero.mag - target.def.def / 2) * (0.9 + Math.random() * 0.2) * mult));
         target.hp -= dmg; sfx('magia'); spawnHitFx(target.actor.wrap.position, tc.ess || 'sol'); spawnDmg(target.actor.wrap.position, dmg, mult >= 2 ? 0xffe24a : 0xffffff);
-        if (mult >= 2) { flash('✨ Acertou a fraqueza! ×2'); sfx('crit'); } playClip(target.actor, 'eat');
+        if (mult >= 2) { flash(tr('flash.weakness_hit')); sfx('crit'); } playClip(target.actor, 'eat');
         if (target.hp <= 0) { target.alive = false; defeatEnemy(target); }
       }
       resetHeroTurn(); updateHeroHud();
     }
     function heroItem(key) {
-      if (!hero.itens[key] || hero.itens[key] <= 0) { flash('Sem esse item.'); return; }
+      if (!hero.itens[key] || hero.itens[key] <= 0) { flash(tr('flash.no_such_item')); return; }
       hero.itens[key]--; const it = ITENS[key];
-      if (it.cura) { hero.hp = Math.min(hero.hpMax, hero.hp + it.cura); spawnDmg(dolly.position.clone().add(new THREE.Vector3(0, -0.4, 0)), '+' + it.cura, 0x5be07a); flash(it.nome + '! +' + it.cura + ' HP'); sfx('ready'); }
+      if (it.cura) { hero.hp = Math.min(hero.hpMax, hero.hp + it.cura); spawnDmg(dolly.position.clone().add(new THREE.Vector3(0, -0.4, 0)), '+' + it.cura, 0x5be07a); flash(tr('flash.effect_used', { nome: it.nome, efeito: '+' + it.cura + ' HP' })); sfx('ready'); }
       resetHeroTurn(); updateHeroHud();
     }
 
@@ -961,9 +961,9 @@
     function allyAct(al) {
       if (!battle) return; // a luta pode ter acabado neste mesmo frame (aliado anterior deu o golpe final, ou o herói caiu)
       if (al.role === 'heal') { // Folho cura o mais ferido do grupo; se ninguém precisa, ataca
-        const party = [{ frac: hero.hp / hero.hpMax, heal: h => { hero.hp = Math.min(hero.hpMax, hero.hp + h); updateHeroHud(); }, pos: heroFxPos().clone().add(new THREE.Vector3(0, -0.4, 0)), nome: 'Você' }].concat(battle.allies.filter(x => x.alive).map(x => ({ frac: x.hp / x.hpMax, heal: h => { x.hp = Math.min(x.hpMax, x.hp + h); }, pos: x.actor.wrap.position, nome: x.nome })));
+        const party = [{ frac: hero.hp / hero.hpMax, heal: h => { hero.hp = Math.min(hero.hpMax, hero.hp + h); updateHeroHud(); }, pos: heroFxPos().clone().add(new THREE.Vector3(0, -0.4, 0)), nome: tr('name.you') }].concat(battle.allies.filter(x => x.alive).map(x => ({ frac: x.hp / x.hpMax, heal: h => { x.hp = Math.min(x.hpMax, x.hp + h); }, pos: x.actor.wrap.position, nome: x.nome })));
         let worst = null; for (const p of party) if (!worst || p.frac < worst.frac) worst = p;
-        if (worst && worst.frac < 0.92) { const h = Math.round(al.mag + 4); worst.heal(h); sfx('cura'); spawnHitFx(worst.pos, 'heal'); spawnDmg(worst.pos, '+' + h, 0x5be07a); flash('🐛 Folho curou ' + worst.nome + '! +' + h + ' HP'); return; }
+        if (worst && worst.frac < 0.92) { const h = Math.round(al.mag + 4); worst.heal(h); sfx('cura'); spawnHitFx(worst.pos, 'heal'); spawnDmg(worst.pos, '+' + h, 0x5be07a); flash(tr('flash.folho_healed', { nome: worst.nome, h })); return; }
       }
       allyAttackEnemy(al);
     }
@@ -992,22 +992,22 @@
       puff(e.actor.wrap.position); sfx('poof');
       e.actor.defeated = true; e.actor.wrap.userData.dyT = 0; dyingActors.push({ wrap: e.actor.wrap, mixer: e.actor.mixer, t: 0, shrink: true });
       const i = overworldEnemies.indexOf(e.actor); if (i >= 0) overworldEnemies.splice(i, 1);
-      if (e.def.miniboss) flash('🏆 Você derrotou o ' + e.def.nome + '!');
-      if (e.def.reward === 'amuleto') { hero.hpMax += 10; hero.mpMax += 4; hero.hp = hero.hpMax; hero.mp = hero.mpMax; setTimeout(() => flash('🏅 Amuleto do Lobão: +10 HP e +4 MP máximos!'), 900); }
+      if (e.def.miniboss) flash(tr('flash.miniboss_defeated', { nome: e.def.nome }));
+      if (e.def.reward === 'amuleto') { hero.hpMax += 10; hero.mpMax += 4; hero.hp = hero.hpMax; hero.mp = hero.mpMax; setTimeout(() => flash(tr('flash.amulet_reward')), 900); }
       if (battle.enemies.every(x => !x.alive)) winBattle();
     }
     function levelUp() {
       hero.lvl++; hero.xpNext = Math.round(hero.xpNext * 1.7); hero.hpMax += 6; hero.mpMax += 2; hero.atk += 2; hero.def += 1; hero.mag += 1; hero.hp = hero.hpMax; hero.mp = hero.mpMax; sfx('levelup');
       const aprende = { 2: 'vendaval', 3: 'jato', 4: 'solzao' }[hero.lvl];
-      if (aprende && !hero.tecnicas.includes(aprende)) { hero.tecnicas.push(aprende); setTimeout(() => flash('✨ Nova técnica: ' + TECNICAS[aprende].nome + '!'), 600); }
+      if (aprende && !hero.tecnicas.includes(aprende)) { hero.tecnicas.push(aprende); setTimeout(() => flash(tr('flash.new_technique', { nome: TECNICAS[aprende].nome })), 600); }
     }
     function winBattle() {
       const xp = battle.enemies.reduce((s, e) => s + e.def.xp, 0); hero.xp += xp; sfx('fanfare');
-      let msg = '🎉 Você venceu! +' + xp + ' XP';
-      while (hero.xp >= hero.xpNext) { hero.xp -= hero.xpNext; levelUp(); msg += ' · subiu pro Nível ' + hero.lvl + '!'; }
+      let msg = tr('flash.victory', { xp });
+      while (hero.xp >= hero.xpNext) { hero.xp -= hero.xpNext; levelUp(); msg += ' ' + tr('flash.level_up_suffix', { n: hero.lvl }); }
       endBattle(); flash(msg);
     }
-    function loseBattle() { flash('😴 Você cochilou no Bosque…'); endBattle(); hero.hp = hero.hpMax; hero.mp = hero.mpMax; dolly.position.set(10, heightAt(10, 64), 64); travelEra(currentEra); }
+    function loseBattle() { flash(tr('flash.fainted')); endBattle(); hero.hp = hero.hpMax; hero.mp = hero.mpMax; dolly.position.set(10, heightAt(10, 64), 64); travelEra(currentEra); }
     function endBattle() {
       inBattle = false; document.body.classList.remove('inbattle'); closeBattleMenu(); updateMusicTrack();
       if (battle && battle.ring) scene.remove(battle.ring);
@@ -1047,8 +1047,8 @@
         const bcx = battle.arena.x + battle.fx * 2.7, bcz = battle.arena.z + battle.fz * 2.7;
         const ring = new THREE.Mesh(new THREE.RingGeometry(5.8, 6.5, 56), new THREE.MeshBasicMaterial({ color: 0xb09ad0, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false }));
         ring.rotation.x = -Math.PI / 2; ring.position.set(bcx, heightAt(bcx, bcz) + 0.12, bcz); scene.add(ring); battle.ring = ring;
-        vrBattleVantage(); heroHud.visible = false; hideBattleStatus(); sfx('start'); setObjetivo('Vença a Murcha… mas talvez vencer seja CUIDAR.');
-        flash('🦋 A Murcha aparece — de frio e sozinha, roendo a seiva do Vovô.');
+        vrBattleVantage(); heroHud.visible = false; hideBattleStatus(); sfx('start'); setObjetivo(tr('obj.boss_battle'));
+        flash(tr('flash.murcha_appears'));
       }
     }
     const FOLHA_KEYS = ['primavera', 'verao', 'chuvas', 'inverno'];
@@ -1138,7 +1138,7 @@
       const rcx = battle.arena.x + battle.fx * 2.7, rcz = battle.arena.z + battle.fz * 2.7; // [3.6] anel no meio do campo, cercando as duas turmas
       const ring = new THREE.Mesh(new THREE.RingGeometry(5.8, 6.5, 56), new THREE.MeshBasicMaterial({ color: 0xffd86b, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false }));
       ring.rotation.x = -Math.PI / 2; ring.position.set(rcx, heightAt(rcx, rcz) + 0.12, rcz); scene.add(ring); battle.ring = ring;
-      vrBattleVantage(); heroHud.visible = false; hideBattleStatus(); sfx('start'); flash('⚔ ' + d.nome + ' apareceu! Encha a barra de AÇÃO e aperte pra agir.');
+      vrBattleVantage(); heroHud.visible = false; hideBattleStatus(); sfx('start'); flash(tr('flash.enemy_appeared', { nome: d.nome }));
     }
     function checkAggro() {
       if (inBattle || activeNPC || narration) return; // ou está em diálogo, ou em batalha — nunca os dois
@@ -1648,8 +1648,8 @@
           spawnDmg(m.position.clone().add(new THREE.Vector3(0, -0.6, 0)), '✨+1', 0xffe24a);
           if (collectN) collectN.textContent = game.coletados;
           const hud = document.getElementById('collectHud'); if (hud) hud.style.display = 'block';
-          if (game.coletados % 4 === 0) { hero.hpMax += 2; hero.mpMax += 1; hero.hp = hero.hpMax; hero.mp = hero.mpMax; flash('✨ Frutos de Luz! Coração mais forte — HP/MP máximos subiram!'); sfx('levelup'); }
-          if (game.coletados === COLLECT_N) { hero.itens.mel = (hero.itens.mel || 0) + 3; flash('🌟 Você juntou TODOS os Frutos de Luz! Ganhou 3 Mel-do-Bosque. O bosque brilha por você!'); sfx('fanfare'); }
+          if (game.coletados % 4 === 0) { hero.hpMax += 2; hero.mpMax += 1; hero.hp = hero.hpMax; hero.mp = hero.mpMax; flash(tr('flash.fruits_levelup')); sfx('levelup'); }
+          if (game.coletados === COLLECT_N) { hero.itens.mel = (hero.itens.mel || 0) + 3; flash(tr('flash.fruits_all_collected')); sfx('fanfare'); }
         }
       }
     }
@@ -1745,13 +1745,13 @@
       else getGLB(`../bosque-vr/npcs/character-${d.char}.glb`).then(g => place(spawnActor(g, 'idle', 1.5))).catch(() => {});
     });
     { const a = spawnProc(pmCara, 2.3); a.wrap.position.set(SHOP.x, heightAt(SHOP.x, SHOP.z), SHOP.z + 0.9); a.wrap.rotation.y = Math.atan2(VILA.x - SHOP.x, VILA.z - SHOP.z); // [3.1] Lojista Cará procedural
-      a.wrap.userData = { nome: 'Lojista Cará', shop: true }; a.story = { era: 'bosque' }; npcs.push(a); }
+      a.wrap.userData = { nome: tr('name.cara'), shop: true }; a.story = { era: 'bosque' }; npcs.push(a); }
     // ---- LOJA: troca Frutos de Luz por itens (DOM no celular/PC; presente simples no VR) ----
     const SHOP_ITEMS = [
-      { nome: '🍯 Mel-do-Bosque (cura 15)', cost: 2, give: () => { hero.itens.mel = (hero.itens.mel || 0) + 1; } },
-      { nome: '❤ Coração de Carvalho (+6 HP máx)', cost: 3, give: () => { hero.hpMax += 6; hero.hp = hero.hpMax; } },
-      { nome: '💧 Gota de Sol (+3 MP máx)', cost: 3, give: () => { hero.mpMax += 3; hero.mp = hero.mpMax; } },
-      { nome: '⚔ Seiva de Força (+1 Ataque)', cost: 4, give: () => { hero.atk += 1; } },
+      { get nome() { return tr('shop.item.mel'); }, cost: 2, give: () => { hero.itens.mel = (hero.itens.mel || 0) + 1; } },
+      { get nome() { return tr('shop.item.coracao'); }, cost: 3, give: () => { hero.hpMax += 6; hero.hp = hero.hpMax; } },
+      { get nome() { return tr('shop.item.gota_sol'); }, cost: 3, give: () => { hero.mpMax += 3; hero.mp = hero.mpMax; } },
+      { get nome() { return tr('shop.item.seiva'); }, cost: 4, give: () => { hero.atk += 1; } },
     ];
     let shopOpen = false;
     function nearShop() { return currentEra === 'bosque' && Math.hypot(dolly.position.x - SHOP.x, dolly.position.z - SHOP.z) < 4.5; }
@@ -1767,12 +1767,12 @@
       });
     }
     function buyItem(it) {
-      if (game.coletados < it.cost) { flash('✨ Frutos de Luz insuficientes…'); return; }
-      game.coletados -= it.cost; it.give(); sfx('coin'); flash('Comprou: ' + it.nome);
+      if (game.coletados < it.cost) { flash(tr('flash.not_enough_fruits')); return; }
+      game.coletados -= it.cost; it.give(); sfx('coin'); flash(tr('flash.bought', { nome: it.nome }));
       const cn = document.getElementById('collectN'); if (cn) cn.textContent = game.coletados; renderShop();
     }
     function openShop() {
-      if (renderer.xr.isPresenting) { const aff = SHOP_ITEMS.filter(it => game.coletados >= it.cost); if (aff.length) { buyItem(aff[0]); flash('🛒 Lojista: leva esse, broto!'); } else flash('🛒 Lojista Cará: junta uns Frutos de Luz e volta aqui!'); return; }
+      if (renderer.xr.isPresenting) { const aff = SHOP_ITEMS.filter(it => game.coletados >= it.cost); if (aff.length) { buyItem(aff[0]); flash(tr('flash.shopkeeper_take_this')); } else flash(tr('flash.shopkeeper_need_fruits')); return; }
       shopOpen = true; renderShop(); const el = document.getElementById('shop'); if (el) el.style.display = 'block'; if (document.exitPointerLock) document.exitPointerLock();
     }
     function closeShop() { shopOpen = false; const el = document.getElementById('shop'); if (el) el.style.display = 'none'; }
@@ -1982,7 +1982,7 @@
     function nearLantern() { return lanternItem && Math.hypot(dolly.position.x - lanternItem.position.x, dolly.position.z - lanternItem.position.z) < 2.8; }
     function pickLantern() {
       if (!lanternItem) return; scene.remove(lanternItem); lanternItem = null; game.flags.lanterna = true;
-      flash('✨ Você pegou a Lanterna-Vagalume! O caminho do Ermo se abriu.'); sfx('fanfare');
+      flash(tr('flash.got_lantern')); sfx('fanfare');
       iniciarFase(3); // Cap.3 "O Ermo" vira a missão ativa (e autosalva com a Lanterna já pega)
     }
     // ---------- o Vovô: conversa (Fase 1) e depois abre o menu das Eras ----------
@@ -2078,7 +2078,7 @@
     }
     function equilibrarRiacho() {
       game.lacos.riacho = 'equilibrado'; sfx('fanfare'); fecharFenda(); recomputeHarmonia(); renderJournal(); saveGame('auto');
-      flash('💧 Você cavou um novo curso — a água voltou ao presente e a fenda se fechou! Harmonia restaurada.');
+      flash(tr('flash.new_stream_course'));
     }
     function abrirFenda() {
       if (fendaMesh) return;
@@ -2290,7 +2290,7 @@
     function tonicoPronto() { return sqMarkers.lampiao.length > 0 && lampioesAcesos() >= sqMarkers.lampiao.length; }
     function acenderLampMesh(g) { g.userData.lit = true; g.userData.lamp.material.color.setHex(0xffe6a0); g.userData.lamp.material.emissive.setHex(0xffcc55); g.userData.lamp.material.emissiveIntensity = 1.0; }
     function nearMudinha() { if (game.sidequests.bromelia !== 'ativa' || currentEra !== 'bosque') return null; for (const g of sqMarkers.mudinha) if (!g.userData.planted && Math.hypot(dolly.position.x - g.userData.x, dolly.position.z - g.userData.z) < 2.6) return g; return null; }
-    function plantarMudinha(g) { g.userData.planted = true; g.visible = false; game.sidequests.bromeliaP = mudinhasPlantadas(); sfx('ready'); saveGame('auto'); if (bromeliaPronta()) flash('🌷 Todas replantadas! Volte à Dona Bromélia.'); else flash('🌱 Mudinha replantada! (' + mudinhasPlantadas() + '/' + sqMarkers.mudinha.length + ')'); }
+    function plantarMudinha(g) { g.userData.planted = true; g.visible = false; game.sidequests.bromeliaP = mudinhasPlantadas(); sfx('ready'); saveGame('auto'); if (bromeliaPronta()) flash(tr('flash.all_replanted')); else flash(tr('flash.sapling_replanted', { n: mudinhasPlantadas(), total: sqMarkers.mudinha.length })); }
     function nearLampiaoSQ() { if (game.sidequests.tonico !== 'ativa' || currentEra !== 'bosque') return null; for (const g of sqMarkers.lampiao) if (!g.userData.lit && Math.hypot(dolly.position.x - g.userData.x, dolly.position.z - g.userData.z) < 2.8) return g; return null; }
     function acenderLampiaoSQ(g) { acenderLampMesh(g); game.sidequests.tonicoP = lampioesAcesos(); sfx('ready'); saveGame('auto'); if (tonicoPronto()) flash(tr('flash.all_lamps_lit', { tonico: tr('name.tonico') })); else flash(tr('flash.lamp_lit', { n: lampioesAcesos(), total: sqMarkers.lampiao.length })); }
     function updateSidequests() {
@@ -2357,7 +2357,7 @@
     }
     function checkCancao() { // chamado quando se ganha uma Folha: atualiza o objetivo da fase 6 e comemora ao reunir os 3
       if (game.fase !== 6) return;
-      if (cancaoPronta() && !game.flags.cancaoOk) { game.flags.cancaoOk = true; flash('🎶 Você reuniu os três versos! Vá ao 🥀 Ermo cantar pra Murcha.'); }
+      if (cancaoPronta() && !game.flags.cancaoOk) { game.flags.cancaoOk = true; flash(tr('flash.three_verses_gathered')); }
       setObjetivoFase6();
     }
     function folhaTarget() { // próximo passo pra reunir a Canção das Quatro Folhas; null = já tem os 3
@@ -2401,7 +2401,7 @@
       questArrow.rotation.set(0, Math.atan2(dx, dz), 0);
       questArrow.visible = true;
     }
-    function checkUnlockRaiz() { if (!game.flags.raiz && game.folhas.length >= 2) { game.flags.raiz = true; setTimeout(() => flash('🌰 Uma raiz mais funda se abriu! Toque o Vovô e viaje à RAIZ, o passado profundo.'), 1400); } }
+    function checkUnlockRaiz() { if (!game.flags.raiz && game.folhas.length >= 2) { game.flags.raiz = true; setTimeout(() => flash(tr('flash.raiz_unlocked')), 1400); } }
 
     // ----- ATO III — A RAIZ: o Constructo de Pedra (chefe-coração resolvido com companhia) → Folha das Chuvas -----
     const CONSTRUCTO = { x: -46, z: 28 };
@@ -2581,7 +2581,7 @@
     function doPlace() {
       if (!ghost || !buildPiece || !curFoot) return;
       const x = ghost.position.x, y = ghost.position.y, z = ghost.position.z, ry = ghostRY;
-      if (overlapsAny(boxAt(x, y, z, curFoot, ry))) { flash('Já tem uma peça aqui 🙂'); return; } // sem sobrepor
+      if (overlapsAny(boxAt(x, y, z, curFoot, ry))) { flash(tr('flash.piece_exists')); return; } // sem sobrepor
       addPiece(buildPiece, x, y, z, ry, false).then(o => { saveBuilding(buildPiece, x, y, z, ry).then(id => { if (id && o) o.userData.id = id; }); });
       netSendBuild(buildPiece, x, y, z, ry); // mostra pra todo mundo na sala na hora
     }
@@ -2591,7 +2591,7 @@
     }
     function changeLevel(d) { if (buildPiece) buildLevel = Math.max(-2, Math.min(20, buildLevel + d)); }
     function saveBuilding(piece, x, y, z, ry) {
-      if (!server.user) { flash('Entre na sua conta no site pra salvar as construções 🙂'); return Promise.resolve(null); }
+      if (!server.user) { flash(tr('flash.login_to_save')); return Promise.resolve(null); }
       return fetch('../bosque-vr/buildings.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF': server.csrf || '' },
         body: JSON.stringify({ piece, x, y, z, ry }) }).then(r => r.json()).then(d => (d && d.id) || null).catch(() => null);
     }
@@ -2625,7 +2625,7 @@
     }
     function toggleRemoveMode() {
       removeMode = !removeMode;
-      if (removeMode) { cancelBuild(); if (menuOpen) closeMenu3D(); flash('Modo remover: mire numa peça e use o gatilho (VR), tecla X (PC) ou toque'); }
+      if (removeMode) { cancelBuild(); if (menuOpen) closeMenu3D(); flash(tr('flash.remove_mode')); }
       else { removeBox.visible = false; removeTarget = null; }
       const rb = document.getElementById('removeBtn'); if (rb) rb.classList.toggle('on', removeMode);
     }
@@ -2662,7 +2662,7 @@
       c.fillStyle = 'rgba(8,22,16,0.92)'; rr(c, 4, 4, W - 8, W - 8, 30); c.fill();
       c.strokeStyle = 'rgba(160,230,180,0.6)'; c.lineWidth = 6; c.stroke();
       c.textAlign = 'center'; c.textBaseline = 'middle';
-      const nav = ['◀', '✕ Sair · pág ' + (menuPage + 1) + '/' + menuPages, '▶'];
+      const nav = ['◀', tr('menu.exit_page', { n: menuPage + 1, total: menuPages }), '▶'];
       for (let col = 0; col < MENU_COLS; col++) {
         const x = col * cw;
         if (menuHover === col) { c.fillStyle = 'rgba(120,220,150,0.4)'; rr(c, x + 8, 8, cw - 16, ch - 16, 14); c.fill(); }
@@ -2871,7 +2871,7 @@
     // posição da câmera (altura, recuo) ao montar: você vira motorista/cavaleiro e VÊ o veículo à frente (fora do VR)
     const MOUNT_CAM = { carro: [1.5, 0.7], moto: [1.5, 0.4], cavalo: [2.2, 0.7], aviao: [1.7, 0.6] };
     const MOUNT_EMOJI = { carro: '🚗', moto: '🏍️', cavalo: '🐴', aviao: '✈️' };
-    const MOUNT_MSG = { carro: 'Vrum vrum! De carro agora.', moto: 'Acelera na moto!', cavalo: 'Eba, montou no cavalo!', aviao: 'Decolando de avião! 🛫' };
+    function mountMsg(k) { return tr('mount.msg.' + k); }
     const matT = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.6, metalness: 0.1 });
     function tbox(g, w, h, d, c, x, y, z) { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), matT(c)); m.position.set(x, y, z); g.add(m); return m; }
     function twheel(g, x, y, z, r) { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.28, 16), matT(0x222428)); m.rotation.z = Math.PI / 2; m.position.set(x, y, z); g.add(m); return m; } // (frente = -z)
@@ -2934,7 +2934,7 @@
       mount = type;
       for (const k in MOUNTS) MOUNTS[k].visible = false;
       setEngine(type);
-      if (type) { MOUNTS[type].visible = true; sfx(type === 'cavalo' ? 'neigh' : 'vroom'); flash(MOUNT_EMOJI[type] + ' ' + MOUNT_MSG[type]); }
+      if (type) { MOUNTS[type].visible = true; sfx(type === 'cavalo' ? 'neigh' : 'vroom'); flash(MOUNT_EMOJI[type] + ' ' + mountMsg(type)); }
       else { sfx('poof'); }
       // sobe e recua a câmera pra você ver a cabine/o cavalo à sua frente (no VR a cabeça é livre, não mexe)
       if (!renderer.xr.isPresenting) { const o = type ? MOUNT_CAM[type] : null; camera.position.set(0, o ? o[0] : 1.6, o ? o[1] : 0); }
@@ -3090,7 +3090,7 @@
       updateCollectibles(dt, t); // frutos de luz giram, boiam e são coletados ao chegar perto
       updateTeia(t); updateTeia2(t); updateTeia3(t); updateTeia4(t); updateTeia5(t); updateSidequests(); updateBrisa(t); updateCantora(t); updateQuestArrow(t); updateConstructo(t); // [2.0] Teia + Constructo + sidequests + Brisa/Cantora (Renascer) + seta-guia
       if (shopOpen && !nearShop()) closeShop(); // saiu de perto da banca → fecha a loja
-      if (!game.flags.vilaVista && currentEra === 'bosque' && Math.hypot(dolly.position.x - VILA.x, dolly.position.z - VILA.z) < 24) { game.flags.vilaVista = true; flash('🏘️ Você chegou à Vila do Carvalho!'); sfx('ready'); }
+      if (!game.flags.vilaVista && currentEra === 'bosque' && Math.hypot(dolly.position.x - VILA.x, dolly.position.z - VILA.z) < 24) { game.flags.vilaVista = true; flash(tr('flash.reached_village')); sfx('ready'); }
       // partículas mágicas: derivam, caem/sobem conforme a era e seguem o jogador
       { const pa = pGeo.attributes.position.array, hs = PSPAN / 2;
         for (let i = 0; i < PCOUNT; i++) {
@@ -3326,8 +3326,8 @@
     function createRoom() {
       net.mode = 'host';
       const code = rndCode(); net.peer = new Peer(ROOM_PREFIX + code);
-      net.peer.on('open', () => { const el = document.getElementById('roomCode'); el.textContent = '🌐 Sala: ' + code; el.style.display = 'block'; });
-      net.peer.on('error', () => flash('Falha ao criar sala. Recarregue e tente de novo.'));
+      net.peer.on('open', () => { const el = document.getElementById('roomCode'); el.textContent = tr('room.code_label', { code }); el.style.display = 'block'; });
+      net.peer.on('error', () => flash(tr('flash.room_create_failed')));
       net.peer.on('connection', c => {
         if (net.conns.length >= 4) { c.on('open', () => c.close()); return; }
         net.conns.push(c);
@@ -3340,12 +3340,12 @@
       net.mode = 'guest'; net.peer = new Peer();
       net.peer.on('open', () => {
         net.hostConn = net.peer.connect(ROOM_PREFIX + code.toUpperCase().trim(), { reliable: true });
-        net.hostConn.on('open', () => flash('Conectado ao bosque! 🌳'));
+        net.hostConn.on('open', () => flash(tr('flash.room_connected')));
         net.hostConn.on('data', onGuestData);
-        net.hostConn.on('close', () => { flash('A sala foi encerrada.'); for (const id of Object.keys(remotes)) removeRemote(id); });
-        net.hostConn.on('error', () => flash('Não achei a sala. Confira o código.'));
+        net.hostConn.on('close', () => { flash(tr('flash.room_closed')); for (const id of Object.keys(remotes)) removeRemote(id); });
+        net.hostConn.on('error', () => flash(tr('flash.room_not_found')));
       });
-      net.peer.on('error', () => flash('Não achei a sala. Confira o código.'));
+      net.peer.on('error', () => flash(tr('flash.room_not_found')));
     }
     function netTick(t, dt) {
       if (net.mode === 'solo' || !net.peer) return;
@@ -3372,9 +3372,9 @@
 
     // ---------- início: escolha do modo (Celular / PC / VR) ----------
     function startHintText() {
-      if (playMode === 'vr') return 'Use a alavanca pra andar · gatilho pra agir';
-      if (playMode === 'mobile') return 'Direcional pra andar · arraste pra olhar · botão Ação pra agir';
-      return 'WASD pra andar · mouse OU setas ←↑↓→ pra olhar · tecla E pra agir';
+      if (playMode === 'vr') return tr('hint.start.vr');
+      if (playMode === 'mobile') return tr('hint.start.mobile');
+      return tr('hint.start.pc');
     }
     function startGame() {
       startAudio();

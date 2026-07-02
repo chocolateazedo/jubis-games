@@ -233,23 +233,24 @@
     import { EN } from './i18n/en.js';
     import { ES } from './i18n/es.js';
 
-    // ---------- i18n: dicionário + t(chave, vars) — idioma escolhido na tela inicial, antes de jogar ----------
+    // ---------- i18n: dicionário + tr(chave, vars) — idioma escolhido na tela inicial, antes de jogar ----------
+    // (nome "tr", não "t": "t" já é o parâmetro de timestamp em frame(t)/update*(t) por todo o arquivo — colidiria)
     const I18N = { pt: PT, en: EN, es: ES };
     let LANG = localStorage.getItem('cronicas-bosque-lang') || 'pt';
     if (!I18N[LANG]) LANG = 'pt';
-    function nameVars() { // glossário name.* vira {vovo}, {broto}, {era_bosque}... disponível em QUALQUER t() automaticamente
+    function nameVars() { // glossário name.* vira {vovo}, {broto}, {era_bosque}... disponível em QUALQUER tr() automaticamente
       const D = I18N[LANG] || I18N.pt, v = {};
       for (const k in I18N.pt) if (k.startsWith('name.')) v[k.slice(5).replace(/\./g, '_')] = (D[k] ?? I18N.pt[k]);
       return v;
     }
-    function t(key, vars) {
+    function tr(key, vars) {
       let s = (I18N[LANG] && I18N[LANG][key]) ?? I18N.pt[key] ?? key;
       const merged = vars ? Object.assign(nameVars(), vars) : nameVars();
       for (const k in merged) s = s.split('{' + k + '}').join(merged[k]);
       return s;
     }
-    function applyI18nDom(root) { // aplica t() em todo elemento com data-i18n (usado na tela inicial)
-      (root || document).querySelectorAll('[data-i18n]').forEach(el => { el.innerHTML = t(el.dataset.i18n); });
+    function applyI18nDom(root) { // aplica tr() em todo elemento com data-i18n (usado na tela inicial)
+      (root || document).querySelectorAll('[data-i18n]').forEach(el => { el.innerHTML = tr(el.dataset.i18n); });
     }
     const onLangChange = []; // callbacks extras (ex.: textos dinâmicos fora de data-i18n) — registrados mais abaixo no arquivo
     function setLang(l) {
@@ -739,7 +740,7 @@
     // UI DOM do celular: NUNCA dentro do headset (o DOM não aparece na camada XR — usaria painéis invisíveis e travaria a luta)
     function onTouchUI() { return playMode === 'mobile' && !renderer.xr.isPresenting; }
     function battleDomUI() { return !renderer.xr.isPresenting; } // [3.0] batalha em 3ª pessoa: PC e celular usam a UI HTML (ficha + barra); só o VR fica 3D/1ª pessoa
-    function actHint() { return playMode === 'vr' ? 'aperte o gatilho' : playMode === 'mobile' ? 'toque em Ação' : 'tecla E'; }
+    function actHint() { return playMode === 'vr' ? tr('hint.act.vr') : playMode === 'mobile' ? tr('hint.act.mobile') : tr('hint.act.pc'); }
     function renderBattleBar() {
       const bb = document.getElementById('battleBar'); if (!bb || !battle) return;
       bb.innerHTML = '';
@@ -2217,7 +2218,7 @@
       ponteGrupo = new THREE.Group();
       const ilha = new THREE.Mesh(new THREE.CylinderGeometry(ILHA_R, ILHA_R + 0.4, 0.7, 20), new THREE.MeshStandardMaterial({ color: 0x6cae4f, roughness: 1, flatShading: true }));
       ilha.position.set(LACO5.ilha.x, PONTE_Y - 0.25, LACO5.ilha.z); ponteGrupo.add(ilha);
-      const tr = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.32, 1.6, 6), new THREE.MeshStandardMaterial({ color: 0x7a5a36, roughness: 1 })); tr.position.set(LACO5.ilha.x, PONTE_Y + 0.9, LACO5.ilha.z); ponteGrupo.add(tr);
+      const tronco2 = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.32, 1.6, 6), new THREE.MeshStandardMaterial({ color: 0x7a5a36, roughness: 1 })); tronco2.position.set(LACO5.ilha.x, PONTE_Y + 0.9, LACO5.ilha.z); ponteGrupo.add(tronco2);
       const cp = new THREE.Mesh(new THREE.IcosahedronGeometry(1.5, 0), new THREE.MeshStandardMaterial({ color: 0x7fc85a, roughness: 1, flatShading: true })); cp.position.set(LACO5.ilha.x, PONTE_Y + 2.2, LACO5.ilha.z); ponteGrupo.add(cp);
       ilhaTesouro = new THREE.Group();
       for (let i = 0; i < 5; i++) { const a = i / 5 * 6.283; const fr = new THREE.Mesh(new THREE.OctahedronGeometry(0.3, 0), new THREE.MeshStandardMaterial({ color: 0xffe24a, emissive: 0xffcc33, emissiveIntensity: 0.9, roughness: 0.3, metalness: 0.3 })); fr.position.set(Math.cos(a) * 1.1, 0, Math.sin(a) * 1.1); ilhaTesouro.add(fr); }
@@ -2903,7 +2904,6 @@
       g.add(prop); g.userData = { prop }; return g;
     }
     const MOUNT_BUILD = { carro: buildCarro, moto: buildMoto, cavalo: buildCavalo, aviao: buildAviao };
-    const MOUNT_NOME = { cavalo: 'no cavalo', carro: 'no carro', moto: 'na moto', aviao: 'no avião' };
     // ONDE cada transporte fica no mundo (você anda até ele e ENTRA): cavalo no bosque, carro/moto na vila, avião na pista
     const MOUNT_SPAWN = { cavalo: { x: 24, z: 56, ry: 2.0 }, carro: { x: VILA.x + 16, z: VILA.z + 6, ry: -1.2 }, moto: { x: VILA.x + 16, z: VILA.z - 6, ry: -1.2 }, aviao: { x: AIRSTRIP.x, z: AIRSTRIP.z + 18, ry: 0 } };
     const MOUNTS = {}, parked = {};
@@ -3118,35 +3118,35 @@
       updateBattleAnims(dt); updateBattleFx(dt); // [3.0] investidas + efeitos de impacto (terminam mesmo após a luta)
       updateDying(dt);
       // dica de interação (contextual) — a narração tem prioridade (até no meio da batalha)
-      if (narration) setHint(onTouchUI() ? '' : '▶ Continuar (' + actHint() + ')'); // no celular a caixa HTML já mostra "continuar"
+      if (narration) setHint(onTouchUI() ? '' : tr('hint.continue', { act: actHint() })); // no celular a caixa HTML já mostra "continuar"
       else if (inBattle) {
-        if (battle && battle.ready && !battle.menuOpen) setHint('⚔ Agir! (' + actHint() + ')');
-        else if (battle && battle.menuOpen) setHint(playMode === 'mobile' ? '' : (playMode === 'vr' ? 'Mire a ação e aperte o gatilho' : 'Mire a ação e tecle E'));
+        if (battle && battle.ready && !battle.menuOpen) setHint(tr('hint.battle.act', { act: actHint() }));
+        else if (battle && battle.menuOpen) setHint(playMode === 'mobile' ? '' : tr(playMode === 'vr' ? 'hint.battle.aim.vr' : 'hint.battle.aim.pc'));
         else setHint('');
       } else {
         const livre = !activeNPC && !eraMenuOpen, a = ' (' + actHint() + ')';
-        if (mount) setHint('🚶 Descer' + a);
-        else if (livre && nearMount()) setHint(MOUNT_EMOJI[nearMount()] + ' Entrar ' + MOUNT_NOME[nearMount()] + a);
-        else if (livre && nearPedra()) setHint('🪨 Mover a pedra do riacho' + a);
-        else if (livre && nearFolhaPrimavera()) setHint('🍃 Cantar a Folha da Primavera' + a);
-        else if (livre && nearCavar()) setHint('⛏️ Cavar um novo curso pro riacho' + a);
-        else if (livre && nearCorvo()) setHint('🐦 Espantar o Corvo Cinza' + a);
-        else if (livre && nearPragaVerao()) setHint('🎵 Cantar o canto de pássaro' + a);
-        else if (livre && nearLampiao()) setHint('🏮 Acender o lampião da Vila' + a);
-        else if (livre && nearSombra()) setHint('🩶 Cantar pra consolar a sombra' + a);
-        else if (livre && nearMudaDoente()) setHint('🌿 Curar a muda doente' + a);
-        else if (livre && nearMata()) setHint('☀️ Abrir uma clareira de luz na Mata' + a);
-        else if (livre && nearCipo()) setHint('🌉 Ensinar o Mestre Cipó a tecer a ponte' + a);
-        else if (livre && nearIlhaTesouro()) setHint('🍎 Colher os Frutos da ilhota' + a);
-        else if (livre && nearMudinha()) setHint('🌱 Replantar a mudinha da Bromélia' + a);
-        else if (livre && nearLampiaoSQ()) setHint('🏮 Acender o lampião do Tonico' + a);
-        else if (livre && nearConstructo()) setHint('🗿 Dar companhia ao Constructo' + a);
-        else if (livre && nearCovinha()) setHint('🌱 Plantar a Semente-do-Amanhã' + a);
-        else if (livre && nearFox()) setHint('🦊 Libertar a Fagulha' + a);
-        else if (livre && nearLantern()) setHint('✨ Pegar a Lanterna-Vagalume' + a);
-        else if (livre && nearPortal()) setHint('🌳 Tocar o Vovô Carvalho' + a);
-        else if (livre && nearShop()) setHint('🛒 Abrir a Loja da Vila' + a);
-        else if (livre && nearestNPC()) setHint('💬 Conversar' + a);
+        if (mount) setHint(tr('hint.dismount') + a);
+        else if (livre && nearMount()) setHint(tr('hint.mount.enter', { emoji: MOUNT_EMOJI[nearMount()], mountname: tr('mount.name.' + nearMount()) }) + a);
+        else if (livre && nearPedra()) setHint(tr('hint.move_rock') + a);
+        else if (livre && nearFolhaPrimavera()) setHint(tr('hint.sing_spring_leaf') + a);
+        else if (livre && nearCavar()) setHint(tr('hint.dig_stream') + a);
+        else if (livre && nearCorvo()) setHint(tr('hint.shoo_crow') + a);
+        else if (livre && nearPragaVerao()) setHint(tr('hint.sing_bird') + a);
+        else if (livre && nearLampiao()) setHint(tr('hint.light_lamp_village') + a);
+        else if (livre && nearSombra()) setHint(tr('hint.comfort_shadow') + a);
+        else if (livre && nearMudaDoente()) setHint(tr('hint.heal_sapling') + a);
+        else if (livre && nearMata()) setHint(tr('hint.clear_forest') + a);
+        else if (livre && nearCipo()) setHint(tr('hint.teach_bridge') + a);
+        else if (livre && nearIlhaTesouro()) setHint(tr('hint.harvest_island') + a);
+        else if (livre && nearMudinha()) setHint(tr('hint.replant_sapling') + a);
+        else if (livre && nearLampiaoSQ()) setHint(tr('hint.light_lamp_tonico') + a);
+        else if (livre && nearConstructo()) setHint(tr('hint.keep_company') + a);
+        else if (livre && nearCovinha()) setHint(tr('hint.plant_seed') + a);
+        else if (livre && nearFox()) setHint(tr('hint.free_fox') + a);
+        else if (livre && nearLantern()) setHint(tr('hint.get_lantern') + a);
+        else if (livre && nearPortal()) setHint(tr('hint.touch_vovo') + a);
+        else if (livre && nearShop()) setHint(tr('hint.open_shop') + a);
+        else if (livre && nearestNPC()) setHint(tr('hint.talk') + a);
         else setHint('');
       }
       adaptiveQuality(t, dt); // celular: ajusta a resolução pra segurar o FPS
@@ -3407,7 +3407,7 @@
       const cb = document.getElementById('continuarBtn'), s = loadRaw('auto');
       if (cb && s && (s.fase || 0) > 0) {
         cb.style.display = 'block';
-        cb.textContent = t('intro.continue.with', { n: s.fase || 1, mode: t('mode.short.' + (s.mode || 'pc')) });
+        cb.textContent = tr('intro.continue.with', { n: s.fase || 1, mode: tr('mode.short.' + (s.mode || 'pc')) });
       }
     }
     { const cb = document.getElementById('continuarBtn'); updateContinueBtn(); if (cb) cb.addEventListener('click', startLoadedGame); }

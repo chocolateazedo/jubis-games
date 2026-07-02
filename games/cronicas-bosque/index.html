@@ -431,7 +431,8 @@
       g.userData.eyes = eyes; return g;
     }
     {
-      const vv = buildVovo(); vovo.add(vv); vovo.userData.eyes = vv.userData.eyes;
+      // [3.6] Vovô Carvalho: corpo trocado por um GLB (carregado mais abaixo, perto do getGLB); aqui só o
+      // anel-portal e a luz mágica, que não dependem do carregador.
       const ring = new THREE.Mesh(new THREE.RingGeometry(3.6, 4.9, 56), new THREE.MeshBasicMaterial({ color: 0x9be8ff, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
       ring.rotation.x = -Math.PI / 2; ring.position.y = 0.16; vovo.add(ring); vovo.userData.ring = ring;
       const glow = new THREE.PointLight(0xffd98a, 1.2, 30, 2); glow.position.set(0, 6.2, 1.6); vovo.add(glow); vovo.userData.glow = glow;
@@ -861,12 +862,14 @@
       if (!battle) return; battle.allies = [];
       const recruited = ['fagulha', 'folho', 'gota', 'brisa'].filter(k => game.flags[k]);
       const fx = battle.fx, fz = battle.fz, rvx = -fz, rvz = fx, encara = Math.atan2(fx, fz);
+      const PR = 1.5, HF = 0.6; // [3.6] turma inteira +1.5 na tela-direita (pR1); herói 0.6 à frente (ponta do V)
+      const hx = battle.arena.x + rvx * PR + fx * HF, hz = battle.arena.z + rvz * PR + fz * HF;
+      const SLOT = [[0.2, 0.8], [-1.0, 0.5], [0.7, 1.9], [-0.8, 2.3]]; // [lateral-R, recuo atrás] relativo ao herói → cunha 2×2 perto da câmera (sem fila)
       recruited.forEach((k, i) => {
         const d = ALLY_DEF[k], pb = PARTY_BUILD[k] || PARTY_BUILD.fagulha;
         const fa = spawnProc(pb.fn, pb.h);
-        const off = ((i % 2 === 0 ? 1 : -1) * (Math.floor(i / 2) + 1)) * 1.25; // [3.3] espalha mais (sem fila)
-        const back = -0.6 + ((i * 37) % 5) * 0.45; // profundidades variadas → não fica enfileirado
-        const ax = dolly.position.x + rvx * off - fx * back, az = dolly.position.z + rvz * off - fz * back, ay = heightAt(ax, az);
+        const sl = SLOT[i] || [0, 1.2];
+        const ax = hx + rvx * sl[0] - fx * sl[1], az = hz + rvz * sl[0] - fz * sl[1], ay = heightAt(ax, az);
         fa.wrap.position.set(ax, ay, az); fa.wrap.rotation.y = encara;
         let hp = d.hp + hero.lvl * 2; if (game.flags.coro) hp = Math.round(hp * 1.25); // [2.0] coro dos Brotinhos reforça a party
         const al = { actor: fa, kind: k, nome: d.nome, emoji: d.emoji, hp, hpMax: hp, def: d.def + hero.lvl, mag: d.mag + hero.lvl, agi: d.agi, role: d.role, ess: d.ess, atb: Math.random() * 0.3, alive: true, bar: makeBar(), ring: makeRing(), charH: pb.h, baseY: ay, phase: Math.random() * 6.28 };
@@ -878,8 +881,10 @@
     let heroBattleActor = null;
     function spawnHeroBattle() { // [3.0] o Broto visível na formação (só fora do VR — no VR você é 1ª pessoa)
       if (!battle) return; // [3.4] no VR também aparece o Broto (a batalha é em 3ª pessoa)
-      const fa = spawnProc(pmBroto, PARTY_BUILD.broto.h); const hy = heightAt(dolly.position.x, dolly.position.z);
-      fa.wrap.position.set(dolly.position.x, hy, dolly.position.z);
+      const PR = 1.5, HF = 0.6, rvx = -battle.fz, rvz = battle.fx; // [3.6] herói = ponta do V da turma (tela-direita, à frente)
+      const hx = battle.arena.x + rvx * PR + battle.fx * HF, hz = battle.arena.z + rvz * PR + battle.fz * HF;
+      const fa = spawnProc(pmBroto, PARTY_BUILD.broto.h); const hy = heightAt(hx, hz);
+      fa.wrap.position.set(hx, hy, hz);
       fa.wrap.rotation.y = Math.atan2(battle.fx, battle.fz);
       fa.baseY = hy; fa.phase = 0;
       fa.bar = makeBar(); scene.add(fa.bar); drawBar(fa.bar, 1); fa.charH = PARTY_BUILD.broto.h;
@@ -901,7 +906,7 @@
     function allyAct(al) {
       if (!battle) return; // a luta pode ter acabado neste mesmo frame (aliado anterior deu o golpe final, ou o herói caiu)
       if (al.role === 'heal') { // Folho cura o mais ferido do grupo; se ninguém precisa, ataca
-        const party = [{ frac: hero.hp / hero.hpMax, heal: h => { hero.hp = Math.min(hero.hpMax, hero.hp + h); updateHeroHud(); }, pos: dolly.position.clone().add(new THREE.Vector3(0, -0.4, 0)), nome: 'Você' }].concat(battle.allies.filter(x => x.alive).map(x => ({ frac: x.hp / x.hpMax, heal: h => { x.hp = Math.min(x.hpMax, x.hp + h); }, pos: x.actor.wrap.position, nome: x.nome })));
+        const party = [{ frac: hero.hp / hero.hpMax, heal: h => { hero.hp = Math.min(hero.hpMax, hero.hp + h); updateHeroHud(); }, pos: heroFxPos().clone().add(new THREE.Vector3(0, -0.4, 0)), nome: 'Você' }].concat(battle.allies.filter(x => x.alive).map(x => ({ frac: x.hp / x.hpMax, heal: h => { x.hp = Math.min(x.hpMax, x.hp + h); }, pos: x.actor.wrap.position, nome: x.nome })));
         let worst = null; for (const p of party) if (!worst || p.frac < worst.frac) worst = p;
         if (worst && worst.frac < 0.92) { const h = Math.round(al.mag + 4); worst.heal(h); sfx('cura'); spawnHitFx(worst.pos, 'heal'); spawnDmg(worst.pos, '+' + h, 0x5be07a); flash('🐛 Folho curou ' + worst.nome + '! +' + h + ' HP'); return; }
       }
@@ -955,7 +960,7 @@
       if (battle && battle.allies) for (const al of battle.allies) { if (al.bar) scene.remove(al.bar); if (al.ring) scene.remove(al.ring); if (al.actor) { scene.remove(al.actor.wrap); const mi = mixers.indexOf(al.actor.mixer); if (mi >= 0) mixers.splice(mi, 1); } }
       if (heroBattleActor) { if (heroBattleActor.bar) scene.remove(heroBattleActor.bar); if (heroBattleActor.ring) scene.remove(heroBattleActor.ring); }
       despawnHeroBattle(); // [3.0] tira o Broto da formação
-      if (!renderer.xr.isPresenting) { camera.position.set(0, 1.6, 0); camera.rotation.set(0, 0, 0); } // restaura a 1ª pessoa
+      if (!renderer.xr.isPresenting) { camera.position.set(0, 1.6, 0); camera.rotation.set(0, 0, 0); if (camera.fov !== 70) { camera.fov = 70; camera.updateProjectionMatrix(); } } // restaura a 1ª pessoa + FOV normal
       else if (battle && battle.arena) { dolly.position.set(battle.arena.x, heightAt(battle.arena.x, battle.arena.z), battle.arena.z); } // [3.4] VR: volta o jogador pro lugar
       battle = null; heroHud.visible = false; hideBattleStatus();
     }
@@ -982,9 +987,11 @@
         e.charH = d.h + 1.5; scene.add(e.bar); drawBar(e.bar, 1); e.baseY = heightAt(ex, ez) + 1.5; e.phase = 0;
         inBattle = true; document.body.classList.add('inbattle'); updateMusicTrack();
         battle = { enemies: [e], allies: [], heroAtb: 0, ready: false, menuOpen: false, hover: -1, ring: null, boss: e, faseBatalha: 'luta', cantar: 0, fx: rcDir.x, fz: rcDir.z, yaw: Math.atan2(rcDir.x, rcDir.z), target: 0, clock: 0, arena: { x: dolly.position.x, z: dolly.position.z } };
+        { const bp = battleEnemyPos(0, 1); a.wrap.position.set(bp.x, heightAt(bp.x, bp.z) + 1.5, bp.z); e.baseY = heightAt(bp.x, bp.z) + 1.5; } // [3.6] Murcha na linha LONGE (tela-esquerda), flutuando
         spawnPartyAllies(); spawnHeroBattle(); // o grupo recrutado + o Broto visível na formação
-        const ring = new THREE.Mesh(new THREE.RingGeometry(5.0, 5.8, 48), new THREE.MeshBasicMaterial({ color: 0xb09ad0, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false }));
-        ring.rotation.x = -Math.PI / 2; ring.position.set(dolly.position.x, heightAt(dolly.position.x, dolly.position.z) + 0.12, dolly.position.z); scene.add(ring); battle.ring = ring;
+        const bcx = battle.arena.x + battle.fx * 2.7, bcz = battle.arena.z + battle.fz * 2.7;
+        const ring = new THREE.Mesh(new THREE.RingGeometry(5.8, 6.5, 56), new THREE.MeshBasicMaterial({ color: 0xb09ad0, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false }));
+        ring.rotation.x = -Math.PI / 2; ring.position.set(bcx, heightAt(bcx, bcz) + 0.12, bcz); scene.add(ring); battle.ring = ring;
         vrBattleVantage(); heroHud.visible = false; hideBattleStatus(); sfx('start'); setObjetivo('Vença a Murcha… mas talvez vencer seja CUIDAR.');
         flash('🦋 A Murcha aparece — de frio e sozinha, roendo a seiva do Vovô.');
       }
@@ -1037,14 +1044,19 @@
       }).catch(() => {});
     }
     // [3.3] posição espalhada (sem fila) no lado dos inimigos (à frente da turma)
-    function battleEnemyPos(i, n) {
-      const perpX = -battle.fz, perpZ = battle.fx, spread = (i - (n - 1) / 2) * 1.8, depth = (i % 2 === 0 ? 0 : 1.3) + (i > 2 ? 0.7 : 0);
-      return { x: battle.arena.x + battle.fx * (4.0 + depth) + perpX * spread, z: battle.arena.z + battle.fz * (4.0 + depth) + perpZ * spread };
+    function battleEnemyPos(i, n) { // [3.6] inimigos = grupo LONGE, puxado pra tela-esquerda (leftBias), em leque com degrau de profundidade
+      const rx = -battle.fz, rz = battle.fx;                 // pR1 = tela-direita (mesmo perpendicular que os aliados usam)
+      const forward = 5.5 + (i % 2 === 0 ? 0 : 1.0);         // linha longe; fileira ímpar 1u mais atrás (dá volume ao grupo)
+      const s = (i - (n - 1) / 2) * 1.9 - 2.0;               // leque lateral + leftBias: empurra o grupo TODO pra tela-esquerda
+      return { x: battle.arena.x + battle.fx * forward + rx * s, z: battle.arena.z + battle.fz * forward + rz * s };
     }
-    function vrBattleVantage() { // [3.4] no VR, posiciona o jogador como observador (3ª pessoa, como no celular) em vez de 1ª pessoa
+    function vrBattleVantage() { // [3.6] VR: observador ELEVADO na diagonal (igual ao celular) — atrás da turma, pouco à direita, alto; turma perto embaixo, inimigos longe em cima
       if (!renderer.xr.isPresenting || !battle) return;
-      const fx = battle.fx, fz = battle.fz, vx = battle.arena.x - fx * 5.0 + (-fz) * 2.2, vz = battle.arena.z - fz * 5.0 + fx * 2.2;
-      dolly.position.set(vx, heightAt(vx, vz) + 0.8, vz); dolly.rotation.y = battle.yaw;
+      const fx = battle.fx, fz = battle.fz, rx = -fz, rz = fx; // pR1 = tela-direita (lado da turma)
+      const BACK = 5.4, SIDE = 0.8, H = 2.6;
+      const vx = battle.arena.x - fx * BACK + rx * SIDE, vz = battle.arena.z - fz * BACK + rz * SIDE;
+      dolly.position.set(vx, heightAt(vx, vz) + H, vz);       // olhos ~3.9 acima do chão
+      dolly.rotation.y = battle.yaw + Math.PI;                // gaze neutro do HMD (-Z) aponta pra +f: encara a batalha; a cabeça baixa naturalmente ~30° vê a diagonal
     }
     const EXTRA_ENEMIES = ['brotoca', 'lobinho', 'cinzela', 'caranguejo', 'macaco', 'corvo'];
     function addBattleEnemy(key, i, n) { // inimigo extra numa vaga espalhada
@@ -1068,8 +1080,9 @@
       const p0 = battleEnemyPos(0, n); e.actor.wrap.position.set(p0.x, heightAt(p0.x, p0.z), p0.z); e.baseY = heightAt(p0.x, p0.z);
       for (let i = 1; i < n; i++) addBattleEnemy(EXTRA_ENEMIES[Math.random() * EXTRA_ENEMIES.length | 0], i, n);
       spawnPartyAllies(); spawnHeroBattle(); // o grupo recrutado + o Broto visível na formação
-      const ring = new THREE.Mesh(new THREE.RingGeometry(4.6, 5.3, 48), new THREE.MeshBasicMaterial({ color: 0xffd86b, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false }));
-      ring.rotation.x = -Math.PI / 2; ring.position.set(dolly.position.x, heightAt(dolly.position.x, dolly.position.z) + 0.12, dolly.position.z); scene.add(ring); battle.ring = ring;
+      const rcx = battle.arena.x + battle.fx * 2.7, rcz = battle.arena.z + battle.fz * 2.7; // [3.6] anel no meio do campo, cercando as duas turmas
+      const ring = new THREE.Mesh(new THREE.RingGeometry(5.8, 6.5, 56), new THREE.MeshBasicMaterial({ color: 0xffd86b, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false }));
+      ring.rotation.x = -Math.PI / 2; ring.position.set(rcx, heightAt(rcx, rcz) + 0.12, rcz); scene.add(ring); battle.ring = ring;
       vrBattleVantage(); heroHud.visible = false; hideBattleStatus(); sfx('start'); flash('⚔ ' + d.nome + ' apareceu! Encha a barra de AÇÃO e aperte pra agir.');
     }
     function checkAggro() {
@@ -1238,6 +1251,23 @@
     function getGLB(url) { return _glbCache[url] || (_glbCache[url] = gltfLoader.loadAsync(url)); }
     // aquece o cache dos modelos de combate pra a 1ª batalha começar na hora (sem travar carregando)
     ['caterpillar', 'dog', 'bee', 'fox'].forEach(n => getGLB(`../bosque-vr/pets/animal-${n}.glb`));
+    // [3.6] Vovô Carvalho: corpo gerado por IA (Meshy, a partir da Bíblia de Personagens) no lugar do
+    // buildVovo() procedural; olhos-âmbar continuam procedurais (garante o brilho mágico independente
+    // da textura) e a respiração é um sutil pulso de escala no corpo carregado.
+    getGLB('models/vovo-carvalho.glb').then(g => {
+      const model = g.scene; const bb0 = new THREE.Box3().setFromObject(model);
+      const targetH = 9.0, s = targetH / ((bb0.max.y - bb0.min.y) || 1);
+      model.scale.setScalar(s);
+      const bb1 = new THREE.Box3().setFromObject(model);
+      model.position.y -= bb1.min.y; model.position.x -= (bb1.min.x + bb1.max.x) / 2; model.position.z -= (bb1.min.z + bb1.max.z) / 2;
+      model.traverse(o => { if (o.isMesh) o.material.roughness = 0.95; });
+      const body = new THREE.Group(); body.add(model); vovo.add(body); vovo.userData.body = body; vovo.userData.bodyBaseScale = body.scale.clone();
+      const bb2 = new THREE.Box3().setFromObject(model), size = bb2.getSize(new THREE.Vector3());
+      const eyeMat = new THREE.MeshStandardMaterial({ color: 0x4a3414, emissive: 0xF8A92E, emissiveIntensity: 1.6, roughness: 0.4 });
+      const eyes = [];
+      for (const sx of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(size.x * 0.07, 16, 12), eyeMat); e.position.set(sx * size.x * 0.18, size.y * 0.62, size.z * 0.42); body.add(e); eyes.push(e); }
+      vovo.userData.eyes = eyes;
+    }).catch(() => { const vv = buildVovo(); vovo.add(vv); vovo.userData.eyes = vv.userData.eyes; }); // rede falhou: volta ao procedural
     const mixers = []; // todos os AnimationMixers, atualizados no loop
     function bestClip(gltf, name) {
       return THREE.AnimationClip.findByName(gltf.animations || [], name)
@@ -2889,7 +2919,7 @@
         if (s.interact && !interactWas) interact();
         interactWas = !!s.interact;
         // analógico direito = giro em passos (snap turn)
-        if (Math.abs(s.tx) > 0.7 && !turned) { dolly.rotation.y -= Math.sign(s.tx) * Math.PI / 6; turned = true; }
+        if (Math.abs(s.tx) > 0.7 && !turned && !inBattle) { dolly.rotation.y -= Math.sign(s.tx) * Math.PI / 6; turned = true; } // [3.6] giro travado na batalha (câmera fixa na diagonal)
         if (Math.abs(s.tx) < 0.3) turned = false;
       } else {
         // setas = câmera por teclado (alternativa ao mouse — funciona mesmo se o touchpad travar ao digitar); WASD = andar
@@ -2900,10 +2930,13 @@
         mz = (keys['KeyS'] ? 1 : 0) - (keys['KeyW'] ? 1 : 0) + joy.y;
       }
       if (inBattle) { mx = 0; mz = 0; wantJump = false; } // na batalha o jogador fica parado
-      if (inBattle && battle && !renderer.xr.isPresenting) { // [3.0] câmera de batalha DIAGONAL: atrás + de lado + acima, olhando pro centro da arena (mostra a turma E os inimigos)
-        dolly.rotation.y = battle.yaw;                 // dolly -Z aponta pro inimigo
-        camera.position.set(2.0, 2.8, 4.7);            // diagonal baixa: à direita + atrás → a SUA turma fica à direita e o rival à esquerda
-        _battleLookAt.set(dolly.position.x + battle.fx * 3.0, dolly.position.y + 1.0, dolly.position.z + battle.fz * 3.0);
+      if (inBattle && battle && !renderer.xr.isPresenting) { // [3.6] câmera de batalha DIAGONAL de CIMA: atrás da turma + elevada → turma PERTO embaixo-direita, inimigos LONGE em cima-esquerda
+        dolly.rotation.y = battle.yaw;                 // dolly: +Z local = +f (inimigo); +X local = tela-esquerda no mundo
+        const wide = camera.aspect >= 1, bfov = wide ? 60 : 80;
+        if (camera.fov !== bfov) { camera.fov = bfov; camera.updateProjectionMatrix(); } // paisagem: leve zoom; retrato: mais aberto (FOV horizontal estreito)
+        if (wide) camera.position.set(3.0, 4.6, -5.0); // -Z local = ATRÁS da turma (inverte perto/longe); +X → câmera na tela-esquerda ⇒ turma aparece à DIREITA
+        else camera.position.set(1.6, 5.4, -7.0);      // retrato: mais alto e mais atrás pra caber tudo
+        _battleLookAt.set(dolly.position.x + battle.fx * 2.7, dolly.position.y + 1.1, dolly.position.z + battle.fz * 2.7);
         camera.updateWorldMatrix(true, false); camera.lookAt(_battleLookAt);
       }
       const len = Math.hypot(mx, mz);
@@ -2937,7 +2970,8 @@
       }
       // segue o relevo do terreno OU sobe pro ar quando está de avião
       const groundY = floorHeightAt(dolly.position.x, dolly.position.z, dolly.position.y);
-      if (mount === 'aviao' && !inBattle) { flyAlt = Math.min(9, flyAlt + dt * 6); dolly.position.y = groundY + flyAlt + Math.sin(t * 0.002) * 0.3; }
+      if (inBattle && battle && vr) { vrBattleVantage(); } // [3.6] VR em batalha: reaplica a vantagem elevada TODO frame (não cola no chão) e re-trava o yaw na diagonal
+      else if (mount === 'aviao' && !inBattle) { flyAlt = Math.min(9, flyAlt + dt * 6); dolly.position.y = groundY + flyAlt + Math.sin(t * 0.002) * 0.3; }
       else { if (flyAlt > 0.01) flyAlt = Math.max(0, flyAlt - dt * 9); dolly.position.y = groundY + flyAlt + jumpOff; }
       // transporte: rodas/hélice/galope; some na batalha; ronco acompanha o movimento
       if (mount) {
@@ -3018,6 +3052,7 @@
       vovo.userData.ring.rotation.z += dt * 0.6;
       vovo.userData.ring.material.opacity = 0.4 + Math.sin(t * 0.003) * 0.15;
       { const pulse = 1.0 + Math.sin(t * 0.0025) * 0.4; if (vovo.userData.eyes) for (const e of vovo.userData.eyes) e.material.emissiveIntensity = pulse; if (vovo.userData.glow) vovo.userData.glow.intensity = 1.0 + Math.sin(t * 0.0025) * 0.35; }
+      if (vovo.userData.body) { const breathe = 1 + Math.sin(t * 0.0011) * 0.018, bs = vovo.userData.bodyBaseScale; vovo.userData.body.scale.set(bs.x * (1 - (breathe - 1) * 0.5), bs.y * breathe, bs.z * (1 - (breathe - 1) * 0.5)); } // [3.6] respiração: pulso sutil e lento (inspira/expira)
       updateFade(dt);
       if (eraMenuOpen && !onTouchUI()) { const h = eraPick(); if (h !== eraHover) { eraHover = h; drawEraMenu(); } }
       // COMBATE: tick da batalha ou checa aproximação de inimigo; efeitos morrendo

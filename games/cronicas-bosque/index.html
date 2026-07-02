@@ -134,8 +134,8 @@
     #eraMenu .embtns { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
     #eraMenu .ebtn { flex: 1 1 96px; min-width: 88px; max-width: 168px; border: 2px solid rgba(160,230,180,.4); background: rgba(255,255,255,.06); color: #eaffee; border-radius: 12px;
       padding: 12px 6px; font-weight: 800; font-size: 15px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-    #eraMenu .ebtn .etag { display: block; white-space: nowrap; }
-    #eraMenu .ebtn .esub { display: block; color: #9fdfae; font-size: 12px; font-weight: 600; margin-top: 5px; white-space: nowrap; }
+    #eraMenu .ebtn .etag { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #eraMenu .ebtn .esub { display: block; color: #9fdfae; font-size: 12px; font-weight: 600; margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #eraMenu .ebtn.cur { border-color: #ffe6a0; color: #ffe6a0; }
     #eraMenu .ebtn:active { background: rgba(120,220,150,.35); }
     #battleStatus { position: fixed; z-index: 27; right: max(8px, env(safe-area-inset-right)); top: max(60px, calc(env(safe-area-inset-top) + 54px)); display: none;

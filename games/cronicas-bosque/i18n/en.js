@@ -80,7 +80,7 @@ export const EN = {
   // ---- eras: names/toasts/time-travel menu ----
   'era.nome.bosque': '🌳 Grove — now', 'era.nome.ermo': '🥀 Wasteland — the withered future', 'era.nome.semente': '🌱 Seed — the past',
   'era.nome.raiz': '🌰 Root — deep past', 'era.nome.renascer': '🌸 Rebirth — the healed future',
-  'era.tag.raiz': '🌰 Root', 'era.tag.semente': '🌱 Seed', 'era.tag.bosque': '🌳 Grove', 'era.tag.ermo': '🥀 Wasteland', 'era.tag.renascer': '🌸 Rebirth',
+  'era.tag.raiz': '🌰 Root', 'era.tag.semente': '🌱 Seed', 'era.tag.bosque': '🌳 Grove', 'era.tag.ermo': '🥀 Waste', 'era.tag.renascer': '🌸 Rebirth',
   'era.sub.raiz': 'the deep past', 'era.sub.semente': 'the past', 'era.sub.bosque': 'the present', 'era.sub.ermo': 'the withered future', 'era.sub.renascer': 'the healed future',
   'era.sub.here': 'here',
   'flash.already_here': 'You\'re already in {sub}.',

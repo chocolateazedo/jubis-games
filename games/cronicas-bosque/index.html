@@ -1251,9 +1251,9 @@
     function getGLB(url) { return _glbCache[url] || (_glbCache[url] = gltfLoader.loadAsync(url)); }
     // aquece o cache dos modelos de combate pra a 1ª batalha começar na hora (sem travar carregando)
     ['caterpillar', 'dog', 'bee', 'fox'].forEach(n => getGLB(`../bosque-vr/pets/animal-${n}.glb`));
-    // [3.6] Vovô Carvalho: corpo gerado por IA (Meshy, a partir da Bíblia de Personagens) no lugar do
-    // buildVovo() procedural; olhos-âmbar continuam procedurais (garante o brilho mágico independente
-    // da textura) e a respiração é um sutil pulso de escala no corpo carregado.
+    // [3.8] Vovô Carvalho: corpo redesenhado (mais polígonos, mais parecido com árvore de verdade —
+    // casca com veios, copa de folhagem vívida) via IA; rosto procedural mais fofo (olho com soquete +
+    // brilho + sobrancelha de musgo, no mesmo estilo do pmRosto usado no resto do elenco) + boca.
     getGLB('models/vovo-carvalho.glb').then(g => {
       const model = g.scene; const bb0 = new THREE.Box3().setFromObject(model);
       const targetH = 9.0, s = targetH / ((bb0.max.y - bb0.min.y) || 1);
@@ -1263,9 +1263,20 @@
       model.traverse(o => { if (o.isMesh) o.material.roughness = 0.95; });
       const body = new THREE.Group(); body.add(model); vovo.add(body); vovo.userData.body = body; vovo.userData.bodyBaseScale = body.scale.clone();
       const bb2 = new THREE.Box3().setFromObject(model), size = bb2.getSize(new THREE.Vector3());
-      const eyeMat = new THREE.MeshStandardMaterial({ color: 0x4a3414, emissive: 0xF8A92E, emissiveIntensity: 1.6, roughness: 0.4 });
+      // rosto: soquete escuro + íris âmbar (brilho bem sutil, não mais "orbe brilhando") + brilho branco + sobrancelha de musgo
+      const eyeDark = new THREE.MeshStandardMaterial({ color: 0x2C2018, roughness: 0.6 });
+      const eyeAmber = new THREE.MeshStandardMaterial({ color: 0x6B4A20, emissive: 0xF8A92E, emissiveIntensity: 0.3, roughness: 0.5 });
+      const white = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
+      const moss = new THREE.MeshStandardMaterial({ color: 0x5E8A30, roughness: 0.9, flatShading: true });
+      const eyeY = size.y * 0.62, eyeZ = size.z * 0.42, eyeSep = size.x * 0.17, eyeR = size.x * 0.075;
       const eyes = [];
-      for (const sx of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(size.x * 0.07, 16, 12), eyeMat); e.position.set(sx * size.x * 0.18, size.y * 0.62, size.z * 0.42); body.add(e); eyes.push(e); }
+      for (const sx of [-1, 1]) {
+        const socket = new THREE.Mesh(new THREE.SphereGeometry(eyeR * 1.15, 16, 12), eyeDark); socket.scale.set(0.85, 1.05, 0.5); socket.position.set(sx * eyeSep, eyeY, eyeZ); body.add(socket);
+        const iris = new THREE.Mesh(new THREE.SphereGeometry(eyeR * 0.7, 14, 10), eyeAmber); iris.position.set(sx * eyeSep, eyeY, eyeZ + eyeR * 0.35); body.add(iris); eyes.push(iris);
+        const hl = new THREE.Mesh(new THREE.SphereGeometry(eyeR * 0.25, 8, 6), white); hl.position.set(sx * eyeSep - sx * eyeR * 0.15, eyeY + eyeR * 0.3, eyeZ + eyeR * 0.55); body.add(hl);
+        for (let k = 0; k < 3; k++) { const mo = new THREE.Mesh(new THREE.IcosahedronGeometry(eyeR * 0.32, 0), moss); mo.scale.set(1, 0.7, 0.7); mo.position.set(sx * eyeSep - eyeR * 0.4 + k * eyeR * 0.4, eyeY + eyeR * 1.3, eyeZ - eyeR * 0.1); body.add(mo); }
+      }
+      const mouth = new THREE.Mesh(new THREE.TorusGeometry(size.x * 0.09, size.x * 0.025, 8, 14, Math.PI), eyeDark); mouth.rotation.z = Math.PI; mouth.position.set(0, size.y * 0.50, size.z * 0.44); body.add(mouth); // [3.8] boca — sorriso gentil
       vovo.userData.eyes = eyes;
     }).catch(() => { const vv = buildVovo(); vovo.add(vv); vovo.userData.eyes = vv.userData.eyes; }); // rede falhou: volta ao procedural
     const mixers = []; // todos os AnimationMixers, atualizados no loop
@@ -3055,7 +3066,7 @@
       // VOVÔ/eras: anel girando, clarão de transição, hover do menu das eras
       vovo.userData.ring.rotation.z += dt * 0.6;
       vovo.userData.ring.material.opacity = 0.4 + Math.sin(t * 0.003) * 0.15;
-      { const pulse = 1.0 + Math.sin(t * 0.0025) * 0.4; if (vovo.userData.eyes) for (const e of vovo.userData.eyes) e.material.emissiveIntensity = pulse; if (vovo.userData.glow) vovo.userData.glow.intensity = 1.0 + Math.sin(t * 0.0025) * 0.35; }
+      { const eyePulse = 0.25 + Math.sin(t * 0.0025) * 0.12; if (vovo.userData.eyes) for (const e of vovo.userData.eyes) e.material.emissiveIntensity = eyePulse; if (vovo.userData.glow) vovo.userData.glow.intensity = 1.0 + Math.sin(t * 0.0025) * 0.35; } // [3.8] olhos com brilho sutil (não mais orbe), a luz ambiente continua pulsando
       if (vovo.userData.body) { const breathe = 1 + Math.sin(t * 0.0011) * 0.018, bs = vovo.userData.bodyBaseScale; vovo.userData.body.scale.set(bs.x * (1 - (breathe - 1) * 0.5), bs.y * breathe, bs.z * (1 - (breathe - 1) * 0.5)); } // [3.6] respiração: pulso sutil e lento (inspira/expira)
       updateFade(dt);
       if (eraMenuOpen && !onTouchUI()) { const h = eraPick(); if (h !== eraHover) { eraHover = h; drawEraMenu(); } }

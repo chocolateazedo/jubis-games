@@ -59,4 +59,21 @@ export const ES = {
   'hint.touch_vovo': '🌳 Tocar al {vovo}',
   'hint.open_shop': '🛒 Abrir la Tienda de la Villa',
   'hint.talk': '💬 Hablar',
+
+  // ---- batalla: acciones, técnicas, ítems, combos, menús ----
+  'battle.action.atacar': '⚔ Atacar', 'battle.action.tecnica': '✨ Técnica', 'battle.action.item': '🎒 Ítem', 'battle.action.defender': '🛡 Defender',
+  'battle.sing': '🎵 Cantar',
+  'battle.sing.song': 'la {cancao}  ({n}/4)',
+  'battle.sing_lullaby': '🎵 Cantar una nana',
+  'tecnica.raio': '☀️ Rayito', 'tecnica.brotar': '🍃 Brotar', 'tecnica.vendaval': '🍃 Vendaval (todos)',
+  'tecnica.jato': '💧 Chorro de Agua', 'tecnica.solzao': '☀️ Solazo',
+  'item.mel': '🍯 Miel-del-Bosque',
+  'combo.clarao': '☀️ Destello (c/ {fagulha})', 'combo.jatoduplo': '💧 Chorro Doble (c/ {gota})',
+  'combo.matamiga': '🌿 Bosque Amigo (c/ {folho})', 'combo.brotacao': '🍃💧 Florecer ({folho}+{gota})',
+  'combo.estacao': '🌈 Estación Completa (¡trío!)',
+  'ui.mp_suffix': '{nome}  ({mp} MP)', 'ui.item_qty': '{nome}  ×{n}', 'ui.back': '← Volver',
+  'flash.no_mp': '¡MP insuficiente!',
+  'flash.combo_used': '✨ DÚO: ¡{nome}!',
+  'flash.roots_hold': '🌿 ¡Las raíces retuvieron el turno del enemigo!',
+  'flash.ally_back': '🌱 ¡{nome} volvió a la lucha!',
 };

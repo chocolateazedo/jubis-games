@@ -59,4 +59,21 @@ export const EN = {
   'hint.touch_vovo': '🌳 Touch {vovo}',
   'hint.open_shop': '🛒 Open the Village Shop',
   'hint.talk': '💬 Talk',
+
+  // ---- battle: actions, techniques, items, combos, menus ----
+  'battle.action.atacar': '⚔ Attack', 'battle.action.tecnica': '✨ Technique', 'battle.action.item': '🎒 Item', 'battle.action.defender': '🛡 Defend',
+  'battle.sing': '🎵 Sing',
+  'battle.sing.song': 'the {cancao}  ({n}/4)',
+  'battle.sing_lullaby': '🎵 Sing a lullaby',
+  'tecnica.raio': '☀️ Little Ray', 'tecnica.brotar': '🍃 Sprout', 'tecnica.vendaval': '🍃 Gale (all)',
+  'tecnica.jato': '💧 Water Jet', 'tecnica.solzao': '☀️ Big Sun',
+  'item.mel': '🍯 Grove Honey',
+  'combo.clarao': '☀️ Flash (w/ {fagulha})', 'combo.jatoduplo': '💧 Double Jet (w/ {gota})',
+  'combo.matamiga': '🌿 Friendly Woods (w/ {folho})', 'combo.brotacao': '🍃💧 Blooming ({folho}+{gota})',
+  'combo.estacao': '🌈 Full Season (trio!)',
+  'ui.mp_suffix': '{nome}  ({mp} MP)', 'ui.item_qty': '{nome}  ×{n}', 'ui.back': '← Back',
+  'flash.no_mp': 'Not enough MP!',
+  'flash.combo_used': '✨ DUO: {nome}!',
+  'flash.roots_hold': '🌿 The roots held the enemy\'s turn!',
+  'flash.ally_back': '🌱 {nome} is back in the fight!',
 };

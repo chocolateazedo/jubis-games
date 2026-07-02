@@ -38,6 +38,11 @@
     .modes { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
     .modes .go { width: 100%; margin-top: 0; }
     .modes .go:disabled { opacity: .45; cursor: default; box-shadow: none; }
+    .langsel { display: flex; gap: 8px; justify-content: center; margin: 0 0 14px; }
+    .langbtn { border: 2px solid rgba(160,230,180,.35); background: rgba(0,0,0,.25); border-radius: 12px; padding: 6px 10px;
+      font-size: 22px; cursor: pointer; line-height: 1; opacity: .55; transition: opacity .15s, border-color .15s; }
+    .langbtn.active { opacity: 1; border-color: #7be88f; box-shadow: 0 0 0 2px rgba(123,232,143,.25); }
+    .langsel-label { font-size: 11px; opacity: .6; margin-bottom: 6px; }
     #intro { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; padding: 18px;
       background: radial-gradient(circle at 50% 30%, rgba(20,40,30,.55), rgba(6,14,10,.82)); }
     #intro.hidden { display: none; }
@@ -182,22 +187,28 @@
 
   <div id="intro">
     <div class="card">
-      <h1>🌳 Crônicas do Bosque</h1>
-      <p>O bosque está ficando <b>cinza</b>. O <b>Vovô Carvalho</b> guarda um segredo: suas raízes tocam o <b>ontem</b> e o <b>amanhã</b>. Viaje no tempo e <b>cure o futuro mudando o passado</b>.</p>
+      <div class="langsel-label" data-i18n="intro.lang.label">Idioma / Language / Idioma</div>
+      <div class="langsel" id="langSel">
+        <button class="langbtn" data-lang="pt" aria-label="Português">🇧🇷</button>
+        <button class="langbtn" data-lang="en" aria-label="English">🇺🇸</button>
+        <button class="langbtn" data-lang="es" aria-label="Español">🇪🇸</button>
+      </div>
+      <h1 data-i18n="intro.title">🌳 Crônicas do Bosque</h1>
+      <p data-i18n="intro.desc">O bosque está ficando <b>cinza</b>. O <b>Vovô Carvalho</b> guarda um segredo: suas raízes tocam o <b>ontem</b> e o <b>amanhã</b>. Viaje no tempo e <b>cure o futuro mudando o passado</b>.</p>
       <div class="keys">
-        🥽 <b>VR (óculos Meta):</b> ande com a <b>alavanca</b> (gatilho esquerdo = correr, lateral = pular).<br>
-        🖥️ <b>PC:</b> <b>W A S D</b> pra andar, <b>mouse OU setas ←↑↓→</b> pra olhar (Shift = correr, Espaço = pular), <b>E</b> pra falar.<br>
-        📱 <b>Celular:</b> <b>arraste</b> pra olhar, <b>direcional</b> pra andar, toque pra falar.<br>
-        <span style="opacity:.7">Chegue perto do <b>Vovô Carvalho</b> pra viajar entre as eras.</span>
+        <span data-i18n="intro.controls.vr">🥽 <b>VR (óculos Meta):</b> ande com a <b>alavanca</b> (gatilho esquerdo = correr, lateral = pular).</span><br>
+        <span data-i18n="intro.controls.pc">🖥️ <b>PC:</b> <b>W A S D</b> pra andar, <b>mouse OU setas ←↑↓→</b> pra olhar (Shift = correr, Espaço = pular), <b>E</b> pra falar.</span><br>
+        <span data-i18n="intro.controls.mobile">📱 <b>Celular:</b> <b>arraste</b> pra olhar, <b>direcional</b> pra andar, toque pra falar.</span><br>
+        <span style="opacity:.7" data-i18n="intro.controls.hint">Chegue perto do <b>Vovô Carvalho</b> pra viajar entre as eras.</span>
       </div>
-      <button class="go" id="continuarBtn" style="display:none; background:linear-gradient(90deg,#ffd56b,#ff9f43);">▶ Continuar</button>
-      <p style="margin:14px 0 2px; font-weight:700;">Escolha como vai jogar:</p>
+      <button class="go" id="continuarBtn" style="display:none; background:linear-gradient(90deg,#ffd56b,#ff9f43);" data-i18n="intro.continue">▶ Continuar</button>
+      <p style="margin:14px 0 2px; font-weight:700;" data-i18n="intro.choosemode">Escolha como vai jogar:</p>
       <div class="modes">
-        <button class="go" id="modeMobile">📱 Modo Celular</button>
-        <button class="go" id="modePC">🖥️ Modo PC</button>
-        <button class="go" id="modeVR">🥽 Entrar VR</button>
+        <button class="go" id="modeMobile" data-i18n="intro.mode.mobile">📱 Modo Celular</button>
+        <button class="go" id="modePC" data-i18n="intro.mode.pc">🖥️ Modo PC</button>
+        <button class="go" id="modeVR" data-i18n="intro.mode.vr">🥽 Entrar VR</button>
       </div>
-      <p id="vrNote" style="display:none; margin:8px 0 0; font-size:13px; opacity:.7;">VR não disponível neste aparelho — escolha Celular ou PC.</p>
+      <p id="vrNote" style="display:none; margin:8px 0 0; font-size:13px; opacity:.7;" data-i18n="intro.vrnote">VR não disponível neste aparelho — escolha Celular ou PC.</p>
     </div>
   </div>
   <div id="roomCode" style="display:none"></div>
@@ -218,6 +229,38 @@
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
     import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
     import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+    import { PT } from './i18n/pt.js';
+    import { EN } from './i18n/en.js';
+    import { ES } from './i18n/es.js';
+
+    // ---------- i18n: dicionário + t(chave, vars) — idioma escolhido na tela inicial, antes de jogar ----------
+    const I18N = { pt: PT, en: EN, es: ES };
+    let LANG = localStorage.getItem('cronicas-bosque-lang') || 'pt';
+    if (!I18N[LANG]) LANG = 'pt';
+    function nameVars() { // glossário name.* vira {vovo}, {broto}, {era_bosque}... disponível em QUALQUER t() automaticamente
+      const D = I18N[LANG] || I18N.pt, v = {};
+      for (const k in I18N.pt) if (k.startsWith('name.')) v[k.slice(5).replace(/\./g, '_')] = (D[k] ?? I18N.pt[k]);
+      return v;
+    }
+    function t(key, vars) {
+      let s = (I18N[LANG] && I18N[LANG][key]) ?? I18N.pt[key] ?? key;
+      const merged = vars ? Object.assign(nameVars(), vars) : nameVars();
+      for (const k in merged) s = s.split('{' + k + '}').join(merged[k]);
+      return s;
+    }
+    function applyI18nDom(root) { // aplica t() em todo elemento com data-i18n (usado na tela inicial)
+      (root || document).querySelectorAll('[data-i18n]').forEach(el => { el.innerHTML = t(el.dataset.i18n); });
+    }
+    const onLangChange = []; // callbacks extras (ex.: textos dinâmicos fora de data-i18n) — registrados mais abaixo no arquivo
+    function setLang(l) {
+      LANG = I18N[l] ? l : 'pt'; localStorage.setItem('cronicas-bosque-lang', LANG);
+      applyI18nDom();
+      document.querySelectorAll('#langSel .langbtn').forEach(b => b.classList.toggle('active', b.dataset.lang === LANG));
+      for (const cb of onLangChange) cb();
+    }
+    { const sel = document.getElementById('langSel');
+      if (sel) sel.querySelectorAll('.langbtn').forEach(b => b.addEventListener('click', () => setLang(b.dataset.lang))); }
+    applyI18nDom(); setLang(LANG); // primeira aplicação: traduz a tela inicial e marca o botão ativo
 
     const SPEED = 3.2;                 // metros por segundo
     const WORLD_R = 178;               // raio andável
@@ -3360,12 +3403,15 @@
       else disableVR();
     })();
     // "Continuar" aparece se houver um jogo salvo (autosave)
-    { const cb = document.getElementById('continuarBtn'), s = loadRaw('auto');
+    function updateContinueBtn() {
+      const cb = document.getElementById('continuarBtn'), s = loadRaw('auto');
       if (cb && s && (s.fase || 0) > 0) {
         cb.style.display = 'block';
-        cb.textContent = '▶ Continuar — Cap. ' + (s.fase || 1) + '  (' + ({ mobile: 'Celular', pc: 'PC', vr: 'VR' }[s.mode] || 'PC') + ')';
-        cb.addEventListener('click', startLoadedGame);
-      } }
+        cb.textContent = t('intro.continue.with', { n: s.fase || 1, mode: t('mode.short.' + (s.mode || 'pc')) });
+      }
+    }
+    { const cb = document.getElementById('continuarBtn'); updateContinueBtn(); if (cb) cb.addEventListener('click', startLoadedGame); }
+    onLangChange.push(updateContinueBtn);
   </script>
 </body>
 </html>

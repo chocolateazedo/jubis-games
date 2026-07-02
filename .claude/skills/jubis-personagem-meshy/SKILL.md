@@ -136,6 +136,41 @@ Repita `mask`/`H2`/`S2`/`V2` pra cada faixa de cor errada (ex.: tronco tan→mar
 Redimensione o resultado pra **≤1024px** nesse passo mesmo (`out.resize((1024,1024))`) — já cumpre a
 regra de textura leve.
 
+### 4b. Quando duas partes têm a MESMA cor errada (matiz não resolve — use geometria)
+
+Na Vovó Samambaia, o rosto (pele, correto) e o corpo (devia ser verde, saiu com a MESMA cor de pele)
+tinham o mesmo matiz/saturação — um `mask` por matiz recoloriria os dois juntos (incluindo o rosto
+que já estava certo). Nesse caso, corrija por **posição 3D do vértice**, não por cor do pixel:
+
+```python
+import struct, json, array
+# leia POSITION, TEXCOORD_0 e os índices do primitive (ver seção 5 pra como ler um accessor cru)
+pos = read_accessor(POSITION_IDX)   # lista de (x,y,z)
+uv  = read_accessor(TEXCOORD_IDX)   # lista de (u,v)
+idx = read_accessor(INDICES_IDX)    # lista de índices (uint16/32)
+
+miny, maxy = min(p[1] for p in pos), max(p[1] for p in pos)
+THRESH = miny + 0.62 * (maxy - miny)   # ajuste pela proporção real corpo/cabeça do preview
+
+from PIL import Image, ImageDraw
+W, H = im.size
+mask = Image.new('L', (W, H), 0); draw = ImageDraw.Draw(mask)
+for t in range(len(idx) // 3):
+    i0, i1, i2 = idx[t*3], idx[t*3+1], idx[t*3+2]
+    if sum(pos[i][1] < THRESH for i in (i0, i1, i2)) >= 2:   # maioria do triângulo é "corpo"
+        draw.polygon([(uv[i][0]*W, uv[i][1]*H) for i in (i0, i1, i2)], fill=255)
+```
+
+Isso rasteriza, no espaço da textura, exatamente os triângulos que ficam abaixo do "pescoço" — mesmo
+que o atlas UV espalhe cabeça/corpo intercalados pela imagem toda (comum em auto-unwrap; não dá pra
+supor que corpo e cabeça ocupam metades separadas da textura). Use essa `mask` no lugar da `mask` por
+matiz da seção 4 (mesmo `Image.composite` de H/S/V). Funciona bem mesmo sem `numpy` — só
+`struct`+`array`+`PIL.ImageDraw`.
+
+Regra prática: **matiz** quando a cor errada é *diferente* da cor certa em algum outro lugar do
+modelo (ex.: tronco tan mas nada mais no modelo é dessa cor); **geometria** quando a cor errada
+*coincide* com uma cor que também está certa em outra parte (pele do rosto vs. pele do corpo).
+
 ## 5. Reconstrua o `.glb` com a textura corrigida (sem depender de libs externas)
 
 Não há `pygltflib`/`trimesh` disponíveis por padrão — não tem problema, um `.glb` é só
@@ -150,7 +185,9 @@ jlen, jtype = struct.unpack('<I4s', f.read(8)); j = json.loads(f.read(jlen))
 blen, btype = struct.unpack('<I4s', f.read(8)); bin_data = f.read(blen)
 
 bv = j['bufferViews'][IMG_INDEX]  # ache o índice certo em j['images']/j['textures']
-assert bv['byteOffset'] + bv['byteLength'] == len(bin_data), 'imagem não é o final do buffer'
+end = bv['byteOffset'] + bv['byteLength']
+assert len(bin_data) - end < 4, 'imagem não é o final do buffer'  # < 4, não ==: o chunk BIN tem até
+                                                                    # 3 bytes de padding de alinhamento
 head = bin_data[:bv['byteOffset']]
 png = open('tex_corrigida.png', 'rb').read()
 pad = (-len(png)) % 4
@@ -167,6 +204,22 @@ out += struct.pack('<I4s', len(new_bin), b'BIN\x00') + new_bin
 out = struct.pack('<4sII', b'glTF', 2, len(out)) + out[12:]
 open('modelo-final.glb', 'wb').write(out)
 ```
+
+Pra ler POSITION/TEXCOORD_0/índices crus (necessário na técnica de geometria da seção 4b), sem
+biblioteca nenhuma além de `array` (built-in):
+
+```python
+def read_accessor(j, bin_data, idx):
+    a = j['accessors'][idx]; bv = j['bufferViews'][a['bufferView']]
+    off = bv.get('byteOffset', 0) + a.get('byteOffset', 0)
+    comp = {5126: ('f', 4), 5125: ('I', 4), 5123: ('H', 2)}[a['componentType']]  # float/uint32/uint16
+    dim = {'VEC2': 2, 'VEC3': 3, 'SCALAR': 1}[a['type']]
+    arr = array.array(comp[0]); arr.frombytes(bin_data[off: off + a['count']*dim*comp[1]])
+    return [arr[i*dim:(i+1)*dim] for i in range(a['count'])] if dim > 1 else list(arr)
+```
+
+`j['meshes'][0]['primitives'][0]['attributes']` dá os índices de `POSITION`/`TEXCOORD_0`/`NORMAL`; o
+campo `indices` do primitive é o accessor dos índices (`SCALAR`, geralmente `componentType` 5125).
 
 Isso troca a textura (geralmente JPEG 2048px pesado) por uma PNG corrigida e menor — o arquivo final
 costuma ficar **menor** que o original (no caso do Vovô: 2.9MB → 1.5MB).

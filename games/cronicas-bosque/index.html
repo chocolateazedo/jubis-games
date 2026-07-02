@@ -1667,7 +1667,7 @@
           return ['Canta pra gente os versos que você já sabe! 🎶', '(Você canta: ' + game.folhas.map(f => FOLHA_NOME[f] || f).join(', ') + ')', 'Que lindooo! A gente vai fazer um CORO pra te ajudar quando você cantar pra Murcha! 💚'];
         },
         onEnd: () => { if (game.sidequests.brotinhos !== 'feita' && game.folhas.length) { game.sidequests.brotinhos = 'feita'; game.flags.coro = true; renderJournal(); saveGame('auto'); flash('🎶 Os Brotinhos vão fazer um coro por você — a party fica mais forte na batalha final!'); } } },
-      { char: 'e', build: pmSamambaia, nome: 'Vovó Samambaia', dx: VILA.x + 4, dz: VILA.z - 8,
+      { char: 'e', glb: 'models/vovo-samambaia.glb', nome: 'Vovó Samambaia', dx: VILA.x + 4, dz: VILA.z - 8,
         falasFn: () => (game.flags.cogu && !game.flags.vila)
           ? ['Então o cinza voltou a subir… eu já temia, criança.', 'O Vovô Carvalho é a árvore-mãe de tudo. As raízes dele tocam o ONTEM e o AMANHÃ ao mesmo tempo.', 'Esse cinza não nasce aqui: ele VAZA de um futuro murcho. Pra fechar a fenda, você vai ter que atravessar o tempo pela raiz do Vovô.', 'Antigamente, a gente fazia as estações virarem CANTANDO — a Canção das Quatro Folhas: uma pra Primavera 🍃, uma pro Verão ☀️, uma pras Chuvas 💧 e uma pro Inverno 🩶. Mas uma cantora ficou sozinha e engoliu o último verso. Desde então o frio não passa.', 'Reaprenda os versos viajando no tempo, broto — comece procurando a Folha da Primavera lá no passado. Mas cuidado: mexer no ontem mexe no agora. E leve a Lanterna — sem luz, ninguém pisa no Ermo.']
           : ['No meu tempo a gente subia no Vovô pra colher estrela…', 'Junta os Frutos de Luz, criança. Eles guardam o brilho do amanhã.'],
@@ -1677,6 +1677,7 @@
       const place = a => { a.wrap.position.set(d.dx, heightAt(d.dx, d.dz), d.dz); a.wrap.rotation.y = Math.atan2(VILA.x - d.dx, VILA.z - d.dz);
         a.wrap.userData = { nome: d.nome, falas: d.falas, falasFn: d.falasFn, onEnd: d.onEnd }; a.story = { era: 'bosque' }; obstacles.push({ x: d.dx, z: d.dz, r: 0.5 }); npcs.push(a); };
       if (d.build) place(spawnProc(d.build, 2.3)); // [3.1] NPC procedural das Fichas
+      else if (d.glb) getGLB(d.glb).then(g => place(spawnActor(g, 'idle', 2.3))).catch(() => place(spawnProc(pmSamambaia, 2.3))); // [3.7] NPC gerado por IA (Meshy)
       else getGLB(`../bosque-vr/npcs/character-${d.char}.glb`).then(g => place(spawnActor(g, 'idle', 1.5))).catch(() => {});
     });
     { const a = spawnProc(pmCara, 2.3); a.wrap.position.set(SHOP.x, heightAt(SHOP.x, SHOP.z), SHOP.z + 0.9); a.wrap.rotation.y = Math.atan2(VILA.x - SHOP.x, VILA.z - SHOP.z); // [3.1] Lojista Cará procedural
@@ -2237,26 +2238,29 @@
     }
     // ---------- Era Renascer (futuro curado): epílogo visitável — Vovó Samambaia (cena secreta) + a Brisa ----------
     function fimDeColecao() { return game.coletados >= (typeof COLLECT_N !== 'undefined' ? COLLECT_N : 16); }
-    { // [3.1] Vovó Samambaia no Renascer (procedural): o segredo da Última Cantora (SQ6)
+    { // [3.7] Vovó Samambaia no Renascer: modelo gerado por IA (Meshy) — o segredo da Última Cantora (SQ6)
       const rx = PORTAL.x + 4, rz = PORTAL.z + 5;
-      const a = spawnProc(pmSamambaia, 2.3); a.wrap.position.set(rx, heightAt(rx, rz), rz); a.wrap.rotation.y = Math.atan2(-rx, -rz);
-      a.wrap.userData = {
-        nome: 'Vovó Samambaia',
-        falasFn: () => {
-          const base = ['Você conseguiu, criança… olha o amanhã: voltou a ser verde. 🌳💚',
-            'Quer saber quem era a Murcha? Era a Última Cantora. Há muito tempo ela ficou sozinha e, com medo do silêncio, engoliu o último verso — pra que o Inverno nunca acabasse e ninguém fosse embora.',
-            'Mas você cantou COM ela, não contra. O medo virou Brisa. Aquela borboleta de luz ali… é o coração dela, leve enfim. 🦋'];
-          return fimDeColecao()
-            ? base.concat(['E porque você cuidou de cada cantinho e juntou TODOS os Frutos de Luz, ela volta — só uma vez mais — pra cantar com você o verso que faltava. Escuta… 🌟', '🎶 …e por um instante, as Quatro Folhas cantam juntas no céu do Renascer: 🍃 Primavera, ☀️ Verão, 💧 Chuvas e 🩶 Inverno, em paz. Fim. 💚'])
-            : base.concat(['Volte quando juntar TODOS os Frutos de Luz, criança — aí eu te mostro o segredo da última canção dela. 🌟']);
-        },
-        onEnd: () => {
-          if (fimDeColecao()) { if (game.sidequests.samambaia !== 'feita') { game.sidequests.samambaia = 'feita'; sfx('fanfare'); flash('🌟 Você viu a cena secreta da Última Cantora!'); } }
-          else if (!game.sidequests.samambaia) game.sidequests.samambaia = 'ativa';
-          renderJournal(); saveGame('auto');
-        }
+      const place = a => {
+        a.wrap.position.set(rx, heightAt(rx, rz), rz); a.wrap.rotation.y = Math.atan2(-rx, -rz);
+        a.wrap.userData = {
+          nome: 'Vovó Samambaia',
+          falasFn: () => {
+            const base = ['Você conseguiu, criança… olha o amanhã: voltou a ser verde. 🌳💚',
+              'Quer saber quem era a Murcha? Era a Última Cantora. Há muito tempo ela ficou sozinha e, com medo do silêncio, engoliu o último verso — pra que o Inverno nunca acabasse e ninguém fosse embora.',
+              'Mas você cantou COM ela, não contra. O medo virou Brisa. Aquela borboleta de luz ali… é o coração dela, leve enfim. 🦋'];
+            return fimDeColecao()
+              ? base.concat(['E porque você cuidou de cada cantinho e juntou TODOS os Frutos de Luz, ela volta — só uma vez mais — pra cantar com você o verso que faltava. Escuta… 🌟', '🎶 …e por um instante, as Quatro Folhas cantam juntas no céu do Renascer: 🍃 Primavera, ☀️ Verão, 💧 Chuvas e 🩶 Inverno, em paz. Fim. 💚'])
+              : base.concat(['Volte quando juntar TODOS os Frutos de Luz, criança — aí eu te mostro o segredo da última canção dela. 🌟']);
+          },
+          onEnd: () => {
+            if (fimDeColecao()) { if (game.sidequests.samambaia !== 'feita') { game.sidequests.samambaia = 'feita'; sfx('fanfare'); flash('🌟 Você viu a cena secreta da Última Cantora!'); } }
+            else if (!game.sidequests.samambaia) game.sidequests.samambaia = 'ativa';
+            renderJournal(); saveGame('auto');
+          }
+        };
+        a.story = { era: 'renascer' }; npcs.push(a);
       };
-      a.story = { era: 'renascer' }; npcs.push(a);
+      getGLB('models/vovo-samambaia.glb').then(g => place(spawnActor(g, 'idle', 2.3))).catch(() => place(spawnProc(pmSamambaia, 2.3)));
     }
     let brisaBorboleta = null;
     function criarBrisa() { // a Brisa: a Murcha redimida, borboleta de luz que voa no futuro curado

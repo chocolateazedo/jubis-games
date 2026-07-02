@@ -268,6 +268,17 @@ save = { nivel:1, xp:0, hp:20, hpMax:20, mp:5, mpMax:5,
 
 Botão **"← Voltar"** (`<a class="back" href="../../">`) fixo fora do VR.
 
+**Multilanguage (v3.9+):** PT-BR (padrão), inglês e espanhol, escolhidos por um seletor 🇧🇷🇺🇸🇪🇸
+no topo da tela inicial, **antes de escolher o modo de jogo** — a troca fica travada depois que o
+jogo começa (não precisa suportar troca em tempo real durante a partida). Persistido em
+`localStorage` (`cronicas-bosque-lang`). Implementação: `games/cronicas-bosque/i18n/{pt,en,es}.js`
+(dicionários chave→string, PT como fallback de qualquer chave faltante), função `tr(chave, vars)` —
+o nome é `tr`, não `t`, porque `t` já é o parâmetro de timestamp usado em `frame(t)`/`update*(t)` por
+todo o arquivo. Nomes de personagens/lugares (`name.*`) ficam disponíveis automaticamente em
+qualquer `tr()` via interpolação `{vovo}`, `{broto}`, `{era_bosque}` etc., sem precisar passar
+manualmente. Sequências de diálogo usam `trArr('prefixo', n)` (monta o array `prefixo.0..n-1`) em
+vez de guardar arrays dentro do dicionário.
+
 ---
 
 ## 10. Áudio procedural (100% CC0)

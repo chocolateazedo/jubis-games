@@ -249,6 +249,9 @@
       for (const k in merged) s = s.split('{' + k + '}').join(merged[k]);
       return s;
     }
+    function trArr(prefix, n, vars) { // sequência de falas: monta ['prefix.0','prefix.1',...] traduzidas — usado em startNarration/falasFn
+      const a = []; for (let i = 0; i < n; i++) a.push(tr(prefix + '.' + i, vars)); return a;
+    }
     function applyI18nDom(root) { // aplica tr() em todo elemento com data-i18n (usado na tela inicial)
       (root || document).querySelectorAll('[data-i18n]').forEach(el => { el.innerHTML = tr(el.dataset.i18n); });
     }
@@ -503,7 +506,7 @@
         if (pendingEra) {
           const arrived = pendingEra; applyEra(arrived); if (typeof flash === 'function') flash(eraNome(arrived)); updateMusicTrack(); pendingEra = null;
           if (arrived === 'ermo' && game.flags.lanterna && !game.flags.momento) { game.flags.momento = true; setTimeout(momentoErmo, 700); } // o MOMENTO
-          if (arrived === 'bosque' && game.flags.sementePlantada && !game.vistoMudanca) { game.vistoMudanca = true; setTimeout(() => startNarration('', ['Olha! O cinza diminuiu… e nasceu um broto novo bem ali.', 'Você mexeu no passado e o presente mudou. É assim que se cura o amanhã. 🌱'], () => { iniciarFase(6); }), 700); }
+          if (arrived === 'bosque' && game.flags.sementePlantada && !game.vistoMudanca) { game.vistoMudanca = true; setTimeout(() => startNarration('', trArr('narr.mudanca_bosque', 2), () => { iniciarFase(6); }), 700); }
         }
       }
       else if (fade <= 0) { fade = 0; fadeDir = 0; }
@@ -1024,7 +1027,7 @@
       const naZona = currentEra === 'ermo' && game.fase >= 6 && Math.hypot(dolly.position.x - PORTAL.x, dolly.position.z - PORTAL.z) < 14;
       if (naZona && !_bossZonePrev) { // entrou na zona da Murcha
         if (cancaoPronta()) startBossBattle();
-        else startNarration('Fagulha', ['A Murcha tá ali, tremendo de frio… mas enfrentar não adianta, broto.', 'Só a CANÇÃO DAS QUATRO FOLHAS acalma ela. Você ainda não tem todos os versos.', 'Vai aprender os que faltam viajando no tempo — a setinha dourada te mostra pra onde ir. 🎵'], () => { });
+        else startNarration(tr('name.fagulha'), trArr('narr.fagulha_pre_murcha', 3), () => { });
       }
       _bossZonePrev = naZona;
     }
@@ -1052,7 +1055,7 @@
     function folhaNome(k) { return tr('folha.nome.' + k); }
     function setAcalanto() {
       battle.faseBatalha = 'acalanto'; battle.cantar = 0; const b = battle.boss; b.alive = true; b.hp = 1;
-      startNarration('Fagulha', ['Espera… esse jeito torto de asa, esse pó… ela não tá brava.', 'Ela é a saudade da Última Cantora — tá com FRIO e sozinha faz tempo demais. Não dá pra bater nela.', 'Canta a CANÇÃO DAS QUATRO FOLHAS pra ela, broto. Os quatro versos. O do Inverno você aprende agora. 🎵'], () => { flash('🎵 Abra o menu e escolha CANTAR (4 versos).'); });
+      startNarration(tr('name.fagulha'), trArr('narr.acalanto', 3), () => { flash(tr('flash.open_sing_menu')); });
     }
     function cantar() {
       battle.cantar++; sfx('ready'); flash(tr('flash.song_verse', { n: battle.cantar, verso: FOLHA_KEYS[battle.cantar - 1] ? folhaNome(FOLHA_KEYS[battle.cantar - 1]) : '' }));
@@ -1072,10 +1075,9 @@
       const lacosFeitos = ['riacho', 'corvo', 'lampiao', 'muda'].every(k => game.lacos[k] === 'equilibrado');
       const todosFrutos = game.coletados >= (typeof COLLECT_N !== 'undefined' ? COLLECT_N : 16);
       if (game.harmonia >= 80 && todasFolhas && lacosFeitos) {
-        startNarration('', ['🌸 A Canção completa ecoa por TODAS as eras. O Inverno, enfim, descansa e PASSA — vira Primavera de novo.', 'A Murcha se abre numa borboleta livre, a BRISA, e voa com você. A Vila canta em coro.', 'Em todo tempo o bosque floresce. A era do RENASCER se abriu — viaje e veja o amanhã que você plantou. 🌳💚',
-          todosFrutos ? '🌟 CENA SECRETA: como você cuidou de cada cantinho e juntou todos os Frutos de Luz, a Última Cantora original volta, só uma vez mais, pra cantar com você. Fim. 💚' : 'Obrigado por jogar! 💚'], () => { iniciarFase(8); });
+        startNarration('', [...trArr('narr.final_completo', 3), tr(todosFrutos ? 'narr.final_completo.secret' : 'narr.final_completo.thanks')], () => { iniciarFase(8); });
       } else {
-        startNarration('', ['🍂 A Canção se completa e o Inverno descansa — mas o bosque cura COM cicatrizes.', 'As fendas que ficaram abertas viram lembranças no Renascer. A Brisa voa contigo, mais quietinha.', 'Não foi perfeito, mas foi gentil — e às vezes basta isso. A era do Renascer se abriu. Obrigado por jogar. 💚'], () => { iniciarFase(8); });
+        startNarration('', trArr('narr.final_cicatrizes', 3), () => { iniciarFase(8); });
       }
     }
     function reverdecerErmo() { // o futuro cura em tempo real
@@ -1990,12 +1992,12 @@
     // ---------- o Vovô: conversa (Fase 1) e depois abre o menu das Eras ----------
     function tocarVovo() {
       if (!game.vovoFalou) {
-        if (game.fase <= 1 && !game.flags.vila) { startNarration('Vovô Carvalho', ['Calma, broto… antes de mim, vá ouvir a Vovó Samambaia, lá na Vila do Carvalho.', 'Ela guarda a história que você precisa pra atravessar o tempo. Volte depois.'], () => { }); return; }
-        startNarration('Vovô Carvalho', ['Ô, broto… chega mais, sem medo. A Samambaia te contou, né?', 'Esse cinza entra pelas minhas raízes — e minhas raízes tocam o ontem e o amanhã.', 'Pega a Lanterna-Vagalume aqui pertinho e volta: aí eu te abro o caminho pro futuro.'], () => { game.vovoFalou = true; iniciarFase(2); });
+        if (game.fase <= 1 && !game.flags.vila) { startNarration(tr('name.vovo'), trArr('narr.vovo_espera_samambaia', 2), () => { }); return; }
+        startNarration(tr('name.vovo'), trArr('narr.vovo_principal', 3), () => { game.vovoFalou = true; iniciarFase(2); });
       } else openEraMenu();
     }
     function momentoErmo() {
-      startNarration('Vovô Carvalho (murcho)', ['Aqui foi o bosque… o lago virou pó, o céu esqueceu de ser azul.', 'No galho mais alto, o ninho está vazio — frio faz muito tempo.', 'Mas olha: uma folhinha verde, teimosa, ainda segura no galho.', 'Uma folha é tudo o que o futuro precisa pra recomeçar. Toma essa semente, broto.', 'Planta ela quando eu ainda era pequenininho. O que você conserta lá… floresce aqui.'], () => { game.flags.semente = true; iniciarFase(4); });
+      startNarration(tr('npc.vovo_murcho'), trArr('narr.vovo_murcho', 5), () => { game.flags.semente = true; iniciarFase(4); });
     }
     // ---------- companheira Fagulha (raposa): recrutar ----------
     let foxNpc = null;
@@ -2010,7 +2012,7 @@
     function recruitFagulha() {
       game.flags.fagulha = true; saveGame('auto');
       if (foxNpc) { scene.remove(foxNpc.wrap); const mi = mixers.indexOf(foxNpc.mixer); if (mi >= 0) mixers.splice(mi, 1); foxNpc = null; }
-      startNarration('Fagulha', ['Ai, esses espinhos!… Ufa, obrigada, broto!', 'Você também sente o bosque ficando triste? Eu vou com você — e na luta eu solto faísca de ☀️ Sol!'], () => { flash('🦊 Fagulha entrou no grupo!'); });
+      startNarration(tr('name.fagulha'), trArr('narr.fagulha_recruta', 2), () => { flash(tr('flash.joined', { nome: tr('comp.nome.fagulha') })); });
     }
     // ---------- CAUSALIDADE: plantar no passado muda o presente ----------
     let covinha = null, manchaCinza = null, brotoNovo = null;
@@ -2040,7 +2042,7 @@
       const cx = covinha.userData.cx, cz = covinha.userData.cz;
       if (treeVariants.length) { const t = buildTreeFromVariant(treeVariants[0], 1.7, true); t.position.set(cx, heightAt(cx, cz), cz); scene.add(t); }
       brotoGrow = 0;
-      startNarration('Broto', ['Você plantou! Olha ele crescendo…', 'Esse carvalhinho vai virar o Vovô de todas as árvores. Cuida dele no teu tempo, tá?'], () => { iniciarFase(5); });
+      startNarration(tr('name.broto'), trArr('narr.broto_planta', 2), () => { iniciarFase(5); });
     }
 
     // ===================== TEIA DE CAUSALIDADE [2.0] =====================
@@ -2069,13 +2071,13 @@
     function nearCavar() { return game.lacos.riacho === 'ativo' && nearTeiaP(TEIA.cavar); }
     function moveRiachoPedra() {
       game.lacos.riacho = 'ativo'; sfx('poof'); abrirFenda(); recomputeHarmonia(); renderJournal(); saveGame('auto');
-      startNarration('', ['Você empurra a pedra… o riacho corre livre e abre caminho pra Folha verde lá adiante.', 'Mas longe dali, no AGORA, algo treme: a água que você desvia aqui faz falta noutro tempo. Volte ao 🌳 Bosque e veja o que mudou.'], () => { });
+      startNarration('', trArr('narr.riacho_pedra', 2), () => { });
     }
     function collectFolhaPrimavera() {
       if (game.folhas.includes('primavera')) return;
       game.folhas.push('primavera'); teiaFolha.visible = false; sfx('fanfare'); renderJournal(); updateHarmonia(); checkUnlockRaiz(); checkCancao(); saveGame('auto');
       if (!game.flags.folho) { game.flags.folho = true;
-        startNarration('Folho', ['🍃 Você cantou a Folha da Primavera! Eu… eu lembrei dela!', 'Pra te ajudar? Eu? Mas sou só um brotinho medroso… ah, tá bom. Mas só se a gente for juntinho.', 'Enquanto eu tô no grupo, eu cuido de você na batalha — um carinho de HP a cada turno. 💚'], () => { flash('🐛 Folho entrou no grupo!'); });
+        startNarration(tr('name.folho'), trArr('narr.folho_recruta', 3), () => { flash(tr('flash.joined', { nome: tr('comp.nome.folho') })); });
       }
     }
     function equilibrarRiacho() {
@@ -2123,13 +2125,13 @@
     function nearPragaVerao() { return game.lacos.corvo === 'ativo' && !game.folhas.includes('verao') && currentEra === 'bosque' && Math.hypot(dolly.position.x - TEIA2.praga.x, dolly.position.z - TEIA2.praga.z) < 4; }
     function espantarCorvo() {
       game.lacos.corvo = 'ativo'; sfx('poof'); recomputeHarmonia(); renderJournal(); hero.itens.mel = (hero.itens.mel || 0) + 2; saveGame('auto');
-      startNarration('', ['Você espanta o Corvo Cinza! Os brotinhos crescem felizes e te dão 2 Mel-do-Bosque de presente. 🍯', 'Mas sem o corvo por perto, no AGORA os besouros-da-folha se soltam e roem as árvores. Volte ao 🌳 Bosque e dê um jeito — com gentileza.'], () => { });
+      startNarration('', trArr('narr.corvo_espantado', 2), () => { });
     }
     function cantarVerao() {
       if (game.folhas.includes('verao')) return;
       game.lacos.corvo = 'equilibrado'; game.folhas.push('verao'); sfx('fanfare'); recomputeHarmonia(); renderJournal(); checkUnlockRaiz(); checkCancao();
       const recruta = !game.flags.gota; if (recruta) game.flags.gota = true; saveGame('auto');
-      startNarration('', ['Você lembra de um canto de pássaro bem velho e assobia baixinho…', 'Os besouros param, escutam… e vão embora sozinhos. Sem expulsar ninguém — só lembrando o bosque de uma música. Você aprendeu a Folha do Verão ☀️!'], () => { if (recruta) startNarration('Gota', ['💧 Blub! Ouvi seu canto lá do riacho e vim ver!', 'Eu sou a Gota. Sei guiar a água e segurar o tranco — enquanto eu tô no grupo, você apanha menos na luta. 🐢'], () => { flash('🐢 Gota entrou no grupo!'); }); });
+      startNarration('', trArr('narr.canto_passaro', 2), () => { if (recruta) startNarration(tr('name.gota'), trArr('narr.gota_recruta', 2), () => { flash(tr('flash.joined', { nome: tr('comp.nome.gota') })); }); });
     }
     function updateTeia2(t) {
       if (teia2Corvo) { teia2Corvo.visible = currentEra === 'semente' && !game.lacos.corvo; if (teia2Corvo.visible) teia2Corvo.children[0].position.y = 1.0 + Math.sin(t * 0.005) * 0.12; }
@@ -2155,11 +2157,11 @@
     function nearSombra() { return game.lacos.lampiao === 'ativo' && currentEra === 'bosque' && Math.hypot(dolly.position.x - LACO4.sombra.x, dolly.position.z - LACO4.sombra.z) < 4.5; }
     function acenderLampiao() {
       game.lacos.lampiao = 'ativo'; sfx('ready'); recomputeHarmonia(); renderJournal(); hero.itens.mel = (hero.itens.mel || 0) + 2; saveGame('auto');
-      startNarration('', ['Você acende o primeiro lampião da Vila! Os moradores perdem o medo do escuro e ficam te devendo uma — passe pra conversar depois. 🏮', 'Mas a luz no passado chama bicho: no AGORA, uma sombra de mariposa (a saudade da Murcha) ronda a Vila. Volte ao 🌳 Bosque e console-a — com calma.'], () => { });
+      startNarration('', trArr('narr.lampiao_aceso', 2), () => { });
     }
     function cantarConforto() {
       game.lacos.lampiao = 'equilibrado'; sfx('fanfare'); recomputeHarmonia(); renderJournal(); saveGame('auto');
-      startNarration('', ['Você chega pertinho da sombra e canta bem baixinho, sem medo…', 'Ela para de tremer, escuta, e se desfaz num pó-de-luz calminho. Não dava pra espantar — dava pra acolher. (Guarde esse jeito pro fim, broto.) 🩶'], () => { });
+      startNarration('', trArr('narr.sombra_consolada', 2), () => { });
     }
     function updateTeia4(t) {
       if (teia4Lamp) teia4Lamp.visible = currentEra === 'semente' && !game.lacos.lampiao;
@@ -2196,12 +2198,12 @@
     function nearMata() { return game.lacos.muda === 'ativo' && currentEra === 'bosque' && Math.hypot(dolly.position.x - LACO3.mata.x, dolly.position.z - LACO3.mata.z) < 4.8; }
     function curarMuda() {
       game.lacos.muda = 'ativo'; sfx('poof'); recomputeHarmonia(); renderJournal(); hero.itens.mel = (hero.itens.mel || 0) + 1; saveGame('auto');
-      startNarration('', ['Você rega e afaga a muda doente… ela se firma e dispara num jato de folhas verdes! 🌳 (Ganhou 1 Mel-do-Bosque.)', 'Mas ela cresce DEMAIS: lá no AGORA a sombra dela tapou o sol e as florzinhas viraram uma Mata Emaranhada de espinhos. Volte ao 🌳 Bosque e abra uma clareira de luz.'], () => { });
+      startNarration('', trArr('narr.muda_curada', 2), () => { });
     }
     function abrirClareira() {
       game.lacos.muda = 'equilibrado'; sfx('fanfare'); recomputeHarmonia(); renderJournal();
       hero.itens.mel = (hero.itens.mel || 0) + 2; hero.hp = hero.hpMax; updateHeroHud(); saveGame('auto');
-      startNarration('', ['Você poda com carinho só os galhos que tapavam o sol e abre uma clareira de luz…', 'Os espinhos se recolhem, as flores voltam e a Mata vira um POMAR cheinho de frutas. Você colhe 2 Mel e recupera todo o fôlego. 🍎🌸'], () => { });
+      startNarration('', trArr('narr.clareira_aberta', 2), () => { });
     }
     function updateTeia3(t) {
       if (lacoMuda) { lacoMuda.visible = currentEra === 'semente' && !game.lacos.muda; if (lacoMuda.visible) lacoMuda.rotation.y = Math.sin(t * 0.001) * 0.12; }
@@ -2242,13 +2244,13 @@
     function nearCipo() { return mestreCipo && !game.lacos.cipo && currentEra === 'semente' && Math.hypot(dolly.position.x - LACO5.cipo.x, dolly.position.z - LACO5.cipo.z) < 3.5; }
     function ensinarCipo() {
       game.lacos.cipo = 'equilibrado'; sfx('fanfare'); recomputeHarmonia(); renderJournal(); criarPonteIlha(); saveGame('auto');
-      startNarration('Mestre Cipó (jovem)', ['Tecer uma ponte? Eu nunca tentei… acha mesmo que eu consigo?', 'Tá bom! Vou aprender — pelos amigos do outro lado da água! 🌉', 'No AGORA, a ponte de cipó atravessa o lago até uma ilhota cheia de Frutos. E sabe o melhor? Dessa vez não veio problema nenhum junto. Tem carinho que só dá — não cobra. 💚'], () => { });
+      startNarration(tr('npc.cipo_jovem'), trArr('narr.cipo_jovem', 3), () => { });
     }
     function nearIlhaTesouro() { return ilhaTesouro && !game.flags.ilhaColhida && currentEra === 'bosque' && Math.hypot(dolly.position.x - LACO5.ilha.x, dolly.position.z - LACO5.ilha.z) < 2.8; }
     function colherIlha() {
       game.flags.ilhaColhida = true; sfx('levelup'); if (ilhaTesouro) ilhaTesouro.visible = false;
       hero.hpMax += 4; hero.mpMax += 2; hero.hp = hero.hpMax; hero.mp = hero.mpMax; hero.itens.mel = (hero.itens.mel || 0) + 2; updateHeroHud(); saveGame('auto');
-      startNarration('', ['🌟 Você colhe os Frutos escondidos da ilhota! Coração mais forte: HP e MP máximos subiram, e ainda ganhou 2 Mel.', 'Valeu a pena atravessar a ponte. 🌉🍎'], () => { });
+      startNarration('', trArr('narr.frutos_ilhota', 2), () => { });
     }
     function onPonte(x, z) { // o ponto está sobre a ponte/ilha andável? (só no presente, com a ponte feita)
       if (game.lacos.cipo !== 'equilibrado' || currentEra !== 'bosque') return false;
@@ -2433,7 +2435,7 @@
     function resolverConstructo() {
       if (game.folhas.includes('chuvas')) return;
       game.folhas.push('chuvas'); sfx('fanfare'); renderJournal(); updateHarmonia(); checkCancao(); saveGame('auto');
-      startNarration('Constructo de Pedra', ['…fica? Ninguém ficou. Faz tanto tempo que esqueci o som de outra voz.', 'Você planta um musguinho-amigo no ombro dele. As runas dos olhos brilham mais quentes — ele não está mais sozinho.', 'Agradecido, o Constructo abre a câmara da Última Cantora, e você aprende a Folha das Chuvas. 💧'], () => { });
+      startNarration(tr('npc.constructo_pedra'), trArr('narr.constructo', 3), () => { });
     }
     function updateConstructo(t) {
       if (!constructoMesh) return;

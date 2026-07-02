@@ -1048,13 +1048,14 @@
         flash('🦋 A Murcha aparece — de frio e sozinha, roendo a seiva do Vovô.');
       }
     }
-    const VERSOS_CANCAO = ['🍃 Primavera', '☀️ Verão', '💧 Chuvas', '🩶 Inverno'];
+    const FOLHA_KEYS = ['primavera', 'verao', 'chuvas', 'inverno'];
+    function folhaNome(k) { return tr('folha.nome.' + k); }
     function setAcalanto() {
       battle.faseBatalha = 'acalanto'; battle.cantar = 0; const b = battle.boss; b.alive = true; b.hp = 1;
       startNarration('Fagulha', ['Espera… esse jeito torto de asa, esse pó… ela não tá brava.', 'Ela é a saudade da Última Cantora — tá com FRIO e sozinha faz tempo demais. Não dá pra bater nela.', 'Canta a CANÇÃO DAS QUATRO FOLHAS pra ela, broto. Os quatro versos. O do Inverno você aprende agora. 🎵'], () => { flash('🎵 Abra o menu e escolha CANTAR (4 versos).'); });
     }
     function cantar() {
-      battle.cantar++; sfx('ready'); flash('🎵 Canção das Quatro Folhas — verso ' + battle.cantar + '/4: ' + (VERSOS_CANCAO[battle.cantar - 1] || ''));
+      battle.cantar++; sfx('ready'); flash(tr('flash.song_verse', { n: battle.cantar, verso: FOLHA_KEYS[battle.cantar - 1] ? folhaNome(FOLHA_KEYS[battle.cantar - 1]) : '' }));
       if (battle.cantar >= 4) bossRedeem();
     }
     function bossRedeem() {
@@ -1727,7 +1728,7 @@
         falasFn: () => {
           if (game.sidequests.brotinhos === 'feita') return ['De novo, de novo! A sua canção é a melhor! 🎶'];
           if (!game.folhas.length) return ['Ô viajante! Você sabe alguma música das estações?', 'Volta quando aprender um verso da Canção, vai!'];
-          return ['Canta pra gente os versos que você já sabe! 🎶', '(Você canta: ' + game.folhas.map(f => FOLHA_NOME[f] || f).join(', ') + ')', 'Que lindooo! A gente vai fazer um CORO pra te ajudar quando você cantar pra Murcha! 💚'];
+          return ['Canta pra gente os versos que você já sabe! 🎶', '(Você canta: ' + game.folhas.map(f => folhaNome(f) || f).join(', ') + ')', 'Que lindooo! A gente vai fazer um CORO pra te ajudar quando você cantar pra Murcha! 💚'];
         },
         onEnd: () => { if (game.sidequests.brotinhos !== 'feita' && game.folhas.length) { game.sidequests.brotinhos = 'feita'; game.flags.coro = true; renderJournal(); saveGame('auto'); flash('🎶 Os Brotinhos vão fazer um coro por você — a party fica mais forte na batalha final!'); } } },
       { char: 'e', glb: 'models/vovo-samambaia.glb', nome: 'Vovó Samambaia', dx: VILA.x + 4, dz: VILA.z - 8,
@@ -1795,53 +1796,53 @@
     const game = { fase: 0, vovoFalou: false, objetivo: '', vistoMudanca: false, coletados: 0,
       harmonia: 100, lacos: {}, folhas: [], sidequests: {}, // [2.0] Teia de Causalidade + Canção das Quatro Folhas (estado base; conteúdo vem nos Atos)
       flags: { cogu: false, vila: false, vilaVista: false, lanterna: false, fagulha: false, folho: false, gota: false, momento: false, semente: false, sementePlantada: false } };
-    const FASE_TITULOS = { 1: 'O Bosque Doente', 2: 'A Lanterna-Vagalume', 3: 'O Ermo', 4: 'A Semente do Passado', 5: 'O Amanhã Plantado', 6: 'A Canção das Quatro Folhas', 7: 'O Coração da Murcha', 8: 'Epílogo' };
+    function faseTitulo(n) { return tr('fase.titulo.' + n); }
     function setObjetivo(txt) {
       game.objetivo = txt; const q = document.getElementById('questBar');
-      if (q) { q.textContent = 'Fase ' + game.fase + ' · ' + (FASE_TITULOS[game.fase] || '') + ' — ' + txt; q.style.display = 'block'; }
+      if (q) { q.textContent = tr('journal.questbar', { n: game.fase, titulo: faseTitulo(game.fase), txt }); q.style.display = 'block'; }
     }
     function iniciarFase(n) {
-      game.fase = n; flash('✨ Fase ' + n + ': ' + (FASE_TITULOS[n] || ''));
-      if (n === 1) { setObjetivo('Fale com o Seu Cogu 🍄'); criarFagulhaNpc(); }
-      else if (n === 2) { setObjetivo('Ache a Lanterna-Vagalume ✨ (perto do Vovô)'); criarLanterna(); }
-      else if (n === 3) setObjetivo('Toque o Vovô e viaje ao 🥀 Ermo (futuro)');
-      else if (n === 4) { setObjetivo('Viaje ao 🌱 Semente (passado) e plante a Semente-do-Amanhã'); criarSementeMundo(); }
-      else if (n === 5) setObjetivo('Volte ao 🌳 Bosque (presente) e veja o que mudou!');
+      game.fase = n; flash(tr('flash.fase_start', { n, titulo: faseTitulo(n) }));
+      if (n === 1) { setObjetivo(tr('obj.fase1')); criarFagulhaNpc(); }
+      else if (n === 2) { setObjetivo(tr('obj.fase2')); criarLanterna(); }
+      else if (n === 3) setObjetivo(tr('obj.fase3'));
+      else if (n === 4) { setObjetivo(tr('obj.fase4')); criarSementeMundo(); }
+      else if (n === 5) setObjetivo(tr('obj.fase5'));
       else if (n === 6) checkCancao(); // objetivo: aprender a Canção (ou ir ao Ermo se já tiver os 3 versos)
-      else if (n === 8) setObjetivo('🌟 Você curou o amanhã! Fim da aventura — por enquanto. Obrigado por jogar! 💚');
+      else if (n === 8) setObjetivo(tr('obj.fase8'));
       renderJournal(); if (typeof saveGame === 'function') saveGame('auto'); // autosave por capítulo
     }
     // ---------- DIÁRIO DE MISSÕES (lista os capítulos e o objetivo atual) ----------
-    const CHAPTER_DESC = { 1: 'Descubra de onde vem o cinza — e ouça os mais velhos da Vila do Carvalho.', 2: 'Pegue a Lanterna-Vagalume, que abre o caminho do futuro.', 3: 'Atravesse pela raiz do Vovô até o Ermo, o amanhã murcho.', 4: 'Volte ao passado e plante a Semente-do-Amanhã.', 5: 'Veja o presente mudar com o que você fez atrás.', 6: 'Aprenda a Canção das Quatro Folhas viajando no tempo (Semente → Raiz) — sem ela não dá pra acalmar a Murcha.', 7: 'Vença a Murcha… cuidando dela, não batendo.', 8: 'O amanhã floresce — visite o Renascer. 💚' };
-    const LACO_NOME = { riacho: 'O Riacho Represado', corvo: 'O Corvo Espantado', lampiao: 'O Lampião Aceso', muda: 'A Muda Curada Demais', cipo: 'A Ponte de Cipó' }; // [2.0] nomes dos laços/folhas/companheiros pro Diário
-    const FOLHA_NOME = { primavera: '🍃 Primavera', verao: '☀️ Verão', chuvas: '💧 Chuvas', inverno: '🩶 Inverno' };
-    const COMP_NOME = { fagulha: '🦊 Fagulha', folho: '🐛 Folho', gota: '🐢 Gota', brisa: '🦋 Brisa' };
-    const SQ_NOME = { bromelia: 'Dona Bromélia — replantar as mudinhas', tonico: 'Tonico — reacender os lampiões', brotinhos: 'Os Brotinhos — cantar a Canção', samambaia: 'Vovó Samambaia — o segredo da Última Cantora (Renascer)' }; // [2.0] Missões da Vila pro Diário
+    function chapterDesc(n) { return tr('chapter.desc.' + n); }
+    function lacoNome(k) { return tr('laco.nome.' + k); }
+    function compNome(k) { return tr('comp.nome.' + k); }
+    function sqNome(k) { return tr('sq.nome.' + k); }
+    const SQ_KEYS = ['bromelia', 'tonico', 'brotinhos', 'samambaia']; // [2.0] Missões da Vila pro Diário
     function renderJournal() {
       const b = document.querySelector('#journal .jbody'); if (!b) return; b.innerHTML = '';
       const lacoKeys = game.lacos ? Object.keys(game.lacos) : [], teiaAtiva = (game.folhas && game.folhas.length) || lacoKeys.length;
-      if (teiaAtiva) { const hd = document.createElement('div'); hd.className = 'jstats'; hd.innerHTML = '🕊️ Harmonia do Tempo: <b>' + Math.round(game.harmonia) + '%</b>'; b.appendChild(hd); }
+      if (teiaAtiva) { const hd = document.createElement('div'); hd.className = 'jstats'; hd.innerHTML = tr('journal.harmony', { n: Math.round(game.harmonia) }); b.appendChild(hd); }
       for (let n = 1; n <= 8; n++) {
         const done = game.fase > n, cur = game.fase === n;
         const row = document.createElement('div'); row.className = 'jrow' + (cur ? ' cur' : '') + (done ? ' done' : '');
-        const desc = (cur && game.objetivo) ? game.objetivo : CHAPTER_DESC[n];
-        row.innerHTML = '<span class="jmk">' + (done ? '✅' : cur ? '▶️' : '•') + '</span><span class="jt"><b>' + n + '. ' + (FASE_TITULOS[n] || '') + '</b>' + (done ? '' : '<br><small>' + desc + '</small>') + '</span>';
+        const desc = (cur && game.objetivo) ? game.objetivo : chapterDesc(n);
+        row.innerHTML = '<span class="jmk">' + (done ? '✅' : cur ? '▶️' : '•') + '</span><span class="jt"><b>' + n + '. ' + faseTitulo(n) + '</b>' + (done ? '' : '<br><small>' + desc + '</small>') + '</span>';
         b.appendChild(row);
       }
       if (teiaAtiva) { // [2.0] Teia de Causalidade: laços (estado), Folhas e companheiros
         const sec = document.createElement('div'); sec.className = 'jsec';
-        let html = '<div class="jsech">🕸️ Teia de Causalidade</div>';
-        for (const k of lacoKeys) { const st = game.lacos[k], eq = st === 'equilibrado'; html += '<div class="jline">' + (eq ? '✅' : '⚠️') + ' ' + (LACO_NOME[k] || k) + ' <small>(' + (eq ? 'equilibrado' : 'EM ABERTO — precisa equilibrar') + ')</small></div>'; }
-        html += '<div class="jline">🍃 Canção das Quatro Folhas (' + game.folhas.length + '/4): ' + ['primavera', 'verao', 'chuvas', 'inverno'].map(f => game.folhas.includes(f) ? FOLHA_NOME[f] : '<span class="jmiss">' + FOLHA_NOME[f] + '</span>').join(' · ') + '</div>';
+        let html = '<div class="jsech">' + tr('journal.web_title') + '</div>';
+        for (const k of lacoKeys) { const st = game.lacos[k], eq = st === 'equilibrado'; html += '<div class="jline">' + (eq ? '✅' : '⚠️') + ' ' + (lacoNome(k) || k) + ' <small>(' + tr(eq ? 'journal.balanced' : 'journal.unbalanced') + ')</small></div>'; }
+        html += '<div class="jline">' + tr('journal.song_progress', { n: game.folhas.length }) + ': ' + FOLHA_KEYS.map(f => game.folhas.includes(f) ? folhaNome(f) : '<span class="jmiss">' + folhaNome(f) + '</span>').join(' · ') + '</div>';
         const comps = ['fagulha', 'folho', 'gota', 'brisa'].filter(c => game.flags[c]);
-        if (comps.length) html += '<div class="jline">🤝 Grupo: ' + comps.map(c => COMP_NOME[c]).join(' · ') + '</div>';
+        if (comps.length) html += '<div class="jline">' + tr('journal.group') + ' ' + comps.map(c => compNome(c)).join(' · ') + '</div>';
         sec.innerHTML = html; b.appendChild(sec);
       }
-      const sqKeys = game.sidequests ? Object.keys(game.sidequests).filter(k => SQ_NOME[k]) : []; // [2.0] Missões da Vila
+      const sqKeys = game.sidequests ? Object.keys(game.sidequests).filter(k => SQ_KEYS.includes(k)) : []; // [2.0] Missões da Vila
       if (sqKeys.length) {
         const sec = document.createElement('div'); sec.className = 'jsec';
-        let html = '<div class="jsech">🏘️ Missões da Vila</div>';
-        for (const k of sqKeys) { const done = game.sidequests[k] === 'feita'; html += '<div class="jline">' + (done ? '✅' : '⚠️') + ' ' + SQ_NOME[k] + ' <small>(' + (done ? 'feita' : 'em andamento') + ')</small></div>'; }
+        let html = '<div class="jsech">' + tr('journal.village_quests') + '</div>';
+        for (const k of sqKeys) { const done = game.sidequests[k] === 'feita'; html += '<div class="jline">' + (done ? '✅' : '⚠️') + ' ' + sqNome(k) + ' <small>(' + tr(done ? 'journal.done' : 'journal.ongoing') + ')</small></div>'; }
         sec.innerHTML = html; b.appendChild(sec);
       }
     }
@@ -2357,8 +2358,8 @@
     const QUEST = { covinha: { x: 9, z: 50 }, cogu: { x: 6, z: 56 }, samambaia: { x: VILA.x + 4, z: VILA.z - 8 } };
     function cancaoPronta() { return ['primavera', 'verao', 'chuvas'].every(f => game.folhas.includes(f)); } // os 3 versos aprendidos ANTES do clímax (o Inverno vem na luta)
     function setObjetivoFase6() {
-      if (cancaoPronta()) setObjetivo('Vá ao 🥀 Ermo (futuro) e cante a Canção pra Murcha 🎵');
-      else { const falta = ['primavera', 'verao', 'chuvas'].filter(f => !game.folhas.includes(f)).map(f => FOLHA_NOME[f]).join(' · '); setObjetivo('Aprenda a Canção viajando no tempo — faltam: ' + falta); }
+      if (cancaoPronta()) setObjetivo(tr('obj.fase6.ready'));
+      else { const falta = ['primavera', 'verao', 'chuvas'].filter(f => !game.folhas.includes(f)).map(f => folhaNome(f)).join(' · '); setObjetivo(tr('obj.fase6.missing', { falta })); }
     }
     function checkCancao() { // chamado quando se ganha uma Folha: atualiza o objetivo da fase 6 e comemora ao reunir os 3
       if (game.fase !== 6) return;

@@ -409,7 +409,7 @@
       pMat.color.setHex(E.part.color); pMat.size = E.part.size; pMat.blending = E.part.add ? THREE.AdditiveBlending : THREE.NormalBlending; pMat.needsUpdate = true; partFall = E.part.fall;
     }
     applyEra('bosque');
-    const ERA_NOME = { bosque: '🌳 Bosque — agora', ermo: '🥀 Ermo — o futuro murcho', semente: '🌱 Semente — o passado' };
+    function eraNome(k) { return tr('era.nome.' + k); }
 
     // ---------- VOVÔ CARVALHO (o portal do tempo, que fala) ----------
     const PORTAL = { x: 6, z: 22 };
@@ -501,7 +501,7 @@
       if (fade >= 1) {
         fade = 1; fadeDir = -1;
         if (pendingEra) {
-          const arrived = pendingEra; applyEra(arrived); if (typeof flash === 'function') flash(ERA_NOME[arrived]); updateMusicTrack(); pendingEra = null;
+          const arrived = pendingEra; applyEra(arrived); if (typeof flash === 'function') flash(eraNome(arrived)); updateMusicTrack(); pendingEra = null;
           if (arrived === 'ermo' && game.flags.lanterna && !game.flags.momento) { game.flags.momento = true; setTimeout(momentoErmo, 700); } // o MOMENTO
           if (arrived === 'bosque' && game.flags.sementePlantada && !game.vistoMudanca) { game.vistoMudanca = true; setTimeout(() => startNarration('', ['Olha! O cinza diminuiu… e nasceu um broto novo bem ali.', 'Você mexeu no passado e o presente mudou. É assim que se cura o amanhã. 🌱'], () => { iniciarFase(6); }), 700); }
         }
@@ -518,7 +518,13 @@
     eraPanel.visible = false; scene.add(eraPanel);
     let eraMenuOpen = false, eraHover = -1;
     // [2.0] eras desbloqueáveis: o menu mostra só as que você já pode visitar
-    const ERA_INFO = { raiz: { tag: '🌰 Raiz', sub: 'passado fundo' }, semente: { tag: '🌱 Semente', sub: 'o passado' }, bosque: { tag: '🌳 Bosque', sub: 'o agora' }, ermo: { tag: '🥀 Ermo', sub: 'futuro murcho' }, renascer: { tag: '🌸 Renascer', sub: 'futuro curado' } };
+    const ERA_INFO = {
+      raiz: { get tag() { return tr('era.tag.raiz'); }, get sub() { return tr('era.sub.raiz'); } },
+      semente: { get tag() { return tr('era.tag.semente'); }, get sub() { return tr('era.sub.semente'); } },
+      bosque: { get tag() { return tr('era.tag.bosque'); }, get sub() { return tr('era.sub.bosque'); } },
+      ermo: { get tag() { return tr('era.tag.ermo'); }, get sub() { return tr('era.sub.ermo'); } },
+      renascer: { get tag() { return tr('era.tag.renascer'); }, get sub() { return tr('era.sub.renascer'); } },
+    };
     const ERA_ORDER = ['raiz', 'semente', 'bosque', 'ermo', 'renascer'];
     function eraUnlocked(k) { if (k === 'bosque') return true; if (k === 'ermo') return game.flags.lanterna; if (k === 'semente') return game.flags.momento; if (k === 'raiz') return game.flags.raiz; if (k === 'renascer') return game.flags.renascer; return false; }
     function eraList() { return ERA_ORDER.filter(eraUnlocked); }
@@ -562,7 +568,7 @@
     function eraSelect(c) {
       if (!eraMenuOpen || c < 0) return; const k = eraList()[c]; if (!k) return; // guard evita seleção dupla (touchstart + click)
       closeEraMenu();
-      if (k !== currentEra) travelEra(k); else flash('Você já está ' + (ERA_INFO[k] ? ERA_INFO[k].sub : 'aqui') + '.');
+      if (k !== currentEra) travelEra(k); else flash(tr('flash.already_here', { sub: ERA_INFO[k] ? ERA_INFO[k].sub : tr('era.sub.here') }));
     }
 
     // ============================================================
@@ -570,15 +576,15 @@
     // ============================================================
     const hero = { lvl: 1, xp: 0, xpNext: 8, hp: 26, hpMax: 26, mp: 5, mpMax: 5, atk: 4, def: 3, mag: 4, agi: 8, defending: false, tecnicas: ['raio', 'brotar'], itens: { mel: 2 } };
     const ENEMY_DEF = {
-      brotoca: { nome: 'Brotoca', build: pmBrotoca, glb: 'caterpillar', hp: 12, atk: 3, def: 2, agi: 6, xp: 4, h: 1.3, ess: 'folha' },
-      lobinho: { nome: 'Lobinho de Musgo', build: pmLobinho, glb: 'dog', hp: 22, atk: 5, def: 4, agi: 11, xp: 6, h: 1.5, ess: 'folha' },
-      cinzela: { nome: 'Cinzela', build: pmCinzela, glb: 'caterpillar', hp: 16, atk: 4, def: 3, agi: 8, xp: 5, h: 1.3, ess: 'cinza' },
-      caranguejo: { nome: 'Caranguejo Casca-Dura', build: pmCaranguejo, glb: 'crab', hp: 28, atk: 5, def: 7, agi: 5, xp: 8, h: 1.3, ess: 'agua' },
-      javali: { nome: 'Javali Espinho', build: pmJavali, glb: 'hog', hp: 32, atk: 8, def: 3, agi: 6, xp: 9, h: 1.5, ess: 'folha' },
-      macaco: { nome: 'Macaco Travesso', build: pmMacaco, glb: 'monkey', hp: 20, atk: 5, def: 3, agi: 14, xp: 8, h: 1.5, ess: 'agua' },
-      corvo: { nome: 'Corvo Cinza', build: pmCorvo, glb: 'parrot', hp: 18, atk: 6, def: 2, agi: 13, xp: 7, h: 1.4, ess: 'cinza' },
-      lobao: { nome: 'Lobão Cinza (Alfa)', build: pmLobao, glb: 'tiger', hp: 64, atk: 9, def: 6, agi: 10, xp: 28, h: 2.0, ess: 'cinza', miniboss: true, reward: 'amuleto' },
-      murcha: { nome: 'Murcha, a Mariposa', build: pmMurcha, glb: 'bee', hp: 70, atk: 7, def: 5, agi: 7, xp: 40, h: 2.8, ess: 'cinza', boss: true },
+      brotoca: { get nome() { return tr('name.brotoca'); }, build: pmBrotoca, glb: 'caterpillar', hp: 12, atk: 3, def: 2, agi: 6, xp: 4, h: 1.3, ess: 'folha' },
+      lobinho: { get nome() { return tr('name.lobinho'); }, build: pmLobinho, glb: 'dog', hp: 22, atk: 5, def: 4, agi: 11, xp: 6, h: 1.5, ess: 'folha' },
+      cinzela: { get nome() { return tr('name.cinzela'); }, build: pmCinzela, glb: 'caterpillar', hp: 16, atk: 4, def: 3, agi: 8, xp: 5, h: 1.3, ess: 'cinza' },
+      caranguejo: { get nome() { return tr('name.caranguejo'); }, build: pmCaranguejo, glb: 'crab', hp: 28, atk: 5, def: 7, agi: 5, xp: 8, h: 1.3, ess: 'agua' },
+      javali: { get nome() { return tr('name.javali'); }, build: pmJavali, glb: 'hog', hp: 32, atk: 8, def: 3, agi: 6, xp: 9, h: 1.5, ess: 'folha' },
+      macaco: { get nome() { return tr('name.macaco'); }, build: pmMacaco, glb: 'monkey', hp: 20, atk: 5, def: 3, agi: 14, xp: 8, h: 1.5, ess: 'agua' },
+      corvo: { get nome() { return tr('name.corvo'); }, build: pmCorvo, glb: 'parrot', hp: 18, atk: 6, def: 2, agi: 13, xp: 7, h: 1.4, ess: 'cinza' },
+      lobao: { get nome() { return tr('name.lobao'); }, build: pmLobao, glb: 'tiger', hp: 64, atk: 9, def: 6, agi: 10, xp: 28, h: 2.0, ess: 'cinza', miniboss: true, reward: 'amuleto' },
+      murcha: { get nome() { return tr('name.murcha'); }, build: pmMurcha, glb: 'bee', hp: 70, atk: 7, def: 5, agi: 7, xp: 40, h: 2.8, ess: 'cinza', boss: true },
     };
     // Roda das Essências: a chave vence (×2) os valores; fraqueza inversa = ×0.5
     const ESS_STRONG = { sol: ['folha', 'cinza'], agua: ['sol', 'cinza'], folha: ['agua'], cinza: ['folha'] };
@@ -899,10 +905,10 @@
     }
     // [2.0] PARTY: cada companheiro recrutado entra na luta com um papel próprio
     const ALLY_DEF = {
-      fagulha: { nome: 'Fagulha', emoji: '🦊', glb: 'fox', ess: 'sol', role: 'atk', hp: 15, def: 2, mag: 5, agi: 13, h: 0.85 },
-      folho: { nome: 'Folho', emoji: '🐛', glb: 'caterpillar', tint: 0x6cba56, ess: 'folha', role: 'heal', hp: 14, def: 2, mag: 6, agi: 10, h: 0.8 },
-      gota: { nome: 'Gota', emoji: '🐢', glb: 'beaver', tint: 0x4fa0d0, ess: 'agua', role: 'atk', hp: 22, def: 5, mag: 4, agi: 8, h: 0.85 },
-      brisa: { nome: 'Brisa', emoji: '🦋', glb: 'bee', tint: 0xb0a0d8, ess: 'cinza', role: 'heal', hp: 18, def: 3, mag: 7, agi: 12, h: 0.9 },
+      fagulha: { get nome() { return tr('name.fagulha'); }, emoji: '🦊', glb: 'fox', ess: 'sol', role: 'atk', hp: 15, def: 2, mag: 5, agi: 13, h: 0.85 },
+      folho: { get nome() { return tr('name.folho'); }, emoji: '🐛', glb: 'caterpillar', tint: 0x6cba56, ess: 'folha', role: 'heal', hp: 14, def: 2, mag: 6, agi: 10, h: 0.8 },
+      gota: { get nome() { return tr('name.gota'); }, emoji: '🐢', glb: 'beaver', tint: 0x4fa0d0, ess: 'agua', role: 'atk', hp: 22, def: 5, mag: 4, agi: 8, h: 0.85 },
+      brisa: { get nome() { return tr('name.brisa'); }, emoji: '🦋', glb: 'bee', tint: 0xb0a0d8, ess: 'cinza', role: 'heal', hp: 18, def: 3, mag: 7, agi: 12, h: 0.9 },
     };
     function spawnPartyAllies() { // [3.0] modelos procedurais em formação ao lado do herói (de costas, encarando o inimigo)
       if (!battle) return; battle.allies = [];

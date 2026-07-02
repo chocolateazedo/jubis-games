@@ -76,4 +76,12 @@ export const ES = {
   'flash.combo_used': '✨ DÚO: ¡{nome}!',
   'flash.roots_hold': '🌿 ¡Las raíces retuvieron el turno del enemigo!',
   'flash.ally_back': '🌱 ¡{nome} volvió a la lucha!',
+
+  // ---- eras: nombres/avisos/menú de viaje en el tiempo ----
+  'era.nome.bosque': '🌳 Bosque — ahora', 'era.nome.ermo': '🥀 Yermo — el futuro marchito', 'era.nome.semente': '🌱 Semilla — el pasado',
+  'era.nome.raiz': '🌰 Raíz — pasado profundo', 'era.nome.renascer': '🌸 Renacer — el futuro sanado',
+  'era.tag.raiz': '🌰 Raíz', 'era.tag.semente': '🌱 Semilla', 'era.tag.bosque': '🌳 Bosque', 'era.tag.ermo': '🥀 Yermo', 'era.tag.renascer': '🌸 Renacer',
+  'era.sub.raiz': 'el pasado profundo', 'era.sub.semente': 'el pasado', 'era.sub.bosque': 'el presente', 'era.sub.ermo': 'el futuro marchito', 'era.sub.renascer': 'el futuro sanado',
+  'era.sub.here': 'aquí',
+  'flash.already_here': 'Ya estás en {sub}.',
 };

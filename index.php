@@ -124,6 +124,29 @@ function e(string $s): string {
       </div>
     </section>
 
+    <section class="vip-highlight" aria-labelledby="vip-plano">
+      <div class="vip-highlight__content">
+        <p class="vip-highlight__tag">🎁 grátis por enquanto</p>
+        <h2 id="vip-plano">Banner VIP no ar — pagamento entra depois</h2>
+        <p>
+          O banner já está aparecendo no site, mas <strong>sem cobrança agora</strong>.
+          Por enquanto o acesso fica grátis para testar, melhorar os jogos e preparar tudo com calma.
+        </p>
+        <ul class="about__list vip-highlight__list">
+          <li>✅ Banner publicado para divulgar o VIP</li>
+          <li>🆓 Acesso grátis durante a fase de preparação</li>
+          <li>💳 Pagamento será ativado só quando você pedir</li>
+        </ul>
+        <div class="vip-highlight__actions" aria-label="Status do VIP">
+          <span class="vip-highlight__price">R$ 0 por enquanto</span>
+          <span class="vip-highlight__note">Cobrança pausada</span>
+        </div>
+      </div>
+      <figure class="vip-highlight__media">
+        <img src="assets/img/vip-pass.svg" alt="Banner do VIP grátis por enquanto, com pagamento planejado para depois" loading="lazy" />
+      </figure>
+    </section>
+
     <section id="jogos" class="games">
       <header class="section-head">
         <h2>Catálogo de jogos</h2>

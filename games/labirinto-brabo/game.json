@@ -1,0 +1,9 @@
+{
+  "title": "Labirinto Brabo",
+  "description": "Comece no meio do labirinto e ache a saída! Seis mundos, estrelas escondidas e fases cada vez maiores.",
+  "emoji": "🌀",
+  "tags": ["labirinto", "1 jogador", "celular", "aventura"],
+  "entry": "index.html",
+  "order": 0,
+  "cover": "cover.png"
+}

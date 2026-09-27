@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#2e9444" />
+    <title>Labirinto Brabo</title>
+    <link rel="icon" href="icon-192.png" type="image/png" />
+    <script type="module" crossorigin src="./assets/index-noyHWplC.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-K1qXx0fQ.css">
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+
+    <div id="hud" hidden>
+      <div class="pill" id="hud-level">Fase 1</div>
+      <div class="pill" id="hud-stars"><span class="star-icon">★</span> <b>0</b>/3</div>
+      <div class="hud-buttons">
+        <button class="round" id="btn-hint" aria-label="Dica">
+          💡<span id="hint-count"></span>
+        </button>
+        <button class="round" id="btn-pause" aria-label="Pausar">⏸</button>
+      </div>
+    </div>
+
+    <div id="banner" hidden></div>
+
+    <section id="screen-title" class="screen">
+      <div class="card">
+        <h1 class="logo">Labirinto<span>Brabo</span></h1>
+        <p class="subtitle">Ache a saída!</p>
+        <div id="characters" class="characters"></div>
+        <button class="big" id="btn-play">Jogar</button>
+        <p class="total" id="total-stars"></p>
+        <button class="link" id="btn-restart">Começar da fase 1</button>
+        <a class="link" id="link-back" href="../../" hidden>← Voltar para Jubis Games</a>
+      </div>
+    </section>
+
+    <section id="screen-pause" class="screen" hidden>
+      <div class="card">
+        <h2>Pausado</h2>
+        <button class="big" id="btn-resume">Continuar</button>
+        <button class="mid" id="btn-sound">Som: ligado</button>
+        <button class="mid" id="btn-menu">Menu</button>
+      </div>
+    </section>
+
+    <section id="screen-win" class="screen" hidden>
+      <div class="card win">
+        <h2>Você saiu! 🎉</h2>
+        <div class="win-stars" id="win-stars"></div>
+        <p id="win-info"></p>
+        <button class="big" id="btn-next">Próxima fase ▶</button>
+        <button class="link" id="btn-win-menu">Menu</button>
+      </div>
+    </section>
+
+  </body>
+</html>
